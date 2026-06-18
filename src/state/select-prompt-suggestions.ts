@@ -227,6 +227,10 @@ export function selectPromptSuggestions(
             },
           });
         case "Сигналы":
+        // TODO(wave1): раздел «Артефакты» получит собственный suggestion-sub
+        // (kind: "artifacts"). Пока переиспользуем «signals», чтобы exhaustive
+        // switch по SectionName компилировался.
+        case "Артефакты":
           return resolved({
             kind: "section",
             sub: {

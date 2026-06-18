@@ -23,7 +23,10 @@ describe("PRESETS.mid", () => {
   it("all campaign signalIds reference existing signals", () => {
     const signalIds = new Set(PRESETS.mid.signals.map((s) => s.id));
     for (const c of PRESETS.mid.campaigns) {
-      expect(signalIds.has(c.signalId)).toBe(true);
+      // Пресеты всегда заполняют signalId (legacy seed-flow), хотя контракт
+      // сделал поле опциональным после campaign-first инверсии.
+      expect(c.signalId).toBeDefined();
+      expect(signalIds.has(c.signalId!)).toBe(true);
     }
   });
 });

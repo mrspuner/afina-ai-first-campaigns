@@ -36,6 +36,8 @@ export const nodeTypeSchema = z.enum([
   "retarget",
   "result",
   "new",
+  "source",
+  "scoring",
 ]);
 
 // ── Placement — куда вставить новую ноду ─────────────────────────────────────

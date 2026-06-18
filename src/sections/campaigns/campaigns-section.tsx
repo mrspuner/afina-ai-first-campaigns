@@ -29,13 +29,19 @@ export function CampaignsSection() {
     [signals]
   );
 
+  // TODO(wave1): campaign-first инверсия сделала Campaign.signalId опциональным.
+  // Этот файл — собственность эпика «Кампании» (перейдёт на campaignId-keyed
+  // Artifact). Пока просто безопасно резолвим сигнал по возможному signalId.
+  const signalFor = (c: { signalId?: string }) =>
+    c.signalId ? signalById.get(c.signalId) : undefined;
+
   const sorted = useMemo(() => {
     const arr = [...campaigns];
     if (campaignSort === "conversion-desc") {
       arr.sort(
         (a, b) =>
-          conversionFor(b, signalById.get(b.signalId)) -
-          conversionFor(a, signalById.get(a.signalId))
+          conversionFor(b, signalFor(b)) -
+          conversionFor(a, signalFor(a))
       );
     } else {
       arr.sort((a, b) =>
@@ -84,7 +90,7 @@ export function CampaignsSection() {
                   <CampaignCard
                     key={c.id}
                     campaign={c}
-                    signal={signalById.get(c.signalId)}
+                    signal={signalFor(c)}
                     onOpen={(id) => dispatch({ type: "campaign_opened", id })}
                   />
                 ))}

@@ -275,6 +275,8 @@ const TYPE_LABEL: Record<WorkflowNodeType, string> = {
   retarget: "Ретаргет",
   result: "Результат",
   new: "Новая",
+  source: "Источник",
+  scoring: "Скоринг",
 };
 
 /**

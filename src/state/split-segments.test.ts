@@ -15,24 +15,7 @@ function makeSignal(overrides: Partial<Signal>): Signal {
 }
 
 describe("splitSegmentBranches", () => {
-  it("uses wizard-selected segments, ordered and labelled", () => {
-    const signal = makeSignal({
-      wizardData: {
-        scenario: null,
-        interests: [],
-        triggers: [],
-        triggerConfig: {},
-        segments: ["high", "max"],
-        budget: null,
-        file: null,
-      },
-    });
-    const branches = splitSegmentBranches(signal);
-    expect(branches.map((b) => b.key)).toEqual(["max", "high"]);
-    expect(branches.map((b) => b.label)).toEqual(["Максимальный", "Высокий"]);
-  });
-
-  it("falls back to materialized tiers with volume", () => {
+  it("uses materialized tiers with volume", () => {
     const signal = makeSignal({
       segments: { max: 100, high: 0, mid: 50, low: 0 },
     });

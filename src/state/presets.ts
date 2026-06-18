@@ -75,13 +75,6 @@ const TRIGGERS_POOL = [
   "Чтение обзоров инвестпродуктов",
 ];
 
-const SEGMENT_SETS: string[][] = [
-  ["max", "high"],
-  ["max", "very-high", "high"],
-  ["high", "medium"],
-  ["max", "high", "medium"],
-];
-
 function rndSample<T>(rng: () => number, arr: readonly T[], n: number): T[] {
   const pool = [...arr];
   const out: T[] = [];
@@ -99,7 +92,10 @@ function buildWizardData(type: SignalType, rng: () => number): StepData {
     interests: rndSample(rng, INTERESTS_POOL, rndInt(rng, 2, 4)),
     triggers: rndSample(rng, TRIGGERS_POOL, rndInt(rng, 2, 3)),
     triggerConfig: {},
-    segments: rndPick(rng, SEGMENT_SETS),
+    // campaign-first контракт: сегментный шаг визарда удалён, добавлены
+    // sourceType/channels (Task 1/Task 10).
+    sourceType: "new",
+    channels: [],
     budget: rndInt(rng, 30, 300) * 1000,
     file: null,
   };

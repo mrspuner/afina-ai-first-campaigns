@@ -67,7 +67,10 @@ export type StatsContext = {
   campaigns?: readonly {
     id: string;
     name: string;
-    signalId: string;
+    // TODO(wave1): campaign-first инверсия сделала signalId опциональным —
+    // статистика перейдёт на campaignId-keyed Artifact. Пока допускаем
+    // отсутствие связи: кампания без signalId просто не подтянет count сигнала.
+    signalId?: string;
     status: string;
     createdAt: string;
     launchedAt?: string;
@@ -370,7 +373,7 @@ function cacheKey(ctx: StatsContext, period: DateRange, now: Date): string {
   const c = (ctx.campaigns ?? [])
     .map(
       (x) =>
-        `${x.id}:${x.status}:${x.signalId}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}`,
+        `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}`,
     )
     .join("|");
   const s = (ctx.signals ?? []).map((x) => `${x.id}:${x.count}`).join("|");
@@ -401,7 +404,14 @@ export function buildFacts(
     const span = intersect(window, period);
     if (!span) continue; // campaign not active during this period → no rows
     const days = eachDay(span);
-    facts.push(...buildCampaignFacts(c, countById.get(c.signalId), days, now));
+    facts.push(
+      ...buildCampaignFacts(
+        c,
+        c.signalId ? countById.get(c.signalId) : undefined,
+        days,
+        now,
+      ),
+    );
   }
   factCache = { key, facts };
   return facts;

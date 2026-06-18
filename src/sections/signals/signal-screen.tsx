@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/entity-card";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { SIGNAL_STATUS_LABEL } from "@/types/signal-status";
-import { SCENARIO_NAMES, SEGMENT_NAMES } from "./signal-summary-data";
+import { SCENARIO_NAMES } from "./signal-summary-data";
 
 function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
@@ -102,14 +102,8 @@ export function SignalScreen() {
             label="Триггеры"
             value={wd?.triggers.length ? wd.triggers.join(", ") : "—"}
           />
-          <SummaryRow
-            label="Сегменты"
-            value={
-              wd?.segments.length
-                ? wd.segments.map((s) => SEGMENT_NAMES[s] ?? s).join("; ")
-                : "—"
-            }
-          />
+          {/* TODO(wave1): сегментный шаг визарда удалён (campaign-first).
+              Этот экран — наследие сигналов, заменяется эпиком «Артефакты». */}
           <SummaryRow label="Файл с базой" value={wd?.file ? wd.file.name : "—"} />
           <SummaryRow
             label={budgetLabel}
