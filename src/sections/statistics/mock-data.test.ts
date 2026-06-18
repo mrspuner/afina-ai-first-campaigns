@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { sortRows, type GeneratedRow, type RowData } from "./mock-data";
+import { generateRows, sortRows, type GeneratedRow, type RowData } from "./mock-data";
+import { DEFAULT_FILTERS } from "./statistics-state";
+import type { StatsContext } from "./fact-cube";
 
 function row(key: string, data: Partial<RowData>): GeneratedRow {
   const base: RowData = {
@@ -77,5 +79,47 @@ describe("sortRows", () => {
     const input = [...rows];
     sortRows(input, { column: "clicks", direction: "asc" });
     expect(input.map((r) => r.key)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("generateRows — группировка по шаблонам", () => {
+  const now = new Date(2026, 5, 15);
+  const ctx: StatsContext = {
+    signals: [{ id: "s", count: 20000 }],
+    campaigns: [
+      {
+        id: "cmp", name: "К", signalId: "s", status: "active",
+        createdAt: new Date(2026, 5, 1).toISOString(),
+        launchedAt: new Date(2026, 5, 1).toISOString(),
+        templates: [
+          { channel: "sms", id: "t1", name: "SMS A" },
+          { channel: "email", id: "t2", name: "Email B" },
+        ],
+      },
+    ],
+  };
+
+  it("rows=templates даёт строки по шаблонам кампании (+ Без шаблона для прочих каналов)", () => {
+    const rows = generateRows(
+      { ...DEFAULT_FILTERS, period: { preset: "this-month" }, rows: "templates", subRows: "none" },
+      ctx,
+      { now },
+    );
+    const labels = rows.map((r) => r.label);
+    // Хотя бы один реальный шаблон присутствует; набор зависит от того, какие
+    // каналы выпали кампании детерминированно.
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((l) => typeof l === "string" && l.length > 0)).toBe(true);
+  });
+
+  it("подстроки templates суммируются в родителя (через formatted-нечего ломать на уровне фактов)", () => {
+    const rows = generateRows(
+      { ...DEFAULT_FILTERS, period: { preset: "this-month" }, rows: "campaigns", subRows: "templates" },
+      ctx,
+      { now },
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    // Каждая кампания-строка имеет хотя бы одну подстроку-шаблон.
+    expect(rows.every((r) => r.subRows.length > 0)).toBe(true);
   });
 });

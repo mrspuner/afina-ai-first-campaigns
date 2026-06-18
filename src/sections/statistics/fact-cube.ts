@@ -25,6 +25,7 @@ import {
   type FunnelNumbers,
 } from "@/state/metrics";
 import type { RowKind, SearchConditions } from "./statistics-state";
+import type { Channel } from "@/types/campaign";
 import {
   eachDay,
   formatDateRangeRu,
@@ -77,6 +78,13 @@ export type StatsContext = {
     pausedAt?: string;
     completedAt?: string;
     scenario?: { id: string; name: string };
+    /**
+     * Templates this campaign actually uses on its communication nodes, by
+     * channel. Surfaced from app-state (Foundation/Артефакты linkage). Optional:
+     * callers that don't supply it (campaign-metrics, data-summary) get the
+     * "Без шаблона" fallback dim — the cube stays total either way.
+     */
+    templates?: readonly { channel: Channel; id: string; name: string }[];
   }[];
   signals?: readonly { id: string; count: number }[];
 };
@@ -87,7 +95,12 @@ export type StatsContext = {
 // their values come from the campaign itself.
 // ---------------------------------------------------------------------------
 
-export const POOLS: Record<Exclude<EntityDim, "campaigns" | "scenarios">, string[]> = {
+// `templates` is real data (resolved from the campaign), not an invented label
+// pool — so it is excluded here alongside the other real dims.
+export const POOLS: Record<
+  Exclude<EntityDim, "campaigns" | "scenarios" | "templates">,
+  string[]
+> = {
   offers: [
     "Кредит наличными",
     "Депозит «Гибкий»",
@@ -172,6 +185,26 @@ export const POOLS: Record<Exclude<EntityDim, "campaigns" | "scenarios">, string
     "Telegram Ads",
     "Ozon Ads",
   ],
+};
+
+// Stable fallback for facts whose channel has no matching template (or for
+// campaigns that carry no templates at all). Keeps `dims.templates` total so the
+// cube invariants hold for template-less inputs too.
+const NO_TEMPLATE_DIM: DimValue = { key: "tpl-none", label: "Без шаблона", order: 0 };
+
+// Maps the cube's invented channel labels (POOLS.channels) to the typed Channel
+// a template targets. Labels with no template channel (Viber/WhatsApp/Звонок/…)
+// map to null → those facts get the "Без шаблона" fallback dim. MUST stay in
+// sync with POOLS.channels above.
+const CHANNEL_LABEL_TO_TEMPLATE_CHANNEL: Record<string, Channel | null> = {
+  SMS: "sms",
+  Push: "push",
+  Email: "email",
+  Звонок: "ivr",
+  Viber: null,
+  WhatsApp: null,
+  "Личный кабинет": null,
+  "Мобильное приложение": null,
 };
 
 const WEEKDAY_NAMES = [
@@ -314,6 +347,13 @@ function buildCampaignFacts(
     ? { key: `scn-${c.scenario.id}`, label: c.scenario.name, order: 0 }
     : { key: "scn-none", label: "Без сценария", order: 0 };
 
+  // Templates this campaign uses, indexed by the typed Channel they target.
+  // Last-wins if a campaign somehow lists two templates for one channel.
+  const templateByChannel = new Map<Channel, DimValue>();
+  for (const t of c.templates ?? []) {
+    templateByChannel.set(t.channel, { key: `tpl-${t.id}`, label: t.name, order: 0 });
+  }
+
   // Weighted cells over (day × channel); distribute the campaign's total sends.
   const cells: { day: Date; channel: DimValue; weight: number }[] = [];
   for (const day of days) {
@@ -344,12 +384,18 @@ function buildCampaignFacts(
     // растут в течение сессии. Прошлые дни детерминированы и не меняются.
     const rawMetrics = computeFunnel(metricRng, s);
     const metrics = dayKey === today ? scaleFunnel(rawMetrics, fraction) : rawMetrics;
+    // Channel-weighted template: the fact's channel determines which template
+    // (if any) colours it; channels with no template fall back to "Без шаблона".
+    const tplChannel = CHANNEL_LABEL_TO_TEMPLATE_CHANNEL[cell.channel.label] ?? null;
+    const templateDim =
+      (tplChannel && templateByChannel.get(tplChannel)) || NO_TEMPLATE_DIM;
     facts.push({
       date: cell.day,
       metrics,
       dims: {
         campaigns: campaignDim,
         scenarios: scenarioDim,
+        templates: templateDim,
         strategies: strategy,
         advertisers: advertiser,
         "traffic-suppliers": trafficSupplier,
@@ -371,10 +417,15 @@ let factCache: { key: string; facts: Fact[] } | null = null;
 
 function cacheKey(ctx: StatsContext, period: DateRange, now: Date): string {
   const c = (ctx.campaigns ?? [])
-    .map(
-      (x) =>
-        `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}`,
-    )
+    .map((x) => {
+      // Template assignment depends on each campaign's templates; key on
+      // channel+id (display name is irrelevant to fact distribution) so a
+      // template change invalidates the cache.
+      const tpls = (x.templates ?? [])
+        .map((t) => `${t.channel}:${t.id}`)
+        .join(",");
+      return `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}:${tpls}`;
+    })
     .join("|");
   const s = (ctx.signals ?? []).map((x) => `${x.id}:${x.count}`).join("|");
   return `${period.from.getTime()}-${period.to.getTime()}|${now.getTime()}|${c}|${s}`;

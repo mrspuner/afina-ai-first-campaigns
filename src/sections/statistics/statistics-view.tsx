@@ -131,7 +131,10 @@ function buildCsv(
 
 export function StatisticsView({ campaignId }: { campaignId?: string } = {}) {
   const filterByCampaign = Boolean(campaignId);
-  const { campaigns, signals } = useAppState();
+  // `messageTemplates` (not `templates`) avoids clashing with the local
+  // ReportTemplate state below; these are the app-state MessageTemplate[] the
+  // cube's templates dimension is derived from.
+  const { campaigns, signals, templates: messageTemplates } = useAppState();
 
   // Stats only become meaningful once a campaign has actually been
   // launched — having signals or draft campaigns isn't enough to
@@ -187,9 +190,23 @@ export function StatisticsView({ campaignId }: { campaignId?: string } = {}) {
   // (applied.conditions), которые применяет generateRows.
   // now тикает раз в 15 с → куб пересчитывает сегодняшние факты по
   // внутридневной доле; прошлые дни не меняются.
+  // Derive each campaign's per-channel templates from the Foundation linkage
+  // (Campaign.templateIds → AppState.templates), shaped to the cube's contract.
+  // Campaigns without launched templates resolve to [] → "Без шаблона" dim.
+  const cubeCampaigns = useMemo(
+    () =>
+      campaigns.map((c) => ({
+        ...c,
+        templates: (c.templateIds ?? [])
+          .map((id) => messageTemplates.find((t) => t.id === id))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t))
+          .map((t) => ({ channel: t.channel, id: t.id, name: t.name })),
+      })),
+    [campaigns, messageTemplates],
+  );
   const rows = useMemo(
-    () => generateRows(applied, { campaigns, signals }, { now }),
-    [applied, campaigns, signals, now],
+    () => generateRows(applied, { campaigns: cubeCampaigns, signals }, { now }),
+    [applied, cubeCampaigns, signals, now],
   );
   const resolvedRange = useMemo(
     () => resolvePeriod(applied.period),
