@@ -417,10 +417,15 @@ let factCache: { key: string; facts: Fact[] } | null = null;
 
 function cacheKey(ctx: StatsContext, period: DateRange, now: Date): string {
   const c = (ctx.campaigns ?? [])
-    .map(
-      (x) =>
-        `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}`,
-    )
+    .map((x) => {
+      // Template assignment depends on each campaign's templates; key on
+      // channel+id (display name is irrelevant to fact distribution) so a
+      // template change invalidates the cache.
+      const tpls = (x.templates ?? [])
+        .map((t) => `${t.channel}:${t.id}`)
+        .join(",");
+      return `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}:${tpls}`;
+    })
     .join("|");
   const s = (ctx.signals ?? []).map((x) => `${x.id}:${x.count}`).join("|");
   return `${period.from.getTime()}-${period.to.getTime()}|${now.getTime()}|${c}|${s}`;

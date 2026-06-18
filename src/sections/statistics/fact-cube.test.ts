@@ -336,6 +336,36 @@ describe("templates dimension — facts", () => {
   });
 });
 
+describe("cacheKey — template identity", () => {
+  it("смена шаблонов кампании инвалидирует кэш (другое распределение по templates)", () => {
+    const ctxA: StatsContext = {
+      signals: [{ id: "s", count: 20000 }],
+      campaigns: [
+        {
+          id: "cmp_c", name: "C", signalId: "s", status: "active",
+          createdAt: iso(2026, 5, 1), launchedAt: iso(2026, 5, 1),
+          templates: [{ channel: "sms", id: "tpl_1", name: "Шаблон 1" }],
+        },
+      ],
+    };
+    const ctxB: StatsContext = {
+      ...ctxA,
+      campaigns: [{ ...ctxA.campaigns![0], templates: [{ channel: "sms", id: "tpl_2", name: "Шаблон 2" }] }],
+    };
+    const labelsA = new Set(
+      buildFacts(ctxA, PERIOD_JUNE, { now: NOW }).map((f) => f.dims.templates.label),
+    );
+    const labelsB = new Set(
+      buildFacts(ctxB, PERIOD_JUNE, { now: NOW }).map((f) => f.dims.templates.label),
+    );
+    // If the cache ignored templates, ctxB would return ctxA's cached facts and
+    // labelsB would still contain "Шаблон 1".
+    expect(labelsA.has("Шаблон 1")).toBe(true);
+    expect(labelsB.has("Шаблон 2")).toBe(true);
+    expect(labelsB.has("Шаблон 1")).toBe(false);
+  });
+});
+
 describe("внутридневная доля — сегодняшние факты масштабируются", () => {
   /** Преобразует Date в ключ дня через локальные компоненты — тот же путь,
    *  что в buildCampaignFacts (dateOnly → midnight local → ISO). */
