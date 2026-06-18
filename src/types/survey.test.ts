@@ -6,7 +6,7 @@ describe("Survey task-description field", () => {
     expect(EMPTY_SURVEY.taskDescription).toBe("");
   });
   it("DEMO_SURVEY has a non-empty taskDescription", () => {
-    expect(DEMO_SURVEY.taskDescription.trim().length).toBeGreaterThan(0);
+    expect((DEMO_SURVEY.taskDescription ?? "").trim().length).toBeGreaterThan(0);
   });
   it("keeps companyWebsite for frozen app-state reducer compat", () => {
     // Foundation dependency: app-state.ts still reads survey.companyWebsite.
