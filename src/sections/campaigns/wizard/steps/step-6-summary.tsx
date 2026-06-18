@@ -9,7 +9,7 @@ import { StepProps } from "@/types/campaign";
 import { useAppState } from "@/state/app-state-context";
 import { computeShortfall } from "@/sections/signals/top-up-modal";
 import { cn } from "@/lib/utils";
-import { SCENARIO_NAMES, SEGMENT_NAMES } from "@/sections/signals/signal-summary-data";
+import { SCENARIO_NAMES } from "@/sections/signals/signal-summary-data";
 
 function formatRub(amount: number): string {
   return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
@@ -79,23 +79,14 @@ export function Step6Summary({ data, onNext, onBack, onGoToStep }: StepProps) {
             onClick={goto ? () => goto(2) : undefined}
           />
           <SummaryRow
-            label="Сегменты"
-            value={
-              data.segments.length
-                ? data.segments.map((s) => SEGMENT_NAMES[s]).join("; ")
-                : "—"
-            }
-            onClick={goto ? () => goto(3) : undefined}
-          />
-          <SummaryRow
             label="Файл с базой"
             value={data.file ? data.file.name : "—"}
-            onClick={goto ? () => goto(4) : undefined}
+            onClick={goto ? () => goto(3) : undefined}
           />
           <SummaryRow
             label="Максимальный бюджет"
             value={budget ? formatRub(budget) : "—"}
-            onClick={goto ? () => goto(5) : undefined}
+            onClick={goto ? () => goto(4) : undefined}
           />
         </div>
       </div>

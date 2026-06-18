@@ -7,7 +7,6 @@ import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
-import { Step3Segments } from "@/sections/campaigns/wizard/steps/step-3-segments";
 import { Step4Upload } from "@/sections/campaigns/wizard/steps/step-4-upload";
 import { Step5Limit } from "@/sections/campaigns/wizard/steps/step-5-limit";
 import { Step6Summary } from "@/sections/campaigns/wizard/steps/step-6-summary";
@@ -15,7 +14,13 @@ import { Step7Processing } from "@/sections/campaigns/wizard/steps/step-7-proces
 import { Step8Result } from "@/sections/campaigns/wizard/steps/step-8-result";
 import type { Signal } from "@/state/app-state";
 import { estimateSignalCount } from "@/state/metrics";
+import { SEGMENTS } from "@/sections/signals/segments-catalog";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
+
+// Сегментный шаг визарда удалён (Task 10). Оценку количества сигналов считаем
+// по полному набору сегментов — estimateSignalCount делит бюджет на самый
+// дешёвый сегмент, давая стабильную верхнюю оценку независимо от выбора.
+const ALL_SEGMENT_IDS = SEGMENTS.map((s) => s.id);
 
 export interface LaunchRequest {
   scenarioId: string;
@@ -176,9 +181,11 @@ function WorkspaceInner({
       scenarioId: stepData.scenario ?? "",
       cost: stepData.budget ?? 0,
       // Estimated count — единая формула бюджет→сигналы из движка чисел.
-      count: estimateSignalCount(stepData.segments, stepData.budget ?? 0),
+      // Сегментный шаг визарда удалён (Task 10): оценка считается по всем
+      // сегментам, а не по выбору пользователя.
+      count: estimateSignalCount(ALL_SEGMENT_IDS, stepData.budget ?? 0),
       stepData,
-      proceed: () => advanceTo(7),
+      proceed: () => advanceTo(6),
     });
   }, [advanceTo, handleNext, onLaunchRequested, stepData]);
 
@@ -188,13 +195,14 @@ function WorkspaceInner({
     // автопереходит по выбору сценария и футера не имеет, поэтому начинаем
     // прокидывать onBack со 2-го.
     const onBack = () => handleGoToStep(step - 1);
+    // Шаги после удаления сегментного шага (Task 10):
+    // 1 Сценарий · 2 Интересы · 3 База · 4 Бюджет · 5 Сводка · 6 Обработка · 7 Результат
     switch (step) {
       case 1: return <Step1Scenario {...props} />;
       case 2: return <Step2Interests {...props} onBack={onBack} />;
-      case 3: return <Step3Segments {...props} onBack={onBack} />;
-      case 4: return <Step4Upload {...props} onBack={onBack} />;
-      case 5: return <Step5Limit {...props} onBack={onBack} />;
-      case 6:
+      case 3: return <Step4Upload {...props} onBack={onBack} />;
+      case 4: return <Step5Limit {...props} onBack={onBack} />;
+      case 5:
         return (
           <Step6Summary
             {...props}
@@ -203,15 +211,15 @@ function WorkspaceInner({
             onNext={() => handleLaunchFromSummary()}
           />
         );
-      case 7:
+      case 6:
         return (
           <Step7Processing
             {...props}
             signal={pendingSignal ?? null}
-            onAdvance={() => advanceTo(8)}
+            onAdvance={() => advanceTo(7)}
           />
         );
-      case 8:
+      case 7:
         return (
           <Step8Result
             signal={pendingSignal ?? null}

@@ -21,17 +21,19 @@ import { shouldShowSurveyGate } from "@/state/survey-gate";
  * current state.
  */
 function stepForSignalStatus(status: SignalStatus | undefined): number {
+  // Шаги сдвинуты на один вниз после удаления сегментного шага (Task 10):
+  // результат 8→7, обработка 7→6, сводка/черновик 6→5.
   switch (status) {
     case "ready":
     case "expired":
-      return 8;
+      return 7;
     case "processing":
     case "error":
-      return 7;
+      return 6;
     case "awaiting_payment":
     case "draft":
     default:
-      return 6;
+      return 5;
   }
 }
 

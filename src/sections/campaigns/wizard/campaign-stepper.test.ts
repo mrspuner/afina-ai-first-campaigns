@@ -6,12 +6,12 @@ describe("STEPPER_ITEMS", () => {
     expect(STEPPER_ITEMS[0]).toEqual({ label: "Выбор сценария", step: 1 });
   });
 
-  it("keeps interests as step 2 and result as step 8", () => {
+  it("keeps interests as step 2 and result as step 7", () => {
     expect(STEPPER_ITEMS.find((i) => i.step === 2)?.label).toBe("Интересы");
-    expect(STEPPER_ITEMS.find((i) => i.step === 8)?.label).toBe("Результат");
+    expect(STEPPER_ITEMS.find((i) => i.step === 7)?.label).toBe("Результат");
   });
 
-  it("covers steps 1..8 contiguously", () => {
-    expect(STEPPER_ITEMS.map((i) => i.step)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  it("covers steps 1..7 contiguously (segment step removed)", () => {
+    expect(STEPPER_ITEMS.map((i) => i.step)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });

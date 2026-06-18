@@ -7,7 +7,6 @@ import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 import { recommendBudget } from "@/state/metrics";
-import { SegmentPriorityBreakdown } from "@/sections/signals/segment-priority-breakdown";
 
 function formatRub(amount: number): string {
   return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
@@ -152,11 +151,6 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
             </span>
           </button>
         </div>
-
-        <SegmentPriorityBreakdown
-          segments={data.segments}
-          budget={activeValue}
-        />
 
         <StepFooter
           onBack={onBack}
