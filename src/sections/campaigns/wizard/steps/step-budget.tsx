@@ -5,25 +5,84 @@ import { Input } from "@/components/ui/input";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
+import {
+  estimateCampaignBudget,
+  type BudgetEstimateInput,
+} from "@/sections/campaigns/campaign-budget-estimate";
 import { cn } from "@/lib/utils";
-import { recommendBudget } from "@/state/metrics";
 
 function formatRub(amount: number): string {
-  return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
+  return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}`;
+}
+
+export interface BudgetRow {
+  key: "signals" | "communication" | "total";
+  label: string;
+  amount: number;
+  display: string;
+}
+
+/** Pure forecast rows for the Бюджет step (own's signals line reads «бесплатно»). */
+export function buildBudgetRows(input: BudgetEstimateInput): BudgetRow[] {
+  const est = estimateCampaignBudget(input);
+  return [
+    {
+      key: "signals",
+      label: "Сигналы",
+      amount: est.signals,
+      display:
+        input.sourceType === "own" || est.signals === 0
+          ? "бесплатно"
+          : formatRub(est.signals),
+    },
+    {
+      key: "communication",
+      label: "Коммуникация",
+      amount: est.communication,
+      display: formatRub(est.communication),
+    },
+    {
+      key: "total",
+      label: "Итого",
+      amount: est.total,
+      display: formatRub(est.total),
+    },
+  ];
 }
 
 type Mode = "recommended" | "custom";
 
-export function Step5Limit({ data, onNext, onBack }: StepProps) {
-  // Рекомендация детерминирована по размеру базы (recommendBudget из движка
-  // чисел), поэтому стабильна между ре-рендерами и повторными заходами на шаг.
-  const recommendedValue = useMemo(
-    () =>
-      typeof data.fileRowCount === "number"
-        ? recommendBudget(data.fileRowCount)
-        : 0,
-    [data.fileRowCount]
+function RadioDot({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "absolute right-3 top-3 h-3 w-3 rounded-full border-2 transition-colors",
+        active ? "border-foreground bg-foreground" : "border-border bg-transparent"
+      )}
+    />
   );
+}
+
+export function StepBudget({ data, onNext, onBack }: StepProps) {
+  const estimateInput: BudgetEstimateInput = {
+    sourceType: data.sourceType,
+    channels: data.channels,
+    baseSize: data.fileRowCount,
+  };
+  const estimate = useMemo(
+    () => estimateCampaignBudget(estimateInput),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.sourceType, data.channels, data.fileRowCount]
+  );
+  const rows = useMemo(
+    () => buildBudgetRows(estimateInput),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.sourceType, data.channels, data.fileRowCount]
+  );
+
+  const recommendedValue = estimate.total;
+  const isStream = data.sourceType === "stream";
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -32,7 +91,6 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
     }
     return recommendedValue > 0 ? String(recommendedValue) : "";
   });
-
   const customInputRef = useRef<HTMLInputElement | null>(null);
 
   const customParsed = parseFloat(customValue);
@@ -49,19 +107,59 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
 
   function selectCustom() {
     setMode("custom");
-    // Defer focus until the input is enabled in the next paint.
     window.requestAnimationFrame(() => customInputRef.current?.focus());
+  }
+
+  function handleContinue() {
+    onNext({
+      budget: activeValue,
+      budgetMode: mode,
+      ...(isStream && estimate.dailyBudget !== undefined
+        ? { dailyBudget: estimate.dailyBudget }
+        : {}),
+    });
   }
 
   return (
     <StepContent
-      title="Укажите максимальный бюджет"
-      subtitle="Мы найдём максимальное количество сигналов в рамках этой суммы"
+      title="Прогноз бюджета"
+      subtitle="Рассчитали стоимость по выбранному источнику и каналам."
       maxWidth="max-w-xl"
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
+        {/* Forecast rows: Сигналы / Коммуникация / Итого (plain text rows) */}
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className={cn(
+                "flex items-center justify-between text-sm",
+                row.key === "total" &&
+                  "mt-1 border-t border-border pt-3 font-semibold text-foreground"
+              )}
+            >
+              <span
+                className={
+                  row.key === "total" ? "text-foreground" : "text-muted-foreground"
+                }
+              >
+                {row.label}
+              </span>
+              <span className="tabular-nums">{row.display}</span>
+            </div>
+          ))}
+          {isStream && estimate.dailyBudget !== undefined && (
+            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Дневной бюджет</span>
+              <span className="tabular-nums">
+                {formatRub(estimate.dailyBudget)} · потолок {formatRub(estimate.total)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Recommended / custom budget cards (reuses step-5 RadioDot pattern) */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Recommended card */}
           <button
             type="button"
             onClick={() => setMode("recommended")}
@@ -79,9 +177,7 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
             <span
               className={cn(
                 "text-xs font-medium uppercase tracking-widest",
-                mode === "recommended"
-                  ? "text-foreground"
-                  : "text-muted-foreground"
+                mode === "recommended" ? "text-foreground" : "text-muted-foreground"
               )}
             >
               Рекомендуемая
@@ -89,19 +185,16 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
             <span
               className={cn(
                 "mt-1 text-2xl font-semibold tabular-nums",
-                mode === "recommended"
-                  ? "text-foreground"
-                  : "text-muted-foreground"
+                mode === "recommended" ? "text-foreground" : "text-muted-foreground"
               )}
             >
               {recommendedValue > 0 ? formatRub(recommendedValue) : "—"}
             </span>
             <span className="mt-auto text-xs text-muted-foreground">
-              На основе размера базы
+              По источнику и каналам
             </span>
           </button>
 
-          {/* Custom card */}
           <button
             type="button"
             onClick={selectCustom}
@@ -132,7 +225,7 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
                 ref={customInputRef}
                 type="text"
                 inputMode="decimal"
-                placeholder="Например, 500"
+                placeholder="Например, 5000"
                 value={customValue}
                 onChange={handleChange}
                 disabled={mode !== "custom"}
@@ -154,25 +247,11 @@ export function Step5Limit({ data, onNext, onBack }: StepProps) {
 
         <StepFooter
           onBack={onBack}
-          onContinue={() => onNext({ budget: activeValue, budgetMode: mode })}
-          continueLabel="Далее"
+          onContinue={handleContinue}
+          continueLabel="Запустить"
           continueDisabled={!canContinue}
         />
       </div>
     </StepContent>
-  );
-}
-
-function RadioDot({ active }: { active: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "absolute right-3 top-3 h-3 w-3 rounded-full border-2 transition-colors",
-        active
-          ? "border-foreground bg-foreground"
-          : "border-border bg-transparent"
-      )}
-    />
   );
 }

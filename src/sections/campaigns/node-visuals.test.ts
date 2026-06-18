@@ -41,3 +41,21 @@ describe("node-visuals SSR safety", () => {
     expect(mod.getNodeIconSvg("nonexistent")).toBeNull();
   });
 });
+
+describe("source/scoring node visuals (A2)", () => {
+  it("source and scoring have a complete style triple", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    for (const k of ["source", "scoring"] as const) {
+      expect(NODE_STYLES[k]).toMatchObject({
+        border: expect.any(String),
+        bg: expect.any(String),
+        color: expect.any(String),
+      });
+    }
+  });
+  it("source and scoring have an icon", async () => {
+    const { NODE_ICON } = await import("./node-visuals");
+    expect(NODE_ICON.source).toBeTruthy();
+    expect(NODE_ICON.scoring).toBeTruthy();
+  });
+});

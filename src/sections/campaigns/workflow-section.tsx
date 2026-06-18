@@ -164,6 +164,17 @@ export function WorkflowSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphTick]);
 
+  // A1: реактивная валидация графа — гейт кнопки «Запустить». Post-inversion
+  // каждая кампания — корень (no-signal недостижим), поэтому signalBound=true;
+  // реальные гейты — needs-attention + no-success-path. Пересчёт на каждое
+  // изменение графа (graphTick).
+  const launchCheck = useMemo(() => {
+    const g = graphRef.current;
+    if (!g) return { ok: false as const, errors: ["no-graph"] };
+    return validateWorkflow(g, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphTick]);
+
   if (view.kind !== "workflow") return null;
 
   const currentCampaign = campaigns.find((c) => c.id === view.campaign.id) ?? null;
@@ -296,6 +307,12 @@ export function WorkflowSection() {
         onSave={isDraftEditable ? handleSave : undefined}
         cost={cost?.total ?? null}
         onExplainCost={handleExplainCost}
+        canLaunch={launchCheck.ok}
+        launchBlockReason={
+          launchCheck.ok
+            ? undefined
+            : ERROR_TEXT[launchCheck.errors[0]] ?? "Не готово к запуску."
+        }
       />
       <div className="relative flex flex-1 flex-col overflow-hidden">
         <WorkflowView
@@ -313,6 +330,7 @@ export function WorkflowSection() {
           campaignId={currentCampaign.id}
           signalType={currentSignal?.type}
           signal={currentSignal ?? undefined}
+          sourceType={currentCampaign.sourceType}
           onGraphChange={handleGraphChange}
           // Launched campaigns are read-only: nodes still open/expand so the
           // user can inspect the сценарий, but their fields can't be edited

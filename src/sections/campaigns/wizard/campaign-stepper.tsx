@@ -4,13 +4,10 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const STEPPER_ITEMS = [
-  { label: "Выбор сценария", step: 1 },
-  { label: "Интересы", step: 2 },
-  { label: "База", step: 3 },
+  { label: "Сценарий", step: 1 },
+  { label: "Источник", step: 2 },
+  { label: "Каналы", step: 3 },
   { label: "Бюджет", step: 4 },
-  { label: "Сводка", step: 5 },
-  { label: "Обработка", step: 6 },
-  { label: "Результат", step: 7 },
 ];
 
 interface CampaignStepperProps {

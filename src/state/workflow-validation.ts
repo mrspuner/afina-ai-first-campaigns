@@ -1,5 +1,50 @@
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
+/** Per-kind required-field check. A node "needs attention" when a field a
+ *  human must fill is empty. Structural/auto nodes (merge, wait, condition,
+ *  split, source, scoring, signal, end) are never flagged. */
+export function nodeNeedsAttention(node: WorkflowNode): boolean {
+  const p = node.data.params;
+  if (!p) return false;
+  switch (p.kind) {
+    case "sms":
+      return !p.text?.trim() || !p.alphaName?.trim();
+    case "email":
+      return !p.subject?.trim() || !p.body?.trim() || !p.sender?.trim();
+    case "push":
+      return !p.title?.trim() || !p.body?.trim();
+    case "ivr":
+      return !p.scenario?.trim();
+    case "landing":
+      return !p.cta?.trim() || !p.offerTitle?.trim();
+    case "storefront":
+      return !p.offers || p.offers.length === 0;
+    case "success":
+      return !p.goal?.trim();
+    // No required human field — auto/structural:
+    case "wait":
+    case "condition":
+    case "split":
+    case "merge":
+    case "end":
+    case "signal":
+      return false;
+    default:
+      return false;
+  }
+}
+
+/** Recomputes `needsAttention` for every node from its params. Returns the
+ *  same node reference when the flag is unchanged (stable identity). */
+export function computeNeedsAttention<N extends WorkflowNode>(nodes: N[]): N[] {
+  return nodes.map((n) => {
+    const next = nodeNeedsAttention(n);
+    return n.data.needsAttention === next
+      ? n
+      : { ...n, data: { ...n.data, needsAttention: next } };
+  });
+}
+
 export type WorkflowValidationError =
   | "no-signal"
   | "needs-attention"
@@ -18,7 +63,7 @@ export function validateWorkflow(
 
   if (!signalBound) errors.push("no-signal");
 
-  if (graph.nodes.some((n) => n.data.needsAttention)) {
+  if (graph.nodes.some((n) => nodeNeedsAttention(n))) {
     errors.push("needs-attention");
   }
 

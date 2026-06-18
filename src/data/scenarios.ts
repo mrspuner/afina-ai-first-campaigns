@@ -1,4 +1,8 @@
 import type { SignalType } from "@/state/app-state";
+import type { SourceType } from "@/types/campaign";
+
+/** Local re-export alias for tests/readers of this module. */
+export type SourceTypeForScenario = SourceType;
 
 export const SCENARIO_CATEGORIES = [
   "Привлечение", "Онбординг", "Апсейл", "Удержание", "Возврат", "Реактивация",
@@ -13,9 +17,28 @@ export interface Scenario {
   signalType: SignalType;
   isBase: boolean;
   isCurated: boolean;
+  /** Which audience source this scenario is best run on (spec §3 matrix). */
+  recommendedSourceType: SourceType;
 }
 
-export const SCENARIOS: Scenario[] = [
+/**
+ * Maps a scenario's ЖЦК-category to its recommended audience source (spec §3):
+ *  - Привлечение / Онбординг → "new"   (cold acquisition / first-touch)
+ *  - Удержание / Апсейл       → "own"   (customers you already hold)
+ *  - Возврат / Реактивация    → "stream" (continuous re-engagement intent)
+ */
+const SOURCE_BY_CATEGORY: Record<ScenarioCategory, SourceType> = {
+  "Привлечение": "new",
+  "Онбординг": "new",
+  "Апсейл": "own",
+  "Удержание": "own",
+  "Возврат": "stream",
+  "Реактивация": "stream",
+};
+
+type RawScenario = Omit<Scenario, "recommendedSourceType">;
+
+const RAW_SCENARIOS: RawScenario[] = [
   // 6 базовых (isBase: true)
   { id: "base-registration", name: "Регистрация", description: "Довести до конца брошенную регистрацию или оформление.", category: "Онбординг", signalType: "Регистрация", isBase: true, isCurated: false },
   { id: "base-first-deal", name: "Первая сделка", description: "Подтолкнуть нового клиента к первой покупке.", category: "Привлечение", signalType: "Первая сделка", isBase: true, isCurated: false },
@@ -58,6 +81,11 @@ export const SCENARIOS: Scenario[] = [
   { id: "cat-vip-care", name: "VIP-забота", description: "Проактивный контакт с топ-сегментом до оттока.", category: "Удержание", signalType: "Удержание", isBase: false, isCurated: false },
   { id: "cat-payment-fail", name: "Сбой оплаты", description: "Вернуть клиента после неудавшегося платежа.", category: "Возврат", signalType: "Возврат", isBase: false, isCurated: false },
 ];
+
+export const SCENARIOS: Scenario[] = RAW_SCENARIOS.map((s) => ({
+  ...s,
+  recommendedSourceType: SOURCE_BY_CATEGORY[s.category],
+}));
 
 export const scenarioCount = SCENARIOS.length;
 export const getScenario = (id: string): Scenario | undefined => SCENARIOS.find((s) => s.id === id);

@@ -9,6 +9,8 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { cn } from "@/lib/utils";
 import { createTemplate } from "@/state/workflow-templates";
+import { getScenario } from "@/data/scenarios";
+import { splitCampaignPayments } from "./campaign-payments";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -16,6 +18,9 @@ import {
   CHANNEL_LABEL,
   type CampaignCost,
 } from "./campaign-cost";
+
+/** Fallback audience base when neither a file nor an artifact is available. */
+const FALLBACK_BASE = 10_000;
 
 type Mode = "recommended" | "custom";
 
@@ -33,7 +38,7 @@ function formatRub(n: number): string {
 }
 
 export function CampaignPaymentScreen() {
-  const { view, campaigns, signals, balance } = useAppState();
+  const { view, campaigns, artifacts, balance } = useAppState();
   const dispatch = useAppDispatch();
 
   // Hook order is fixed across renders: we always call hooks unconditionally
@@ -44,22 +49,50 @@ export function CampaignPaymentScreen() {
   const campaign = campaignFromView
     ? campaigns.find((c) => c.id === campaignFromView.id) ?? null
     : null;
-  const signal = campaign
-    ? signals.find((s) => s.id === campaign.signalId) ?? null
-    : null;
-  const audienceSize = signal?.count ?? 0;
+
+  // Campaign-first audience size: uploaded base, else the campaign's artifact
+  // count, else a sensible fallback. No signal join.
+  const campaignArtifact = campaign
+    ? artifacts
+        .filter((a) => a.campaignId === campaign.id)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
+    : undefined;
+  const audienceSize =
+    campaign?.file?.rowCount ?? campaignArtifact?.count ?? FALLBACK_BASE;
+
+  // The signal type the cost model needs comes from the campaign's scenario.
+  const scenarioSignalType = campaign?.scenario
+    ? getScenario(campaign.scenario.id)?.signalType
+    : undefined;
 
   // Расчётная стоимость кампании из её workflow (тот же модуль, что в шапке).
-  // Граф берём из durable-кэша (учитывает ручные правки) либо строим из
-  // шаблона; N = signal.count. Рекомендуемая сумма = computeCampaignCost.total.
+  // Граф берём из durable-кэша (учитывает ручные правки) либо строим из шаблона
+  // по сценарию + источнику кампании; N = размер аудитории кампании.
   const cost = useMemo<CampaignCost | null>(() => {
-    if (!campaign || !signal) return null;
+    if (!campaign) return null;
     const graph =
-      getCachedGraph(campaign.id) ?? createTemplate(signal.type, signal);
-    return computeCampaignCost(graph.nodes, graph.edges, signal.count);
+      getCachedGraph(campaign.id) ??
+      (scenarioSignalType
+        ? createTemplate(scenarioSignalType, undefined, campaign.sourceType)
+        : null);
+    if (!graph) return null;
+    return computeCampaignCost(graph.nodes, graph.edges, audienceSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign?.id, signal?.id, audienceSize]);
+  }, [campaign?.id, scenarioSignalType, audienceSize, campaign?.sourceType]);
   const recommended = cost?.total ?? 0;
+
+  // Two-payment split (scoring + communication), source-aware. Free lines are
+  // shown as «бесплатно»; degenerate own bases yield zero payments.
+  const paymentSplit = useMemo(() => {
+    if (!campaign) return null;
+    return splitCampaignPayments({
+      sourceType: campaign.sourceType ?? "new",
+      channels: campaign.channels ?? [],
+      baseSize: audienceSize,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, campaign?.sourceType, campaign?.channels, audienceSize]);
+  const streamDailyBudget = paymentSplit?.dailyBudget;
 
   const [mode, setMode] = useState<Mode>("recommended");
   const [customValue, setCustomValue] = useState<string>(
@@ -81,7 +114,11 @@ export function CampaignPaymentScreen() {
   // The actual campaign_launched dispatch fires after the animation completes,
   // so the user sees feedback before being navigated to CampaignScreen.
   const [launching, setLaunching] = useState(false);
-  const launchPayloadRef = useRef<{ id: string; budget: number } | null>(null);
+  const launchPayloadRef = useRef<{
+    id: string;
+    budget: number;
+    dailyBudget?: number;
+  } | null>(null);
 
   function handleBack() {
     if (!campaign) return;
@@ -93,7 +130,12 @@ export function CampaignPaymentScreen() {
   }
 
   function startLaunchAnimation(campaignId: string, budget: number) {
-    launchPayloadRef.current = { id: campaignId, budget };
+    launchPayloadRef.current = {
+      id: campaignId,
+      budget,
+      // Stream campaigns launch with a per-day budget alongside the cap (FD-5).
+      ...(streamDailyBudget !== undefined ? { dailyBudget: streamDailyBudget } : {}),
+    };
     setLaunching(true);
   }
 
@@ -145,6 +187,9 @@ export function CampaignPaymentScreen() {
             id: payload.id,
             timestamp: new Date().toISOString(),
             budget: payload.budget,
+            ...(payload.dailyBudget !== undefined
+              ? { dailyBudget: payload.dailyBudget }
+              : {}),
           });
         }}
       />
@@ -214,7 +259,43 @@ export function CampaignPaymentScreen() {
           </div>
         )}
 
-        {/* Budget cards — mirror of step-5-limit.tsx */}
+        {/* Two-payment split — scoring + communication (source-aware, §5) */}
+        {paymentSplit && (
+          <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+            <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Платежи
+            </h2>
+            <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-muted-foreground">Скоринг (сигналы)</span>
+                <span className="shrink-0 font-medium tabular-nums text-foreground">
+                  {paymentSplit.scoring > 0
+                    ? formatRubPlain(paymentSplit.scoring)
+                    : "бесплатно"}
+                </span>
+              </li>
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-muted-foreground">Коммуникация</span>
+                <span className="shrink-0 font-medium tabular-nums text-foreground">
+                  {paymentSplit.communication > 0
+                    ? formatRubPlain(paymentSplit.communication)
+                    : "—"}
+                </span>
+              </li>
+              {streamDailyBudget !== undefined && (
+                <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
+                  <span className="text-muted-foreground">Дневной бюджет · потолок</span>
+                  <span className="shrink-0 tabular-nums text-foreground">
+                    {formatRubPlain(streamDailyBudget)} ·{" "}
+                    {formatRubPlain(paymentSplit.total)}
+                  </span>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        {/* Budget cards — mirror of the wizard budget step */}
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"

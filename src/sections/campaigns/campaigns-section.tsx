@@ -9,40 +9,43 @@ import { NewCampaignCard } from "./new-campaign-card";
 import { CampaignFilterChips } from "./campaign-filter-chips";
 import { CampaignsNoResults } from "./campaigns-no-results";
 import { getCampaignCardMetrics } from "./campaign-metrics";
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign, Artifact } from "@/state/app-state";
 
 function relevantTimestamp(c: Campaign): string {
   return c.launchedAt ?? c.completedAt ?? c.createdAt;
 }
 
-function conversionFor(c: Campaign, signal: Signal | undefined): number {
-  const m = getCampaignCardMetrics(c, signal);
+function conversionFor(c: Campaign, artifact: Artifact | undefined): number {
+  const m = getCampaignCardMetrics(c, artifact);
   if (!m.launched) return Number.NEGATIVE_INFINITY;
   return m.crPct;
 }
 
 export function CampaignsSection() {
-  const { signals, campaigns, campaignFilter, campaignSort } = useAppState();
+  const { artifacts, campaigns, campaignFilter, campaignSort } = useAppState();
   const dispatch = useAppDispatch();
 
-  const signalById = useMemo(
-    () => new Map(signals.map((s) => [s.id, s])),
-    [signals]
-  );
+  // Campaign-first: cards no longer join a signal — they read the campaign's
+  // own Artifact (keyed by campaignId) for the funnel base.
+  const artifactByCampaign = useMemo(() => {
+    const m = new Map<string, Artifact>();
+    for (const a of artifacts) {
+      // Keep the latest artifact per campaign.
+      const prev = m.get(a.campaignId);
+      if (!prev || a.createdAt > prev.createdAt) m.set(a.campaignId, a);
+    }
+    return m;
+  }, [artifacts]);
 
-  // TODO(wave1): campaign-first инверсия сделала Campaign.signalId опциональным.
-  // Этот файл — собственность эпика «Кампании» (перейдёт на campaignId-keyed
-  // Artifact). Пока просто безопасно резолвим сигнал по возможному signalId.
-  const signalFor = (c: { signalId?: string }) =>
-    c.signalId ? signalById.get(c.signalId) : undefined;
+  const artifactFor = (c: Campaign) => artifactByCampaign.get(c.id);
 
   const sorted = useMemo(() => {
     const arr = [...campaigns];
     if (campaignSort === "conversion-desc") {
       arr.sort(
         (a, b) =>
-          conversionFor(b, signalFor(b)) -
-          conversionFor(a, signalFor(a))
+          conversionFor(b, artifactByCampaign.get(b.id)) -
+          conversionFor(a, artifactByCampaign.get(a.id))
       );
     } else {
       arr.sort((a, b) =>
@@ -50,7 +53,7 @@ export function CampaignsSection() {
       );
     }
     return arr;
-  }, [campaigns, campaignSort, signalById]);
+  }, [campaigns, campaignSort, artifactByCampaign]);
 
   const filtered = useMemo(
     () =>
@@ -60,8 +63,7 @@ export function CampaignsSection() {
     [sorted, campaignFilter]
   );
 
-  const goToSignals = () =>
-    dispatch({ type: "sidebar_nav", section: "Сигналы" });
+  const startCampaign = () => dispatch({ type: "start_campaign_flow" });
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto px-8 pb-promptbar pt-[140px]">
@@ -82,7 +84,7 @@ export function CampaignsSection() {
         </div>
 
         {campaigns.length === 0 ? (
-          <NewCampaignCard onGoToSignals={goToSignals} />
+          <NewCampaignCard onCreate={startCampaign} />
         ) : (
           <>
             <CampaignFilterChips
@@ -97,7 +99,7 @@ export function CampaignsSection() {
                   <CampaignCard
                     key={c.id}
                     campaign={c}
-                    signal={signalFor(c)}
+                    artifact={artifactFor(c)}
                     onOpen={(id) => dispatch({ type: "campaign_opened", id })}
                   />
                 ))}

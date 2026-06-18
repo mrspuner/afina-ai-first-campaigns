@@ -68,6 +68,12 @@ describe("all template nodes have matching params.kind", () => {
   it.each(SIGNAL_TYPES)("template \"%s\" — каждая нода имеет params.kind === nodeType", (type) => {
     const { nodes } = createTemplate(type);
     for (const node of nodes) {
+      // The `scoring` node (inserted for new/stream sources) has no params
+      // kind, just like `source` — both are param-less structural endpoints.
+      if (node.data.nodeType === "scoring") {
+        expect(node.data.params).toBeUndefined();
+        continue;
+      }
       expect(
         node.data.params,
         `node ${node.id} (${node.data.nodeType}) has no params`
@@ -106,6 +112,41 @@ describe("createTemplate with signal", () => {
       expect(params.segments.high).toBe(1500);
       expect(params.segments.mid).toBe(1500);
       expect(params.segments.low).toBe(1000);
+    }
+  });
+});
+
+describe("source-aware generation (A3)", () => {
+  it("own source has NO scoring node", () => {
+    const g = createTemplate("Регистрация", undefined, "own");
+    expect(g.nodes.some((n) => n.data.nodeType === "scoring")).toBe(false);
+  });
+  it("new source inserts a scoring node after source", () => {
+    const g = createTemplate("Регистрация", undefined, "new");
+    const idx = g.nodes.findIndex((n) => n.data.nodeType === "scoring");
+    expect(idx).toBeGreaterThan(-1);
+  });
+  it("stream source also inserts scoring", () => {
+    const g = createTemplate("Регистрация", undefined, "stream");
+    expect(g.nodes.some((n) => n.data.nodeType === "scoring")).toBe(true);
+  });
+  it("entry node stays type source even after scoring insertion", () => {
+    const g = createTemplate("Регистрация", undefined, "new");
+    expect(g.nodes[0].data.nodeType).toBe("source");
+  });
+  it("scoring node sits between source and the first communication", () => {
+    const g = createTemplate("Регистрация", undefined, "new");
+    const entryId = g.nodes[0].id;
+    // No edge directly from entry to a non-scoring node remains.
+    const entryEdges = g.edges.filter((e) => e.source === entryId);
+    expect(entryEdges).toHaveLength(1);
+    const scoringNode = g.nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect(entryEdges[0].target).toBe(scoringNode.id);
+  });
+  it("source-aware graph still validates ok", () => {
+    for (const st of ["new", "stream", "own"] as const) {
+      const g = createTemplate("Удержание", undefined, st);
+      expect(validateWorkflow(g, true).ok).toBe(true);
     }
   });
 });
