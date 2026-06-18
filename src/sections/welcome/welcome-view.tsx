@@ -29,14 +29,14 @@ export function WelcomeView() {
         <FirstTimeHero
           surveyCompleted={surveyCompleted || done}
           onOpenSurvey={() => dispatch({ type: "open_survey" })}
-          onCreateScenario={() => dispatch({ type: "start_signal_flow" })}
+          onCreateScenario={() => dispatch({ type: "start_campaign_flow" })}
         />
       </div>
     </div>
   );
 }
 
-function FirstTimeHero({
+export function FirstTimeHero({
   surveyCompleted,
   onOpenSurvey,
   onCreateScenario,
@@ -52,10 +52,9 @@ function FirstTimeHero({
           Добро пожаловать в афину
         </h1>
         <p className="text-[18px] leading-[26px] text-muted-foreground">
-          В афине собраны готовые сценарии для работы с вашими клиентами:
-          удержание, допродажи, реактивация и другие. Выберите сигнал по
-          нужному сценарию, запустите кампанию, отслеживайте результат в
-          статистике.
+          В афине вы создаёте кампанию по готовому сценарию: афина находит,
+          кому нужна коммуникация прямо сейчас, запускает сообщения в нужный
+          момент и показывает результат в статистике.
         </p>
       </div>
 
@@ -71,13 +70,13 @@ function FirstTimeHero({
             </h2>
             <p className="text-sm leading-relaxed text-foreground/70">
               {surveyCompleted
-                ? "Запустите поиск сигналов по этим сценариям или выберите свой сценарий из каталога"
+                ? "Создайте кампанию по одному из них или выберите свой сценарий из каталога."
                 : "За минуту афина предложит подходящие варианты."}
             </p>
           </div>
           {surveyCompleted ? (
             <Button onClick={onCreateScenario} className="shrink-0">
-              Найти сигналы
+              Создать кампанию
             </Button>
           ) : (
             <Button onClick={onOpenSurvey} className="shrink-0">
