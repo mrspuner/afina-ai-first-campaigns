@@ -52,6 +52,30 @@ function iso(y: number, m: number, d: number): string {
   return new Date(y, m, d).toISOString();
 }
 
+const CTX_WITH_TEMPLATES: StatsContext = {
+  signals: [{ id: "sig_t", count: 20000 }],
+  campaigns: [
+    {
+      id: "cmp_t",
+      name: "С шаблонами",
+      signalId: "sig_t",
+      status: "active",
+      createdAt: iso(2026, 5, 1),
+      launchedAt: iso(2026, 5, 1),
+      templates: [
+        { channel: "sms", id: "tpl_sms", name: "SMS-напоминание" },
+        { channel: "email", id: "tpl_eml", name: "Email-дайджест" },
+      ],
+    },
+  ],
+};
+
+describe("StatsContext — per-campaign templates field", () => {
+  it("accepts campaigns carrying a templates array", () => {
+    expect(CTX_WITH_TEMPLATES.campaigns?.[0].templates).toHaveLength(2);
+  });
+});
+
 const CTX: StatsContext = {
   signals: [
     { id: "sig_a", count: 40000 },

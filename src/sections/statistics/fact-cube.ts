@@ -25,6 +25,7 @@ import {
   type FunnelNumbers,
 } from "@/state/metrics";
 import type { RowKind, SearchConditions } from "./statistics-state";
+import type { Channel } from "@/types/campaign";
 import {
   eachDay,
   formatDateRangeRu,
@@ -77,6 +78,13 @@ export type StatsContext = {
     pausedAt?: string;
     completedAt?: string;
     scenario?: { id: string; name: string };
+    /**
+     * Templates this campaign actually uses on its communication nodes, by
+     * channel. Surfaced from app-state (Foundation/Артефакты linkage). Optional:
+     * callers that don't supply it (campaign-metrics, data-summary) get the
+     * "Без шаблона" fallback dim — the cube stays total either way.
+     */
+    templates?: readonly { channel: Channel; id: string; name: string }[];
   }[];
   signals?: readonly { id: string; count: number }[];
 };
@@ -87,7 +95,12 @@ export type StatsContext = {
 // their values come from the campaign itself.
 // ---------------------------------------------------------------------------
 
-export const POOLS: Record<Exclude<EntityDim, "campaigns" | "scenarios">, string[]> = {
+// `templates` is real data (resolved from the campaign), not an invented label
+// pool — so it is excluded here alongside the other real dims.
+export const POOLS: Record<
+  Exclude<EntityDim, "campaigns" | "scenarios" | "templates">,
+  string[]
+> = {
   offers: [
     "Кредит наличными",
     "Депозит «Гибкий»",
