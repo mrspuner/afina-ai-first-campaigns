@@ -4,7 +4,7 @@ import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { SignalStatus } from "@/types/signal-status";
-import type { StepData } from "@/types/campaign";
+import type { StepData, Channel } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import { scenarioNameForSignal, defaultCampaignName } from "./scenario-display";
 import {
@@ -91,6 +91,31 @@ export type Campaign = {
    */
   budget?: number;
   scenario?: { id: string; name: string };
+};
+
+/**
+ * Output of a campaign (formerly the top-level `Signal`). Campaign-scoped:
+ * keyed by `campaignId` rather than the campaign referencing it. Per-contact
+ * score lives in the file these represent — not modelled here for the prototype.
+ */
+export type Artifact = {
+  id: string;
+  campaignId: string;
+  kind: "signals" | "signals_conversions";
+  count: number;
+  createdAt: string;
+};
+
+/**
+ * A reusable, channel-typed message set assigned to a communication node.
+ * Flat by design (no variants): `content` is the field set of one channel.
+ */
+export type MessageTemplate = {
+  id: string;
+  channel: Channel;
+  name: string;
+  content: NodeParams;
+  usedInCampaigns: number;
 };
 
 export type Preset = {
