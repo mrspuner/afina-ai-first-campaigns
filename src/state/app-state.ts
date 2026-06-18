@@ -102,6 +102,12 @@ export type Campaign = {
    * alone ("active") cannot. Drives the in-card progress block (design §4).
    */
   phase?: "scoring" | "communicating";
+  /**
+   * Ids of the `MessageTemplate`s this campaign launched with. Set by
+   * `campaign_launched` (Task 15) from node-derived templates the launching
+   * UI passes in. Absent on drafts and seeded preset campaigns.
+   */
+  templateIds?: string[];
   scenario?: { id: string; name: string };
 };
 
