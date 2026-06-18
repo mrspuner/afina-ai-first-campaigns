@@ -90,7 +90,7 @@ export function AppSidebar({
                     <Icon className="h-6 w-6" />
                     {showBadge && (
                       <span
-                        aria-label="Есть новые сигналы"
+                        aria-label="Есть новые артефакты"
                         className="absolute -right-1.5 -top-1 inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-background"
                       />
                     )}
