@@ -1,5 +1,7 @@
 import {
   SignalLow,
+  Database,
+  Gauge,
   GitFork,
   Clock,
   GitBranch,
@@ -57,9 +59,12 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
 
 export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
   signal: SignalLow,
-  // provisional — reuse the legacy `signal` icon (spec §7.7, confirm with user)
-  source: SignalLow,
-  scoring: SignalLow,
+  // source = the audience source (file / stream / collection); scoring = the
+  // quality-selection step. Distinct lucide icons; palette stays provisional
+  // (reuses the `signal` blue) pending the §7.7 UI decision — yellow stays a
+  // rare signal, never a node fill.
+  source: Database,
+  scoring: Gauge,
   split: GitFork,
   wait: Clock,
   condition: GitBranch,
