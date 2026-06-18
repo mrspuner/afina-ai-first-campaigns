@@ -30,7 +30,9 @@ export function validateAiGraph(graph: {
   const ids = new Set(graph.nodes.map((n) => n.id));
   const byType = (t: string) => graph.nodes.filter((n) => n.data.nodeType === t);
 
-  const signals = byType("signal");
+  // Entry node was renamed `signal` → `source` (campaign-first inversion).
+  // Accept `source` as the entry; keep `signal` for any legacy graph.
+  const signals = [...byType("source"), ...byType("signal")];
   if (signals.length === 0) errors.push("no-signal-entry");
   if (byType("success").length === 0) errors.push("no-success-terminal");
   // "no-end-terminal" intentionally omitted — see jsdoc above

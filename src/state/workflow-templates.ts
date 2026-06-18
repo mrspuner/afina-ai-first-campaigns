@@ -65,7 +65,7 @@ const STEP = 210;
 function registrationTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Регистрация", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Регистрация", undefined,
         { kind: "signal", fileName: "сигнал_регистрация.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("email", "Email", "email", STEP, 0, "Welcome", undefined,
         { kind: "email", subject: "Добро пожаловать", body: "Мы рады видеть вас в нашем сервисе.", sender: "noreply@brand.com", link: "https://brand.com/welcome" }),
@@ -90,7 +90,7 @@ function registrationTemplate(): Template {
 function firstDealTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Первая сделка", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Первая сделка", undefined,
         { kind: "signal", fileName: "сигнал_первая-сделка.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("sms", "СМС", "sms", STEP, 0, "Промо", undefined,
         { kind: "sms", text: "Готовы к первой покупке? Подарок внутри.", alphaName: "BRAND", scheduledAt: "immediate", link: "https://brand.com/first" }),
@@ -119,7 +119,7 @@ function firstDealTemplate(): Template {
 function upsellTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Апсейл", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Апсейл", undefined,
         { kind: "signal", fileName: "сигнал_апсейл.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("split", "Сплиттер", "split", STEP, 0, "По сегменту", undefined,
         { kind: "split", by: "segment", branches: 3 }),
@@ -156,7 +156,7 @@ function upsellTemplate(): Template {
 function reactivationTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Реактивация", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Реактивация", undefined,
         { kind: "signal", fileName: "сигнал_реактивация.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("wait", "Задержка", "wait", STEP, 0, "3 дня", undefined,
         { kind: "wait", mode: "duration", durationHours: 72 }),
@@ -188,7 +188,7 @@ function reactivationTemplate(): Template {
 function returnTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Возврат", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Возврат", undefined,
         { kind: "signal", fileName: "сигнал_возврат.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("email", "Email", "email", STEP, 0, "Напоминание", undefined,
         { kind: "email", subject: "Мы ценим вас", body: "Вернитесь и получите подарок.", sender: "care@brand.com", link: "https://brand.com/return" }),
@@ -220,7 +220,7 @@ function returnTemplate(): Template {
 function retentionTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "signal", 0, 0, "Удержание", undefined,
+      n("signal", "Сигнал", "source", 0, 0, "Удержание", undefined,
         { kind: "signal", fileName: "сигнал_удержание.json", count: 0, segments: EMPTY_SEGMENTS }),
       n("split", "Сплиттер", "split", STEP, 0, "По сегменту", undefined,
         { kind: "split", by: "segment", branches: 3 }),

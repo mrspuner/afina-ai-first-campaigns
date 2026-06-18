@@ -45,6 +45,15 @@ describe("workflow templates", () => {
     }
   });
 
+  // The graph entry node is now typed `source` (replaces the legacy `signal`
+  // root). Its params stay the `signal` NodeParams member — there is no
+  // `source` params kind — so it is exempt from the params.kind===nodeType
+  // invariant below.
+  it.each(SIGNAL_TYPES)("entry node of %s is of type source", (type) => {
+    const { nodes } = createTemplate(type);
+    expect(nodes[0].data.nodeType).toBe("source");
+  });
+
   // Block A5 — numeric-suffix rule: within a template, every label must be unique.
   // If the rule is applied correctly: single occurrence → bare canonical label,
   // multiple occurrences → "<label> 1", "<label> 2", … so all labels stay unique.
@@ -64,7 +73,11 @@ describe("all template nodes have matching params.kind", () => {
         `node ${node.id} (${node.data.nodeType}) has no params`
       ).toBeDefined();
       if (node.data.params) {
-        expect(node.data.params.kind).toBe(node.data.nodeType);
+        // Entry node is typed `source` but keeps the `signal` params member
+        // (no `source` NodeParams kind exists). Exempt it from the invariant.
+        const expectedKind =
+          node.data.nodeType === "source" ? "signal" : node.data.nodeType;
+        expect(node.data.params.kind).toBe(expectedKind);
       }
     }
   });
@@ -81,7 +94,9 @@ describe("createTemplate with signal", () => {
       updatedAt: new Date().toISOString(),
     };
     const { nodes } = createTemplate("Регистрация", signal);
-    const signalNode = nodes.find((n) => n.data.nodeType === "signal");
+    // Entry node is now typed `source`; patchNodeParams still targets it by id
+    // "signal" and its params remain the `signal` member.
+    const signalNode = nodes.find((n) => n.data.params?.kind === "signal");
     expect(signalNode).toBeDefined();
     const params = signalNode?.data.params;
     expect(params?.kind).toBe("signal");

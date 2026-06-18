@@ -28,6 +28,10 @@ export interface NodeStyle {
 export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
   // Endpoints
   signal:     { border: "#1e3a8a", bg: "#050815", color: "#93c5fd" },
+  // source/scoring: provisional — reuse the legacy `signal` node's palette/icon
+  // until the UI-decision (spec §7.7) is confirmed with the user.
+  source:     { border: "#1e3a8a", bg: "#050815", color: "#93c5fd" },
+  scoring:    { border: "#1e3a8a", bg: "#050815", color: "#93c5fd" },
   success:    { border: "#14532d", bg: "#030d06", color: "#4ade80" },
   end:        { border: "#374151", bg: "#0a0a0a", color: "#9ca3af" },
   // Logic
@@ -53,6 +57,9 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
 
 export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
   signal: SignalLow,
+  // provisional — reuse the legacy `signal` icon (spec §7.7, confirm with user)
+  source: SignalLow,
+  scoring: SignalLow,
   split: GitFork,
   wait: Clock,
   condition: GitBranch,
