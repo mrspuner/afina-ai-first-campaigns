@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { Check, CircleDashed, Loader2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StepContent } from "@/sections/signals/steps/step-content";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import type { StepData } from "@/types/campaign";
 import type { Signal } from "@/state/app-state";
 

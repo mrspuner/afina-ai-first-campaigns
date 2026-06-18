@@ -26,7 +26,7 @@ import {
 import type { ChipSegment } from "@/state/prompt-chips-context";
 import { fetchAssistAvailability } from "@/lib/ai/assist-client";
 import { buildDataSummary, buildStatsLines } from "@/lib/ai/data-summary";
-import { STEPPER_ITEMS } from "@/sections/signals/campaign-stepper";
+import { STEPPER_ITEMS } from "@/sections/campaigns/wizard/campaign-stepper";
 import { isAiParserEnabled, appendAiLogEntry } from "@/state/dev-config";
 import { getCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
 import { summarizeGraph } from "@/lib/ai/graph-summary";

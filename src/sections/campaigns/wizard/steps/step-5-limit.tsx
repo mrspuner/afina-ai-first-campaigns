@@ -2,8 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { StepContent } from "@/sections/signals/steps/step-content";
-import { StepFooter } from "@/sections/signals/steps/step-footer";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
+import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 import { recommendBudget } from "@/state/metrics";

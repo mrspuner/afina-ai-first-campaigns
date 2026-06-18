@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { DropZone } from "@/components/ui/drop-zone";
 import { HashingLoader } from "@/components/ui/hashing-loader";
-import { StepContent } from "@/sections/signals/steps/step-content";
-import { StepFooter } from "@/sections/signals/steps/step-footer";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
+import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import { rngFor, seededInt } from "@/state/metrics";
 

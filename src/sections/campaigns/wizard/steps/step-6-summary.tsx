@@ -3,8 +3,8 @@
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { StepContent } from "@/sections/signals/steps/step-content";
-import { StepFooter } from "@/sections/signals/steps/step-footer";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
+import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import { useAppState } from "@/state/app-state-context";
 import { computeShortfall } from "@/sections/signals/top-up-modal";

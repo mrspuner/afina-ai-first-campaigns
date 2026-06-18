@@ -2,20 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { CampaignStepper } from "@/sections/signals/campaign-stepper";
+import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
-import { Step1Scenario } from "@/sections/signals/steps/step-1-scenario";
-import { Step2Interests } from "@/sections/signals/steps/step-2-interests";
-import { Step3Segments } from "@/sections/signals/steps/step-3-segments";
-import { Step4Upload } from "@/sections/signals/steps/step-4-upload";
-import { Step5Limit } from "@/sections/signals/steps/step-5-limit";
-import { Step6Summary } from "@/sections/signals/steps/step-6-summary";
-import { Step7Processing } from "@/sections/signals/steps/step-7-processing";
-import { Step8Result } from "@/sections/signals/steps/step-8-result";
+import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
+import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
+import { Step3Segments } from "@/sections/campaigns/wizard/steps/step-3-segments";
+import { Step4Upload } from "@/sections/campaigns/wizard/steps/step-4-upload";
+import { Step5Limit } from "@/sections/campaigns/wizard/steps/step-5-limit";
+import { Step6Summary } from "@/sections/campaigns/wizard/steps/step-6-summary";
+import { Step7Processing } from "@/sections/campaigns/wizard/steps/step-7-processing";
+import { Step8Result } from "@/sections/campaigns/wizard/steps/step-8-result";
 import type { Signal } from "@/state/app-state";
 import { estimateSignalCount } from "@/state/metrics";
-import { computeStepTransition } from "@/sections/signals/wizard-navigation";
+import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
 
 export interface LaunchRequest {
   scenarioId: string;

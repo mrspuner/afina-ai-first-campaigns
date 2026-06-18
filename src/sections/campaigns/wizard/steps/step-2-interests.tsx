@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Check, Plus, X, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StepContent } from "@/sections/signals/steps/step-content";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { VERTICALS, getInterestById } from "@/data/triggers-by-vertical";

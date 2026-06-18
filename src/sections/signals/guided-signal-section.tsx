@@ -10,7 +10,7 @@ import { SCENARIO_TO_TYPE } from "@/state/scenario-map";
 import { segmentsForSignal } from "@/state/metrics";
 import { SCENARIO_NAMES } from "@/data/scenarios";
 import { SurveySection } from "@/sections/survey/survey-section";
-import { CampaignWorkspace } from "./campaign-workspace";
+import { CampaignWorkspace } from "@/sections/campaigns/wizard/campaign-workspace";
 import { TopUpModal, computeShortfall } from "./top-up-modal";
 import { getProcessingDuration } from "@/state/dev-config";
 import { shouldShowSurveyGate } from "@/state/survey-gate";

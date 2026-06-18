@@ -3,7 +3,7 @@
 import { Download, MessageCircle, RotateCcw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { StepContent } from "@/sections/signals/steps/step-content";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import type { Signal } from "@/state/app-state";
 
 interface Step8ResultProps {

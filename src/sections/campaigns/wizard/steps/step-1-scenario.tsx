@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import { StepContent } from "@/sections/signals/steps/step-content";
+import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
 import { Input } from "@/components/ui/input";
