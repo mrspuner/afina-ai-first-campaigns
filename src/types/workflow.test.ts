@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { patchNodeParams, type NodeParams, type WorkflowNodeData } from "./workflow";
+import type { WorkflowNodeType } from "./workflow";
+
+it("source and scoring are valid node types", () => {
+  const a: WorkflowNodeType = "source";
+  const b: WorkflowNodeType = "scoring";
+  expect([a, b]).toEqual(["source", "scoring"]);
+});
 
 type TestNode = { id: string; data: WorkflowNodeData };
 

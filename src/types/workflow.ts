@@ -3,6 +3,8 @@ import type { Node, Edge } from "@xyflow/react";
 export type WorkflowNodeType =
   // Endpoints
   | "signal"
+  | "source"   // entry node (replaces "signal" as the graph root; carries sourceType + interests)
+  | "scoring"  // quality/segment selection (new/stream only)
   | "success"
   | "end"
   // Logic / Flow
@@ -157,6 +159,8 @@ export type NodeCategory = "endpoint" | "logic" | "communication" | "web" | "leg
 
 export const NODE_CATEGORY: Record<WorkflowNodeType, NodeCategory> = {
   signal: "endpoint",
+  source: "endpoint",
+  scoring: "endpoint",
   success: "endpoint",
   end: "endpoint",
   split: "logic",
