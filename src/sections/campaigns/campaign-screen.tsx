@@ -14,6 +14,7 @@ import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { ProviderList } from "./provider-list";
 import { CampaignPathIndicator } from "./campaign-path-indicator";
 import { CampaignSignalProgress } from "./campaign-signal-progress";
+import { CampaignStatsBlock } from "./campaign-stats-block";
 import { StatusBadge } from "./status-badge";
 import { scenarioNameForSignal } from "@/state/scenario-display";
 
@@ -31,7 +32,7 @@ function formatNumber(n: number): string {
 }
 
 export function CampaignScreen() {
-  const { view, campaigns, signals } = useAppState();
+  const { view, campaigns, signals, artifacts } = useAppState();
   const dispatch = useAppDispatch();
 
   const campaign =
@@ -72,6 +73,11 @@ export function CampaignScreen() {
     isActive &&
     sourceType !== "own" &&
     (campaign.phase ?? "scoring") === "scoring";
+
+  // Latest artifact produced by this campaign (drives in-card stats funnel).
+  const campaignArtifact = artifacts
+    .filter((a) => a.campaignId === campaign.id)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
 
   const scenarioName =
     campaign.scenario?.name ?? (signal ? scenarioNameForSignal(signal) : "—");
@@ -202,6 +208,13 @@ export function CampaignScreen() {
               Запустить
             </Button>
           </div>
+        </CardSection>
+      )}
+
+      {/* Статистика — сводка в карточке (дополняет переход в полный отчёт) */}
+      {hasStats && !isScoring && (
+        <CardSection label="Статистика">
+          <CampaignStatsBlock campaign={campaign} artifact={campaignArtifact} />
         </CardSection>
       )}
     </EntityCardShell>
