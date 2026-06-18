@@ -833,6 +833,7 @@ describe("appReducer — survey actions", () => {
     expect(next.survey).toEqual({
       companyName: "",
       companyWebsite: "",
+      taskDescription: "",
       directionId: null,
     });
     expect(next.clientDirection).toBe("finance");

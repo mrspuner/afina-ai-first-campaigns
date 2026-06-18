@@ -8,8 +8,14 @@ export interface Survey {
    * Foundation owner renames the reader; then this field can be dropped.
    */
   companyWebsite: string;
-  /** Free-text description of the marketing task (replaces the website URL). */
-  taskDescription: string;
+  /**
+   * Free-text description of the marketing task (replaces the website URL).
+   * Optional during the migration alias period: the form and seeds always set
+   * it, but legacy `{companyName, companyWebsite, directionId}` fixtures predate
+   * it. Becomes required once the full `companyWebsite`→`taskDescription` hub
+   * rename lands.
+   */
+  taskDescription?: string;
   directionId: DirectionId | null;
 }
 
