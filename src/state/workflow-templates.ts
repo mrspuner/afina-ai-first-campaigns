@@ -1,4 +1,5 @@
 import type { Signal, SignalType } from "./app-state";
+import type { SourceType } from "@/types/campaign";
 import { patchNodeParams } from "@/types/workflow";
 import type {
   NodeParams,
@@ -260,8 +261,47 @@ export const TEMPLATE_BY_TYPE: Record<SignalType, () => Template> = {
   "Удержание": retentionTemplate,
 };
 
-export function createTemplate(signalType: SignalType, signal?: Signal): Template {
-  const template = TEMPLATE_BY_TYPE[signalType]();
+/**
+ * Splices a `scoring` node between the entry `source` node and its first
+ * downstream node. Used for `new`/`stream` sources (spec §3): collected/streamed
+ * audiences must be scored before communication. `own` bases are pre-loaded and
+ * skip scoring entirely. The scoring node carries no params (no required human
+ * field — `nodeNeedsAttention` returns false), so it never blocks launch.
+ */
+function withScoring(t: Template): Template {
+  const entry = t.nodes[0];
+  if (!entry) return t;
+  const entryId = entry.id;
+  const firstEdge = t.edges.find((edge) => edge.source === entryId);
+  if (!firstEdge) return t;
+
+  const scoringNode = n(
+    "scoring",
+    "Скоринг",
+    "scoring",
+    entry.position.x + STEP / 2,
+    entry.position.y,
+    "Качество базы"
+  );
+  // Shift everything to the right of the entry by STEP/2 to make room.
+  const shifted = t.nodes.map((nd) =>
+    nd.id === entryId
+      ? nd
+      : { ...nd, position: { ...nd.position, x: nd.position.x + STEP / 2 } }
+  );
+  const edges = t.edges
+    .filter((edge) => edge.id !== firstEdge.id)
+    .concat([e(entryId, "scoring"), e("scoring", firstEdge.target)]);
+  return { nodes: [...shifted, scoringNode], edges };
+}
+
+export function createTemplate(
+  signalType: SignalType,
+  signal?: Signal,
+  sourceType: SourceType = "new"
+): Template {
+  const base = TEMPLATE_BY_TYPE[signalType]();
+  const template = sourceType === "own" ? base : withScoring(base);
   if (!signal) return template;
   const fileName = `сигнал_${signalType.toLowerCase()}.json`;
   return {

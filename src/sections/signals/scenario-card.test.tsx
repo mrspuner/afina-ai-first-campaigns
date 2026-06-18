@@ -11,6 +11,7 @@ const SCENARIO: Scenario = {
   signalType: "Регистрация",
   isBase: true,
   isCurated: false,
+  recommendedSourceType: "new",
 };
 
 describe("ScenarioCard — card-level click", () => {
