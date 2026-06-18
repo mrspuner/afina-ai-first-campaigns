@@ -582,7 +582,7 @@ function applyRemove(
   const node = findNodeByRef(graph.nodes, op.ref);
   if (!node) return { error: `«${op.ref}» — нет такой ноды` };
   const nodeType = (node.data as { nodeType: WorkflowNodeType }).nodeType;
-  if (nodeType === "signal") {
+  if (nodeType === "source" || nodeType === "signal") {
     return { error: `Сигнал — точка входа, удалять нельзя` };
   }
   if (nodeType === "success" || nodeType === "end") {
@@ -694,9 +694,10 @@ function applyReplace(
  * Сироты (не достижимые из Сигнала) — за последним столбцом.
  */
 export function relayoutGraph(graph: GraphState): GraphState {
-  const signal = graph.nodes.find(
-    (n) => (n.data as { nodeType: WorkflowNodeType }).nodeType === "signal"
-  );
+  const signal = graph.nodes.find((n) => {
+    const t = (n.data as { nodeType: WorkflowNodeType }).nodeType;
+    return t === "source" || t === "signal";
+  });
   if (!signal) return graph;
 
   const COL_WIDTH = 200;

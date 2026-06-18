@@ -114,7 +114,9 @@ export function computeReach(
     dynamic[n.id] = false;
   }
 
-  const signal = nodes.find((n) => n.data.nodeType === "signal");
+  const signal = nodes.find(
+    (n) => n.data.nodeType === "source" || n.data.nodeType === "signal"
+  );
   const segments =
     signal?.data.params?.kind === "signal" ? signal.data.params.segments : undefined;
   if (signal) reach[signal.id] = N;

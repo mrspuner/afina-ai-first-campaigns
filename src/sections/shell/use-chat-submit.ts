@@ -380,7 +380,9 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
           : undefined;
       const graph = cached ? summarizeGraph(cached) : undefined;
       const cachedSignalLabel =
-        cached?.nodes.find((n) => n.data.nodeType === "signal")?.data.label ?? "Сигнал";
+        cached?.nodes.find(
+          (n) => n.data.nodeType === "source" || n.data.nodeType === "signal"
+        )?.data.label ?? "Сигнал";
       const selectedNode =
         editableWorkflow && appState.selectedWorkflowNode
           ? {

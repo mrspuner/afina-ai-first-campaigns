@@ -32,7 +32,7 @@ function edge(source: string, target: string): WorkflowEdge {
 const EMPTY_SEG = { max: 0, high: 0, mid: 0, low: 0 };
 
 function signalNode(count: number, segments = EMPTY_SEG): WorkflowNode {
-  return node("signal", "signal", {
+  return node("signal", "source", {
     kind: "signal",
     fileName: "x.json",
     count,
