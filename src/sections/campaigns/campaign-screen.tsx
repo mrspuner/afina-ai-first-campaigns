@@ -15,6 +15,7 @@ import { ProviderList } from "./provider-list";
 import { CampaignPathIndicator } from "./campaign-path-indicator";
 import { CampaignSignalProgress } from "./campaign-signal-progress";
 import { CampaignStatsBlock } from "./campaign-stats-block";
+import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
 import { scenarioNameForSignal } from "@/state/scenario-display";
 
@@ -74,10 +75,11 @@ export function CampaignScreen() {
     sourceType !== "own" &&
     (campaign.phase ?? "scoring") === "scoring";
 
-  // Latest artifact produced by this campaign (drives in-card stats funnel).
-  const campaignArtifact = artifacts
+  // Artifacts produced by this campaign (newest first).
+  const campaignArtifacts = artifacts
     .filter((a) => a.campaignId === campaign.id)
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const campaignArtifact = campaignArtifacts[0];
 
   const scenarioName =
     campaign.scenario?.name ?? (signal ? scenarioNameForSignal(signal) : "—");
@@ -215,6 +217,17 @@ export function CampaignScreen() {
       {hasStats && !isScoring && (
         <CardSection label="Статистика">
           <CampaignStatsBlock campaign={campaign} artifact={campaignArtifact} />
+        </CardSection>
+      )}
+
+      {/* Артефакты — что произвела кампания (Сигналы / Сигналы и конверсии) */}
+      {(campaignArtifacts.length > 0 || isScoring) && (
+        <CardSection label="Артефакты">
+          <CampaignArtifactsBlock
+            artifacts={campaignArtifacts}
+            forming={isScoring}
+            onOpen={(id) => dispatch({ type: "artifact_opened", id })}
+          />
         </CardSection>
       )}
     </EntityCardShell>
