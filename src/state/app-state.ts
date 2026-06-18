@@ -361,7 +361,8 @@ export type Action =
   | { type: "wizard_step_changed"; step: number | null }
   | { type: "budget_help_shown" }
   | { type: "wizard_random_remix" }
-  | { type: "campaign_launched"; id: string; timestamp: string; budget: number }
+  | { type: "campaign_launched"; id: string; timestamp: string; budget: number; templates?: MessageTemplate[]; dailyBudget?: number }
+  | { type: "campaign_phase_advanced"; id: string }
   | { type: "open_workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { type: "open_campaign_payment"; campaignId: string }
   | { type: "stats_set_period"; period: Period }
@@ -1049,8 +1050,26 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "campaign_launched": {
       const c = state.campaigns.find((cc) => cc.id === action.id);
       if (!c) return state;
+
+      // Merge node-derived templates into the shared library, deduping by id:
+      // bump usage for an already-present id, push with usage 1 for a new one.
+      const incoming = action.templates ?? [];
+      const incomingIds = incoming.map((t) => t.id);
+      const present = new Set(state.templates.map((t) => t.id));
+      const templates: MessageTemplate[] = state.templates.map((t) =>
+        incomingIds.includes(t.id)
+          ? { ...t, usedInCampaigns: t.usedInCampaigns + 1 }
+          : t
+      );
+      for (const t of incoming) {
+        if (!present.has(t.id)) {
+          templates.push({ ...t, usedInCampaigns: 1 });
+        }
+      }
+
       return {
         ...state,
+        templates,
         campaigns: state.campaigns.map((cc) =>
           cc.id === action.id
             ? {
@@ -1060,6 +1079,8 @@ export function appReducer(state: AppState, action: Action): AppState {
                 // A real budget overwrites; a 0 (e.g. weird re-dispatch) keeps
                 // the previously-stored value.
                 budget: action.budget > 0 ? action.budget : cc.budget,
+                dailyBudget: action.dailyBudget ?? cc.dailyBudget,
+                templateIds: incomingIds.length > 0 ? incomingIds : cc.templateIds,
               }
             : cc
         ),
@@ -1067,6 +1088,14 @@ export function appReducer(state: AppState, action: Action): AppState {
         activeSection: null,
       };
     }
+
+    case "campaign_phase_advanced":
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.id ? { ...c, phase: "communicating" } : c
+        ),
+      };
 
     case "open_workflow":
       return {
