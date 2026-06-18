@@ -847,3 +847,686 @@ Foundation is complete on `feature/campaign-first-foundation` at `.worktrees/fou
 - **Placeholders:** none. UI-undetermined values (Артефакты icon Task 7; source/scoring colors Task 8) use the existing node/style as a provisional and are flagged as §7 user-decisions, not left blank.
 - **Type consistency:** `Artifact{id,campaignId,kind,count,createdAt}`, `MessageTemplate{id,channel,name,content,usedInCampaigns}`, `campaign_artifact_ready{campaignId,kind,count}`, `start_campaign_flow` used identically across Tasks 3–11.
 - **Known intentional red window:** build is red Tasks 1→10 by design (contract-first, stub-after); first green checkpoint is Task 10 Step 4. Each task still keeps `src/state`/`src/types` unit tests green.
+- **Addendum:** the "Wave 0 — Addendum: cross-epic contract completion" section below (Tasks 13–18) extends spec coverage to the remaining hub contracts the six Wave-1 epics depend on — templates in state (§2/block 10), `Campaign.templateIds`, `campaign_launched` template/dailyBudget merge, `campaign_phase_advanced` (§4), the artifact-ready badge, and the artifact detail view/action — all owned by Foundation and frozen here.
+
+---
+
+## Wave 0 — Addendum: cross-epic contract completion
+
+> **Why an addendum:** Tasks 1–12 froze the entity types, the create-flow inversion, routing, and the structural move. Six Wave-1 epics (artifacts, statistics, campaigns, shell) still depend on a handful of *hub* contracts that only Foundation may own — they live in `src/state/app-state.ts` and `src/app/page.tsx`. This section freezes exactly those, so the epics can build against stable shapes. Same rules as above: each task is a real TDD loop (failing `src/state/*.test.ts` → run → implement → pass → commit), complete code, exact paths, exact commands. These tasks assume Task 12's green baseline; run them after Foundation's core is green.
+
+---
+
+## Task 13: Seed `AppState.templates` with preset `MessageTemplate`s
+
+The Шаблоны tab (Артефакты epic) and statistics both need real template data *before* any campaign launches. We add a `templates` slice to `AppState` and seed it from `PRESET_EMAILS` (channel `email`) plus one sms and one push sample, using the `MessageTemplate` shape Foundation added in Task 3 (`{ id, channel, name, content: NodeParams, usedInCampaigns }`, where `content` is the channel's `NodeParams` discriminated-union member).
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `AppState` (add `templates`), `initialState` (seed), a new `PRESET_TEMPLATES` const.
+- Test: `src/state/templates-seed.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/templates-seed.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import { initialState, PRESET_TEMPLATES, type MessageTemplate } from "./app-state";
+
+describe("seeded message templates", () => {
+  it("initialState.templates is the preset set", () => {
+    expect(initialState.templates).toBe(PRESET_TEMPLATES);
+    expect(initialState.templates.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("seeds three email templates derived from the email directory", () => {
+    const emails = initialState.templates.filter((t) => t.channel === "email");
+    expect(emails).toHaveLength(3);
+    expect(emails.every((t) => t.content.kind === "email")).toBe(true);
+  });
+
+  it("seeds at least one sms and one push sample", () => {
+    const channels = new Set(initialState.templates.map((t) => t.channel));
+    expect(channels.has("sms")).toBe(true);
+    expect(channels.has("push")).toBe(true);
+  });
+
+  it("each template's content.kind matches its channel and usage starts at 0", () => {
+    for (const t of initialState.templates as MessageTemplate[]) {
+      expect(t.content.kind).toBe(t.channel);
+      expect(t.usedInCampaigns).toBe(0);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run it to confirm it fails**
+
+Run: `npx vitest run src/state/templates-seed.test.ts`
+Expected: FAIL — `PRESET_TEMPLATES` not exported, `templates` not on `AppState`/`initialState`.
+
+- [ ] **Step 3: Add the `PRESET_TEMPLATES` const**
+
+In `src/state/app-state.ts`, add the email-directory import to the top-of-file imports (it already lives at `@/state/email-directory`):
+```ts
+import { getEmails } from "@/state/email-directory";
+```
+After the `MessageTemplate` type (added in Task 3), add the seed const. The three email templates are derived from the directory preset records; map each `EmailRecord` to an `EmailParams` content (`{ kind: "email", subject, body, sender, link }`). Then append one sms and one push sample:
+```ts
+/**
+ * Seed templates so the Шаблоны tab + statistics have real data before any
+ * launch. Email templates are derived 1:1 from the email directory presets
+ * (channel "email"); the sms + push entries are hand-authored samples. Each
+ * `content` is the channel's NodeParams member; `usedInCampaigns` starts at 0
+ * and is bumped by `campaign_launched` (Task 15).
+ */
+export const PRESET_TEMPLATES: MessageTemplate[] = [
+  ...getEmails().map<MessageTemplate>((e) => ({
+    id: `tpl_${e.id}`,
+    channel: "email",
+    name: e.name,
+    content: {
+      kind: "email",
+      subject: e.subject,
+      body: e.body,
+      sender: e.sender,
+      link: e.link,
+      emailId: e.id,
+    },
+    usedInCampaigns: 0,
+  })),
+  {
+    id: "tpl_sms_reminder",
+    channel: "sms",
+    name: "SMS — напоминание",
+    content: {
+      kind: "sms",
+      text: "Ваше предложение ждёт. Подробности на сайте.",
+      alphaName: "AFINA",
+      scheduledAt: "immediate",
+      link: "https://example.com/offer",
+    },
+    usedInCampaigns: 0,
+  },
+  {
+    id: "tpl_push_back",
+    channel: "push",
+    name: "Push — возвращение",
+    content: {
+      kind: "push",
+      title: "Давно вас не видели",
+      body: "Загляните — у нас есть кое-что для вас.",
+      deeplink: "app://offers",
+    },
+    usedInCampaigns: 0,
+  },
+];
+```
+> `getEmails()` returns `PRESET_EMAILS` (3 records) at module load, since no session emails exist yet — giving exactly three email templates. Their ids are namespaced `tpl_<emailId>` to avoid colliding with the directory's own `eml_*` ids.
+
+- [ ] **Step 4: Add `templates` to `AppState` + `initialState`**
+
+In the `AppState` type, add beneath the `artifacts: Artifact[];` line (added in Task 6):
+```ts
+  templates: MessageTemplate[];
+```
+In `initialState`, add beneath `artifacts: [],`:
+```ts
+  templates: PRESET_TEMPLATES,
+```
+
+- [ ] **Step 5: Run the test**
+
+Run: `npx vitest run src/state/templates-seed.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Verify the state suite + app-state type-check**
+
+Run: `npx vitest run src/state && npx tsc --noEmit 2>&1 | grep "app-state" || echo "app-state clean"`
+Expected: `src/state` PASS; no `app-state.ts` errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/state/app-state.ts src/state/templates-seed.test.ts
+git commit -m "feat(state): seed AppState.templates from email presets + sms/push samples"
+```
+
+---
+
+## Task 14: Add `Campaign.templateIds` (additive optional)
+
+Statistics joins a campaign to the templates it used. Add the link as an optional field on `Campaign` (set by `campaign_launched` in Task 15).
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `Campaign` type.
+- Test: `src/state/campaign-template-link.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/campaign-template-link.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import type { Campaign } from "./app-state";
+
+describe("Campaign → template linkage", () => {
+  it("carries an optional templateIds list", () => {
+    const c: Campaign = {
+      id: "cmp_1",
+      name: "Test",
+      status: "draft",
+      createdAt: "2026-06-18T00:00:00.000Z",
+      sourceType: "new",
+      channels: ["email"],
+      templateIds: ["tpl_eml_offer"],
+    };
+    expect(c.templateIds).toEqual(["tpl_eml_offer"]);
+  });
+});
+```
+> Compiles only once `templateIds` is on `Campaign` — fails to type-check until Step 3.
+
+- [ ] **Step 2: Run it**
+
+Run: `npx vitest run src/state/campaign-template-link.test.ts`
+Expected: FAIL — `templateIds` not assignable to `Campaign`.
+
+- [ ] **Step 3: Add the field**
+
+In `src/state/app-state.ts`, in the `Campaign` type, add after the `dailyBudget?: number;` field (added in Task 4):
+```ts
+  /**
+   * Ids of the `MessageTemplate`s this campaign launched with. Set by
+   * `campaign_launched` (Task 15) from node-derived templates the launching
+   * UI passes in. Absent on drafts and seeded preset campaigns.
+   */
+  templateIds?: string[];
+```
+
+- [ ] **Step 4: Run the test**
+
+Run: `npx vitest run src/state/campaign-template-link.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/state/app-state.ts src/state/campaign-template-link.test.ts
+git commit -m "feat(state): add Campaign.templateIds link"
+```
+
+---
+
+## Task 15: Emit templates + dailyBudget at launch (extend `campaign_launched`)
+
+Graphs are NOT persisted in state, so the launching UI (Кампании epic) derives `MessageTemplate`s from the workflow's communication nodes and passes them in the `campaign_launched` payload. Foundation only defines the action shape + the merge logic: dedup incoming templates into `state.templates` by id (bump `usedInCampaigns` for an existing id, push with `usedInCampaigns: 1` for a new one), set the launched campaign's `templateIds`, and persist `dailyBudget` when present.
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `campaign_launched` action variant + reducer case.
+- Test: `src/state/campaign-launch-templates.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/campaign-launch-templates.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import {
+  appReducer,
+  initialState,
+  type Campaign,
+  type MessageTemplate,
+} from "./app-state";
+
+function draft(over: Partial<Campaign> = {}): Campaign {
+  return {
+    id: "cmp_seed",
+    name: "Seed",
+    status: "draft",
+    createdAt: "2026-06-18T00:00:00.000Z",
+    sourceType: "new",
+    channels: ["sms"],
+    ...over,
+  };
+}
+
+const newTpl: MessageTemplate = {
+  id: "tpl_launch_sms",
+  channel: "sms",
+  name: "SMS из ноды",
+  content: { kind: "sms", text: "Привет", alphaName: "AFINA", scheduledAt: "immediate" },
+  usedInCampaigns: 0,
+};
+
+describe("campaign_launched template + dailyBudget merge", () => {
+  it("pushes a new template with usedInCampaigns: 1 and links it to the campaign", () => {
+    const state = { ...initialState, campaigns: [draft()] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_seed",
+      timestamp: "2026-06-18T00:00:00.000Z",
+      budget: 50000,
+      templates: [newTpl],
+    });
+    const merged = next.templates.find((t) => t.id === "tpl_launch_sms");
+    expect(merged?.usedInCampaigns).toBe(1);
+    expect(next.campaigns[0].templateIds).toEqual(["tpl_launch_sms"]);
+  });
+
+  it("increments usedInCampaigns for an already-present template id (no duplicate)", () => {
+    const seeded: MessageTemplate = { ...newTpl, usedInCampaigns: 2 };
+    const state = { ...initialState, campaigns: [draft()], templates: [seeded] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_seed",
+      timestamp: "x",
+      budget: 1000,
+      templates: [{ ...newTpl, usedInCampaigns: 0 }],
+    });
+    const hits = next.templates.filter((t) => t.id === "tpl_launch_sms");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].usedInCampaigns).toBe(3);
+  });
+
+  it("persists dailyBudget when present and leaves templates untouched when omitted", () => {
+    const state = { ...initialState, campaigns: [draft()] };
+    const before = state.templates.length;
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_seed",
+      timestamp: "x",
+      budget: 1000,
+      dailyBudget: 2500,
+    });
+    expect(next.campaigns[0].dailyBudget).toBe(2500);
+    expect(next.templates).toHaveLength(before);
+    expect(next.campaigns[0].templateIds ?? []).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `npx vitest run src/state/campaign-launch-templates.test.ts`
+Expected: FAIL — `templates`/`dailyBudget` not on the `campaign_launched` payload; merge logic absent.
+
+- [ ] **Step 3: Extend the action variant**
+
+In `src/state/app-state.ts`, change the `campaign_launched` line in the `Action` union to:
+```ts
+  | { type: "campaign_launched"; id: string; timestamp: string; budget: number; templates?: MessageTemplate[]; dailyBudget?: number }
+```
+
+- [ ] **Step 4: Rewrite the `campaign_launched` reducer case**
+
+Replace the existing `case "campaign_launched": { … }` body with:
+```ts
+    case "campaign_launched": {
+      const c = state.campaigns.find((cc) => cc.id === action.id);
+      if (!c) return state;
+
+      // Merge node-derived templates into the shared library, deduping by id:
+      // bump usage for an already-present id, push with usage 1 for a new one.
+      const incoming = action.templates ?? [];
+      const incomingIds = incoming.map((t) => t.id);
+      const present = new Set(state.templates.map((t) => t.id));
+      const templates: MessageTemplate[] = state.templates.map((t) =>
+        incomingIds.includes(t.id)
+          ? { ...t, usedInCampaigns: t.usedInCampaigns + 1 }
+          : t
+      );
+      for (const t of incoming) {
+        if (!present.has(t.id)) {
+          templates.push({ ...t, usedInCampaigns: 1 });
+        }
+      }
+
+      return {
+        ...state,
+        templates,
+        campaigns: state.campaigns.map((cc) =>
+          cc.id === action.id
+            ? {
+                ...cc,
+                status: "active",
+                launchedAt: cc.launchedAt ?? action.timestamp,
+                // A real budget overwrites; a 0 (e.g. weird re-dispatch) keeps
+                // the previously-stored value.
+                budget: action.budget > 0 ? action.budget : cc.budget,
+                dailyBudget: action.dailyBudget ?? cc.dailyBudget,
+                templateIds: incomingIds.length > 0 ? incomingIds : cc.templateIds,
+              }
+            : cc
+        ),
+        view: { kind: "campaign", campaign: { id: c.id, name: c.name } },
+        activeSection: null,
+      };
+    }
+```
+
+- [ ] **Step 5: Run the test**
+
+Run: `npx vitest run src/state/campaign-launch-templates.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Verify the full state suite + tsc (no existing `campaign_launched` caller breaks — both new payload fields are optional)**
+
+Run: `npx vitest run src/state && npx tsc --noEmit 2>&1 | grep "app-state" || echo "app-state clean"`
+Expected: `src/state` PASS; app-state clean. Existing dispatchers pass only `{ id, timestamp, budget }`, which still type-checks.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/state/app-state.ts src/state/campaign-launch-templates.test.ts
+git commit -m "feat(state): merge node templates + dailyBudget at campaign launch"
+```
+
+---
+
+## Task 16: Add `campaign_phase_advanced` action
+
+The Кампании epic drives the in-card progress block (design §4) by moving a launched campaign from `phase: "scoring"` to `phase: "communicating"`. The `phase` field already exists from Task 4; here we add the action that flips it.
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `Action` union + reducer case.
+- Test: `src/state/campaign-phase.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/campaign-phase.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import { appReducer, initialState, type Campaign } from "./app-state";
+
+function active(over: Partial<Campaign> = {}): Campaign {
+  return {
+    id: "cmp_1",
+    name: "Active",
+    status: "active",
+    createdAt: "2026-06-18T00:00:00.000Z",
+    sourceType: "new",
+    channels: ["sms"],
+    phase: "scoring",
+    ...over,
+  };
+}
+
+describe("campaign_phase_advanced", () => {
+  it("moves the campaign to phase communicating", () => {
+    const state = { ...initialState, campaigns: [active()] };
+    const next = appReducer(state, { type: "campaign_phase_advanced", id: "cmp_1" });
+    expect(next.campaigns[0].phase).toBe("communicating");
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const state = { ...initialState, campaigns: [active()] };
+    const next = appReducer(state, { type: "campaign_phase_advanced", id: "nope" });
+    expect(next.campaigns[0].phase).toBe("scoring");
+  });
+});
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `npx vitest run src/state/campaign-phase.test.ts`
+Expected: FAIL — `campaign_phase_advanced` not in `Action`.
+
+- [ ] **Step 3: Add the action variant + reducer case**
+
+In the `Action` union, after the `campaign_launched` line, add:
+```ts
+  | { type: "campaign_phase_advanced"; id: string }
+```
+In `appReducer`, add the case near the other campaign cases (e.g. directly after `campaign_launched`):
+```ts
+    case "campaign_phase_advanced":
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.id ? { ...c, phase: "communicating" } : c
+        ),
+      };
+```
+
+- [ ] **Step 4: Run the test**
+
+Run: `npx vitest run src/state/campaign-phase.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/state/app-state.ts src/state/campaign-phase.test.ts
+git commit -m "feat(state): add campaign_phase_advanced (scoring → communicating)"
+```
+
+---
+
+## Task 17: Fire the notifications badge on `campaign_artifact_ready`
+
+The shell badge must light when a real artifact lands. We reuse the existing `notifications.signalsBadge` field (do NOT rename it) and flip it true inside the `campaign_artifact_ready` case (added in Task 6).
+
+> **Polish note (out of Foundation scope):** renaming `notifications.signalsBadge` → `notifications.artifactsBadge` is optional Wave-1 cleanup once the legacy signal badge paths are removed by the Артефакты epic. Foundation keeps the existing field name so no other reader breaks.
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `campaign_artifact_ready` reducer case.
+- Test: `src/state/artifact-badge.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/artifact-badge.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import { appReducer, initialState, type Campaign } from "./app-state";
+
+function draft(): Campaign {
+  return {
+    id: "cmp_seed",
+    name: "Seed",
+    status: "draft",
+    createdAt: "2026-06-18T00:00:00.000Z",
+    sourceType: "new",
+    channels: ["sms"],
+  };
+}
+
+describe("artifact-ready fires the notifications badge", () => {
+  it("sets the badge true when an artifact lands", () => {
+    const state = { ...initialState, campaigns: [draft()] };
+    expect(state.notifications.signalsBadge).toBe(false);
+    const next = appReducer(state, {
+      type: "campaign_artifact_ready",
+      campaignId: "cmp_seed",
+      kind: "signals",
+      count: 100,
+    });
+    expect(next.notifications.signalsBadge).toBe(true);
+    expect(next.artifacts).toHaveLength(1);
+  });
+});
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `npx vitest run src/state/artifact-badge.test.ts`
+Expected: FAIL — badge stays false (Task 6's case only appends the artifact).
+
+- [ ] **Step 3: Flip the badge in the existing case**
+
+In the `case "campaign_artifact_ready": { … }` block (from Task 6), change the return to also set the badge:
+```ts
+    case "campaign_artifact_ready": {
+      const artifact: Artifact = {
+        id: `art_${nanoid(8)}`,
+        campaignId: action.campaignId,
+        kind: action.kind,
+        count: action.count,
+        createdAt: new Date().toISOString(),
+      };
+      return {
+        ...state,
+        artifacts: [...state.artifacts, artifact],
+        // Reuse the existing badge field (rename to artifactsBadge is optional
+        // Wave-1 polish — see task note). Lighting it here makes the Артефакты
+        // badge fire for real artifacts.
+        notifications: { ...state.notifications, signalsBadge: true },
+      };
+    }
+```
+
+- [ ] **Step 4: Run the test**
+
+Run: `npx vitest run src/state/artifact-badge.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Verify the state suite stays green**
+
+Run: `npx vitest run src/state`
+Expected: all PASS (including Task 6's `create-flow-inversion.test.ts`, which only asserts artifact append).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/state/app-state.ts src/state/artifact-badge.test.ts
+git commit -m "feat(state): light notifications badge on campaign_artifact_ready"
+```
+
+---
+
+## Task 18: Add the artifact detail view + `artifact_opened` action + route it in `page.tsx`
+
+The Артефакты epic opens an individual artifact in a detail screen. Add an `artifact` member to `View`/`ViewAddress`, an `artifact_opened` action that routes to it, and a minimal `ArtifactScreen` stub the epic will replace. The legacy `signal`/`signal_opened`/`Сигналы` routing stays intact for now — it is removed by the Артефакты epic when it deletes `SignalScreen`/`SignalsSection`.
+
+> **Note:** the legacy `signal` view, `signal_opened` action, and the `Сигналы` section route are intentionally left in place by Foundation. The Артефакты epic repoints/removes them when it owns the deletion of `SignalScreen` and `SignalsSection`.
+
+**Files:**
+- Modify: `src/state/app-state.ts` — `View`, `ViewAddress`, `Action`, reducer case, `rebuildViewFromAddress`, `viewToAddress`.
+- Modify: `src/app/page.tsx` — route `view.kind === "artifact"`.
+- Create: `src/sections/artifacts/artifact-screen.tsx` (stub).
+- Test: `src/state/artifact-routing.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/state/artifact-routing.test.ts`:
+```ts
+import { describe, expect, it } from "vitest";
+import { appReducer, initialState, viewToAddress } from "./app-state";
+
+describe("artifact detail routing", () => {
+  it("artifact_opened routes to the artifact view", () => {
+    const next = appReducer(initialState, { type: "artifact_opened", id: "art_1" });
+    expect(next.view).toMatchObject({ kind: "artifact", artifactId: "art_1" });
+  });
+
+  it("viewToAddress round-trips the artifact view", () => {
+    const addr = viewToAddress({ kind: "artifact", artifactId: "art_1" });
+    expect(addr).toEqual({ kind: "artifact", artifactId: "art_1" });
+  });
+});
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `npx vitest run src/state/artifact-routing.test.ts`
+Expected: FAIL — `artifact_opened` not an action; `artifact` not a `View` kind.
+
+- [ ] **Step 3: Add the view + address members**
+
+In `src/state/app-state.ts`, add to the `View` union (e.g. after the `signal` line):
+```ts
+  | { kind: "artifact"; artifactId: string }
+```
+Add to the `ViewAddress` union (after its `signal` line):
+```ts
+  | { kind: "artifact"; artifactId: string }
+```
+
+- [ ] **Step 4: Add the action + reducer case**
+
+In the `Action` union, after `signal_opened`, add:
+```ts
+  | { type: "artifact_opened"; id: string }
+```
+In `appReducer`, add the case (near `signal_opened`):
+```ts
+    case "artifact_opened":
+      return {
+        ...state,
+        view: { kind: "artifact", artifactId: action.id },
+        activeSection: null,
+      };
+```
+
+- [ ] **Step 5: Add the address branches**
+
+In `rebuildViewFromAddress`, add (after the `signal` case):
+```ts
+    case "artifact":
+      return { kind: "artifact", artifactId: addr.artifactId };
+```
+In `viewToAddress`, add (after the `signal` case):
+```ts
+    case "artifact":
+      return { kind: "artifact", artifactId: view.artifactId };
+```
+
+- [ ] **Step 6: Run the routing test**
+
+Run: `npx vitest run src/state/artifact-routing.test.ts`
+Expected: PASS.
+
+- [ ] **Step 7: Create the `ArtifactScreen` stub**
+
+Create `src/sections/artifacts/artifact-screen.tsx` (mirrors the `ArtifactsSection` stub style from Task 7 — replaced by the Артефакты epic):
+```tsx
+"use client";
+
+/**
+ * Stub — replaced by the Артефакты epic (Wave 1, spec block 10). Renders the
+ * detail of a single artifact reached via `artifact_opened`. Kept minimal so
+ * routing + build stay green during Foundation.
+ */
+export function ArtifactScreen() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      Артефакт — раздел в разработке
+    </div>
+  );
+}
+```
+
+- [ ] **Step 8: Route it in `page.tsx`**
+
+In `src/app/page.tsx`, add the import (alongside the `ArtifactsSection` import from Task 7):
+```tsx
+import { ArtifactScreen } from "@/sections/artifacts/artifact-screen";
+```
+In `renderMain`, add a branch — place it next to the legacy `signal` branch (leave that one in place):
+```tsx
+    if (view.kind === "artifact") return <ArtifactScreen />;
+```
+
+- [ ] **Step 9: Full green check**
+
+Run: `npx vitest run src/state && npx tsc --noEmit 2>&1 | grep -E "page.tsx|app-state|artifact-screen" || echo "artifact routing files clean"`
+Expected: `src/state` PASS; those files clean. (`viewToAddress`/`rebuildViewFromAddress` are exhaustive over the union — the new member is handled, so no fall-through error.)
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/state/app-state.ts src/app/page.tsx src/sections/artifacts/artifact-screen.tsx src/state/artifact-routing.test.ts
+git commit -m "feat(artifacts): add artifact detail view + artifact_opened route"
+```
+
+---
+
+### Frozen contract additions (satisfies Wave-1 dependencies)
+
+Each addition above maps to the Wave-1 epic(s) that depend on it:
+
+- **`AppState.templates` + `PRESET_TEMPLATES` seed** (Task 13) → **Артефакты** (Шаблоны tab) + **Статистика** (template-level data before any launch).
+- **`Campaign.templateIds`** (Task 14) → **Статистика** (join a campaign to the templates it used).
+- **`campaign_launched` += `templates` / `dailyBudget` + merge logic** (Task 15) → **Кампании** (the launching UI passes node-derived templates; reducer dedups into the library and links the campaign).
+- **`campaign_phase_advanced`** (Task 16) → **Кампании** (drives the in-card scoring → communicating progress block, design §4).
+- **Badge on `campaign_artifact_ready`** (Task 17) → **Shell** (the Артефакты nav badge fires for real artifacts).
+- **`artifact` view + `artifact_opened` action + `ArtifactScreen` stub** (Task 18) → **Артефакты** (artifact detail screen the epic replaces).
+
+**Ownership note:** `src/state/workflow-templates.ts` (the graph generator that branches by `sourceType` / `channels` to build the per-source/per-channel node graph) is delegated to the **Кампании** epic's ownership — NOT Foundation. Foundation only froze the entry-node type rename (`signal` → `source`, Task 8) and the contracts the generator's output must satisfy; the branching logic itself is Wave-1.
