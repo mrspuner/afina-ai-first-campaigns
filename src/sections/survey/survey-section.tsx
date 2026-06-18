@@ -132,10 +132,7 @@ export function SurveySection({
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
             className="flex w-full justify-center"
           >
-            <SurveyAwaiting
-              onDone={handleAwaitingDone}
-              websiteHostname={hostnameFor(phase.survey.companyWebsite)}
-            />
+            <SurveyAwaiting onDone={handleAwaitingDone} />
           </motion.div>
         )}
         {phase.kind === "interests" && (
@@ -184,12 +181,4 @@ export function SurveySection({
       </AnimatePresence>
     </div>
   );
-}
-
-function hostnameFor(url: string): string | undefined {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return undefined;
-  }
 }

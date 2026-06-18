@@ -4,12 +4,9 @@ import { useState } from "react";
 import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
-import {
-  isWebsiteValid,
-  normalizeWebsite,
-} from "@/state/survey-validation";
+import { isTaskDescriptionValid } from "@/state/survey-validation";
 import type { Survey } from "@/types/survey";
 
 interface SurveyFormProps {
@@ -20,26 +17,31 @@ interface SurveyFormProps {
 
 export function SurveyForm({
   onSubmit,
-  title = "С чего начнём — дайте ссылку на ваш сайт",
-  subtitle = "По сайту афина поймёт, чем вы занимаетесь, и подберёт подходящие сценарии.",
+  title = "С чего начнём — опишите вашу задачу",
+  subtitle = "Опишите, кого хотите привлечь или какую задачу решаете. Афина подберёт подходящие сценарии.",
 }: SurveyFormProps) {
   const { survey } = useAppState();
   const dispatch = useAppDispatch();
 
-  const [website, setWebsite] = useState(survey.companyWebsite);
+  const [description, setDescription] = useState(
+    survey.taskDescription || survey.companyWebsite,
+  );
   const [showErrors, setShowErrors] = useState(false);
 
-  const websiteOk = isWebsiteValid(website);
+  const descriptionOk = isTaskDescriptionValid(description);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!websiteOk) {
+    if (!descriptionOk) {
       setShowErrors(true);
       return;
     }
+    const trimmed = description.trim();
     const filled: Survey = {
       companyName: survey.companyName,
-      companyWebsite: normalizeWebsite(website),
+      // Alias: the frozen app-state reducer reads companyWebsite.
+      companyWebsite: trimmed,
+      taskDescription: trimmed,
       directionId: survey.directionId,
     };
     // Persist the partial as we go so navigation away keeps draft state.
@@ -65,23 +67,21 @@ export function SurveyForm({
         </p>
       </header>
       <Field
-        id="survey-website"
-        label="Сайт компании"
+        id="survey-task"
+        label="Ваша задача"
         error={
-          showErrors && !websiteOk
-            ? "Введите адрес вида example.com"
+          showErrors && !descriptionOk
+            ? "Опишите задачу хотя бы парой слов"
             : undefined
         }
       >
-        <Input
-          id="survey-website"
-          type="url"
-          inputMode="url"
-          autoComplete="url"
-          placeholder="example.com"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          aria-invalid={showErrors && !websiteOk ? true : undefined}
+        <Textarea
+          id="survey-task"
+          rows={4}
+          placeholder="Например: привлечь людей, которые ищут ипотеку"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          aria-invalid={showErrors && !descriptionOk ? true : undefined}
         />
       </Field>
       <div className="mt-8 flex items-center justify-end">
