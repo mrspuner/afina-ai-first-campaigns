@@ -1,4 +1,4 @@
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign, Artifact } from "@/state/app-state";
 import { aggregate, buildFacts } from "@/sections/statistics/fact-cube";
 import { recommendBudget } from "@/state/metrics";
 import { UNIT_COST } from "./campaign-cost";
@@ -31,14 +31,15 @@ function isLaunched(status: Campaign["status"]): boolean {
 
 export function getCampaignCardMetrics(
   campaign: Campaign,
-  signal: Signal | undefined,
+  artifact?: Artifact,
 ): CampaignCardMetrics {
   const launched = isLaunched(campaign.status);
 
-  // Расчётный бюджет: то, что пользователь заложил при запуске; для черновика —
-  // детерминированная рекомендация от размера аудитории сигнала.
+  // Расчётный бюджет (campaign-first): то, что пользователь заложил при
+  // запуске; иначе — детерминированная рекомендация от размера загруженной
+  // базы. Сигнал-джойна больше нет.
   const plannedBudget =
-    campaign.budget ?? (signal ? recommendBudget(signal.count) : 0);
+    campaign.budget ?? recommendBudget(campaign.file?.rowCount ?? 0);
 
   if (!launched) {
     return { launched, sends: 0, crPct: 0, plannedBudget, actualSpend: 0 };
@@ -46,12 +47,18 @@ export function getCampaignCardMetrics(
 
   // Считаем факты только для этой кампании за всё её время жизни (широкий
   // период — границы куб всё равно обрежет по реальному окну кампании).
+  // Базу касаний питаем количеством из артефакта кампании (если есть);
+  // иначе fact-cube выводит детерминированную базу из id кампании.
   const now = new Date();
   const period = { from: new Date(2000, 0, 1), to: now };
   const facts = buildFacts(
     {
-      campaigns: [campaign],
-      signals: signal ? [{ id: signal.id, count: signal.count }] : [],
+      campaigns: campaign.signalId
+        ? [campaign]
+        : [{ ...campaign, signalId: `art_${campaign.id}` }],
+      signals: artifact
+        ? [{ id: campaign.signalId ?? `art_${campaign.id}`, count: artifact.count }]
+        : [],
     },
     period,
     { now },

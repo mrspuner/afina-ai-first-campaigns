@@ -1,9 +1,16 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign, Artifact } from "@/state/app-state";
+import type { SourceType } from "@/types/campaign";
 import { StatusBadge } from "./status-badge";
 import { getCampaignCardMetrics } from "./campaign-metrics";
+
+const SOURCE_LABEL: Record<SourceType, string> = {
+  new: "Новая база",
+  stream: "Поток",
+  own: "Своя база",
+};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("ru-RU");
@@ -29,16 +36,18 @@ function timestampLine(c: Campaign): string {
 
 interface CampaignCardProps {
   campaign: Campaign;
-  signal: Signal | undefined;
+  artifact?: Artifact;
   onOpen: (id: string) => void;
 }
 
-export function CampaignCard({ campaign, signal, onOpen }: CampaignCardProps) {
-  const signalLine = signal
-    ? `Сигнал: ${signal.type} · ${formatNumber(signal.count)}`
-    : "Сигнал: —";
+export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) {
+  const scenarioLine = `Сценарий: ${campaign.scenario?.name ?? "—"}`;
+  const sourceLabel = campaign.sourceType
+    ? SOURCE_LABEL[campaign.sourceType]
+    : null;
+  const isDegenerate = (campaign.channels?.length ?? 0) === 0;
 
-  const metrics = getCampaignCardMetrics(campaign, signal);
+  const metrics = getCampaignCardMetrics(campaign, artifact);
 
   return (
     <Card
@@ -58,15 +67,26 @@ export function CampaignCard({ campaign, signal, onOpen }: CampaignCardProps) {
         <StatusBadge status={campaign.status} />
       </div>
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs text-muted-foreground">{signalLine}</p>
-        <p className="text-xs text-muted-foreground">{timestampLine(campaign)}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-xs text-muted-foreground">{scenarioLine}</p>
+          {sourceLabel && (
+            <span className="shrink-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {sourceLabel}
+            </span>
+          )}
+        </div>
+        <p className="shrink-0 text-xs text-muted-foreground">{timestampLine(campaign)}</p>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 pt-2 text-xs">
-        {metrics.launched && (
-          <>
-            <StatItem label="Отправки" value={formatNumber(metrics.sends)} />
-            <StatItem label="CR" value={`${metrics.crPct.toFixed(1)}%`} />
-          </>
+        {isDegenerate ? (
+          <StatItem label="Коммуникация" value="Без коммуникации" />
+        ) : (
+          metrics.launched && (
+            <>
+              <StatItem label="Отправки" value={formatNumber(metrics.sends)} />
+              <StatItem label="CR" value={`${metrics.crPct.toFixed(1)}%`} />
+            </>
+          )
         )}
         <StatItem
           label="Бюджет"
