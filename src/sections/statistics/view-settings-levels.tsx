@@ -58,6 +58,7 @@ const ROW_GROUPS = [
     options: [
       { value: "campaigns", label: "Кампании" },
       { value: "scenarios", label: "Сценарии" },
+      { value: "templates", label: "Шаблоны" },
       { value: "strategies", label: "Стратегии" },
     ],
   },

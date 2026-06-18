@@ -50,6 +50,7 @@ export type RowKind =
   | "landings"
   | "campaigns"
   | "scenarios"
+  | "templates"
   | "strategies"
   | "advertisers"
   | "traffic-suppliers";

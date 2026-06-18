@@ -5,7 +5,15 @@ import {
   filtersEqual,
   statisticsReducer,
   type StatisticsFilters,
+  type RowKind,
 } from "./statistics-state";
+
+describe("RowKind — templates dimension", () => {
+  it('"templates" is a valid RowKind', () => {
+    const k: RowKind = "templates";
+    expect(k).toBe("templates");
+  });
+});
 
 describe("statisticsReducer — SET_SORT", () => {
   it("устанавливает столбец и направление сортировки", () => {
