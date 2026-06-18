@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
+import type { SourceType } from "@/types/campaign";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -19,32 +20,92 @@ function matchesQuery(scenario: Scenario, q: string): boolean {
   return scenario.name.toLocaleLowerCase("ru-RU").includes(q);
 }
 
+export interface ScenarioGroup {
+  category: ScenarioCategory;
+  scenarios: Scenario[];
+  count: number;
+}
+
+/**
+ * Groups the non-base scenarios by ЖЦК category (spec §7.3). Returns one group
+ * per `SCENARIO_CATEGORIES` value, in catalogue order, each carrying its count.
+ */
+export function groupScenariosByCategory(
+  scenarios: Scenario[] = SCENARIOS
+): ScenarioGroup[] {
+  const usable = scenarios.filter((s) => !s.isBase);
+  return SCENARIO_CATEGORIES.map((category) => {
+    const inGroup = usable.filter((s) => s.category === category);
+    return { category, scenarios: inGroup, count: inGroup.length };
+  });
+}
+
+/** Russian label for a recommended source type (shown as a chip on the card). */
+export function sourceTypeLabel(sourceType: SourceType): string {
+  switch (sourceType) {
+    case "new":
+      return "Новая база";
+    case "stream":
+      return "Поток";
+    case "own":
+      return "Своя база";
+  }
+}
+
+/** How many cards to show per group before «Показать ещё». */
+const COLLAPSED_PER_GROUP = 3;
+
+function SourceTypeChip({ sourceType }: { sourceType: SourceType }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground">
+      Источник: {sourceTypeLabel(sourceType)}
+    </span>
+  );
+}
+
 export function Step1Scenario({ data, onNext }: StepProps) {
   const [query, setQuery] = useState("");
-  const [activeCategories, setActiveCategories] = useState<Set<ScenarioCategory>>(new Set());
+  const [activeCategories, setActiveCategories] = useState<Set<ScenarioCategory>>(
+    new Set()
+  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<ScenarioCategory>>(
+    new Set()
+  );
 
   const normalized = query.trim().toLocaleLowerCase("ru-RU");
 
-  // Базовые сценарии (isBase) одноимённы с категориями и поэтому всегда
-  // отсеиваются — пользователь выбирает категорию через chip'ы фильтра выше,
-  // а в карточках видит «настоящие» сценарии: подобранные и остальные.
+  // Filter first (search + active category chips), then group by ЖЦК.
   const filtered = useMemo(() => {
     return SCENARIOS.filter((s) => {
       if (s.isBase) return false;
       if (!matchesQuery(s, normalized)) return false;
-      if (activeCategories.size > 0 && !activeCategories.has(s.category)) return false;
+      if (activeCategories.size > 0 && !activeCategories.has(s.category))
+        return false;
       return true;
     });
   }, [normalized, activeCategories]);
 
-  const curated = useMemo(() => filtered.filter((s) => s.isCurated), [filtered]);
-  const others = useMemo(() => filtered.filter((s) => !s.isCurated), [filtered]);
+  const groups = useMemo(
+    () => groupScenariosByCategory(filtered).filter((g) => g.count > 0),
+    [filtered]
+  );
 
   const selectedId =
-    typeof data.scenario === "string" && data.scenario.length > 0 ? data.scenario : null;
+    typeof data.scenario === "string" && data.scenario.length > 0
+      ? data.scenario
+      : null;
 
   function toggleCategory(category: ScenarioCategory) {
     setActiveCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
+
+  function toggleGroupExpanded(category: ScenarioCategory) {
+    setExpandedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(category)) next.delete(category);
       else next.add(category);
@@ -68,7 +129,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
     setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - slack);
   }
 
-  useLayoutEffect(updateScrollFlags, [filtered]);
+  useLayoutEffect(updateScrollFlags, [groups]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -78,7 +139,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
 
   return (
     <StepContent
-      title="Выберите сценарий для подбора сигналов"
+      title="Выберите сценарий для кампании"
       subtitle="Готовая связка сигнала и кампании под бизнес-цель"
     >
       <div className="flex flex-col gap-4">
@@ -124,10 +185,8 @@ export function Step1Scenario({ data, onNext }: StepProps) {
             onScroll={updateScrollFlags}
             className={cn(
               "max-h-[420px] overflow-y-auto pr-2",
-              // Firefox / standard
               "[scrollbar-width:thin]",
               "[scrollbar-color:rgb(255_255_255_/_0.18)_transparent]",
-              // WebKit (Safari, Chrome)
               "[&::-webkit-scrollbar]:w-1.5",
               "[&::-webkit-scrollbar]:bg-transparent",
               "[&::-webkit-scrollbar-track]:bg-transparent",
@@ -138,46 +197,59 @@ export function Step1Scenario({ data, onNext }: StepProps) {
               "hover:[&::-webkit-scrollbar-thumb]:bg-white/30"
             )}
           >
-            {filtered.length === 0 ? (
+            {groups.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 Ничего не нашлось. Измените запрос или сбросьте фильтр.
               </p>
             ) : (
               <div className="flex flex-col gap-6 pb-1">
-                {curated.length > 0 && (
-                  <section className="flex flex-col gap-3">
-                    <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Подобрано для вас
-                    </h2>
-                    <div className="grid grid-cols-3 gap-3">
-                      {curated.map((s) => (
-                        <ScenarioCard
-                          key={s.id}
-                          scenario={s}
-                          selected={selectedId === s.id}
-                          onClick={handleSelect}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-                {others.length > 0 && (
-                  <section className="flex flex-col gap-3">
-                    <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Остальные сценарии
-                    </h2>
-                    <div className="grid grid-cols-3 gap-3">
-                      {others.map((s) => (
-                        <ScenarioCard
-                          key={s.id}
-                          scenario={s}
-                          selected={selectedId === s.id}
-                          onClick={handleSelect}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
+                {groups.map((group) => {
+                  const expanded = expandedGroups.has(group.category);
+                  const visible = expanded
+                    ? group.scenarios
+                    : group.scenarios.slice(0, COLLAPSED_PER_GROUP);
+                  const hiddenCount = group.count - visible.length;
+                  return (
+                    <section key={group.category} className="flex flex-col gap-3">
+                      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {group.category}{" "}
+                        <span className="text-muted-foreground/60">
+                          ({group.count})
+                        </span>
+                      </h2>
+                      <div className="grid grid-cols-3 gap-3">
+                        {visible.map((s) => (
+                          <div key={s.id} className="flex flex-col gap-1.5">
+                            <ScenarioCard
+                              scenario={s}
+                              selected={selectedId === s.id}
+                              onClick={handleSelect}
+                            />
+                            <SourceTypeChip sourceType={s.recommendedSourceType} />
+                          </div>
+                        ))}
+                      </div>
+                      {hiddenCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupExpanded(group.category)}
+                          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Показать ещё ({hiddenCount})
+                        </button>
+                      )}
+                      {expanded && group.count > COLLAPSED_PER_GROUP && (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupExpanded(group.category)}
+                          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Свернуть
+                        </button>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             )}
           </div>
