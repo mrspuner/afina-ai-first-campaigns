@@ -8,20 +8,14 @@ const TICK = 50;
 
 interface SurveyAwaitingProps {
   onDone: () => void;
-  websiteHostname?: string;
-  /** Override the heading. Defaults to the site-enrichment copy. */
+  /** Override the heading. Defaults to the task-analysis copy. */
   title?: string;
-  /** Override the sub-line. When omitted, falls back to the hostname-aware
-   *  site-enrichment copy. */
+  /** Override the sub-line. When omitted, falls back to the source-agnostic
+   *  task-analysis copy. */
   subtitle?: string;
 }
 
-export function SurveyAwaiting({
-  onDone,
-  websiteHostname,
-  title,
-  subtitle,
-}: SurveyAwaitingProps) {
+export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps) {
   const [progress, setProgress] = useState(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
@@ -52,9 +46,7 @@ export function SurveyAwaiting({
       </h1>
       <p className="mt-1.5 text-sm text-muted-foreground">
         {subtitle ??
-          (websiteHostname
-            ? `Анализируем ${websiteHostname}…`
-            : "афина анализирует сайт и сопоставляет его с данными об аудитории.")}
+          "Афина анализирует вашу задачу и сопоставляет с данными об аудитории."}
       </p>
 
       <div className="mt-8 flex flex-col gap-3">
