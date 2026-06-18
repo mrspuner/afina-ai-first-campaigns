@@ -84,7 +84,8 @@ export function SurveyForm({
           aria-invalid={showErrors && !descriptionOk ? true : undefined}
         />
       </Field>
-      <div className="mt-8 flex items-center justify-end">
+      <div className="mt-8 flex items-center justify-between gap-3">
+        <span aria-hidden />
         <Button type="submit" variant="default" size="lg">
           Продолжить
         </Button>
