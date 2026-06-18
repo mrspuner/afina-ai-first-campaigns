@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isCompanyNameValid,
-  isWebsiteValid,
-  normalizeWebsite,
+  isTaskDescriptionValid,
 } from "./survey-validation";
 
 describe("isCompanyNameValid", () => {
@@ -18,44 +17,20 @@ describe("isCompanyNameValid", () => {
   });
 });
 
-describe("isWebsiteValid", () => {
-  it("accepts bare domain", () => {
-    expect(isWebsiteValid("example.com")).toBe(true);
+describe("isTaskDescriptionValid", () => {
+  it("accepts a non-empty description", () => {
+    expect(isTaskDescriptionValid("Хотим привлечь людей, ищущих ипотеку")).toBe(
+      true,
+    );
   });
-  it("accepts www and full URL", () => {
-    expect(isWebsiteValid("www.example.ru")).toBe(true);
-    expect(isWebsiteValid("https://acme.io/path")).toBe(true);
+  it("accepts a single meaningful word over the min length", () => {
+    expect(isTaskDescriptionValid("ипотека")).toBe(true);
   });
-  it("rejects strings without a dot", () => {
-    expect(isWebsiteValid("localhost")).toBe(false);
+  it("rejects empty / whitespace-only", () => {
+    expect(isTaskDescriptionValid("")).toBe(false);
+    expect(isTaskDescriptionValid("   ")).toBe(false);
   });
-  it("rejects strings with whitespace", () => {
-    expect(isWebsiteValid("acme .com")).toBe(false);
-  });
-  it("rejects empty", () => {
-    expect(isWebsiteValid("")).toBe(false);
-    expect(isWebsiteValid("   ")).toBe(false);
-  });
-  it("rejects trailing dot or empty TLD", () => {
-    expect(isWebsiteValid("acme.")).toBe(false);
-    expect(isWebsiteValid(".com")).toBe(false);
-  });
-});
-
-describe("normalizeWebsite", () => {
-  it("adds https when scheme missing", () => {
-    expect(normalizeWebsite("acme.com")).toBe("https://acme.com");
-  });
-  it("preserves existing http/https scheme", () => {
-    expect(normalizeWebsite("http://acme.com")).toBe("http://acme.com");
-    expect(normalizeWebsite("https://acme.com")).toBe("https://acme.com");
-  });
-  it("trims trailing slashes", () => {
-    expect(normalizeWebsite("acme.com/")).toBe("https://acme.com");
-    expect(normalizeWebsite("https://acme.com//")).toBe("https://acme.com");
-  });
-  it("returns empty for empty input", () => {
-    expect(normalizeWebsite("")).toBe("");
-    expect(normalizeWebsite("  ")).toBe("");
+  it("rejects too-short input", () => {
+    expect(isTaskDescriptionValid("ок")).toBe(false); // < min length
   });
 });
