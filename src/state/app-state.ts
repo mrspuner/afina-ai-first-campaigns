@@ -7,6 +7,7 @@ import type { SignalStatus } from "@/types/signal-status";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import { scenarioNameForSignal, defaultCampaignName } from "./scenario-display";
+import { getEmails } from "@/state/email-directory";
 import {
   DEFAULT_DIRECTION_ID,
   businessDirectionFromSurvey,
@@ -129,6 +130,55 @@ export type MessageTemplate = {
   usedInCampaigns: number;
 };
 
+/**
+ * Seed templates so the Шаблоны tab + statistics have real data before any
+ * launch. Email templates are derived 1:1 from the email directory presets
+ * (channel "email"); the sms + push entries are hand-authored samples. Each
+ * `content` is the channel's NodeParams member; `usedInCampaigns` starts at 0
+ * and is bumped by `campaign_launched` (Task 15).
+ */
+export const PRESET_TEMPLATES: MessageTemplate[] = [
+  ...getEmails().map<MessageTemplate>((e) => ({
+    id: `tpl_${e.id}`,
+    channel: "email",
+    name: e.name,
+    content: {
+      kind: "email",
+      subject: e.subject,
+      body: e.body,
+      sender: e.sender,
+      link: e.link,
+      emailId: e.id,
+    },
+    usedInCampaigns: 0,
+  })),
+  {
+    id: "tpl_sms_reminder",
+    channel: "sms",
+    name: "SMS — напоминание",
+    content: {
+      kind: "sms",
+      text: "Ваше предложение ждёт. Подробности на сайте.",
+      alphaName: "AFINA",
+      scheduledAt: "immediate",
+      link: "https://example.com/offer",
+    },
+    usedInCampaigns: 0,
+  },
+  {
+    id: "tpl_push_back",
+    channel: "push",
+    name: "Push — возвращение",
+    content: {
+      kind: "push",
+      title: "Давно вас не видели",
+      body: "Загляните — у нас есть кое-что для вас.",
+      deeplink: "app://offers",
+    },
+    usedInCampaigns: 0,
+  },
+];
+
 export type Preset = {
   key: "empty" | "mid" | "full";
   label: string;
@@ -167,6 +217,7 @@ export type AppState = {
   view: View;
   signals: Signal[];
   artifacts: Artifact[];
+  templates: MessageTemplate[];
   campaigns: Campaign[];
   workflowCommand: string | null;
   workflowNodeCommand: { commands: Array<{ nodeLabel?: string; nodeId?: string; text: string }> } | null;
@@ -333,6 +384,7 @@ export const initialState: AppState = {
   view: { kind: "welcome" },
   signals: [],
   artifacts: [],
+  templates: PRESET_TEMPLATES,
   campaigns: [],
   workflowCommand: null,
   workflowNodeCommand: null,
