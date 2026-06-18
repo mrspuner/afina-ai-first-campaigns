@@ -30,6 +30,8 @@ function addressKey(a: ViewAddress): string {
       return `campaign-payment:${a.campaignId}`;
     case "signal":
       return `signal:${a.signalId}`;
+    case "artifact":
+      return `artifact:${a.artifactId}`;
     case "section":
       return `section:${a.name}:${a.campaignId ?? ""}`;
   }

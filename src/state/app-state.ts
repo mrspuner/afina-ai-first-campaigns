@@ -203,6 +203,7 @@ export type View =
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
   | { kind: "signal"; signal: { id: string } }
+  | { kind: "artifact"; artifactId: string }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
 // A "browser-history address" — what we persist to history.state so back/forward
@@ -217,6 +218,7 @@ export type ViewAddress =
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
   | { kind: "signal"; signalId: string }
+  | { kind: "artifact"; artifactId: string }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
 export type AppState = {
@@ -354,6 +356,7 @@ export type Action =
   | { type: "signal_status_changed"; id: string; status: SignalStatus }
   | { type: "signal_deleted"; id: string }
   | { type: "signal_opened"; id: string }
+  | { type: "artifact_opened"; id: string }
   | { type: "signal_renamed"; id: string; name: string }
   | { type: "signals_badge_set"; value: boolean }
   | { type: "resume_signal_in_wizard"; signalId: string }
@@ -998,6 +1001,13 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "artifact_opened":
+      return {
+        ...state,
+        view: { kind: "artifact", artifactId: action.id },
+        activeSection: null,
+      };
+
     case "signal_renamed": {
       const name = action.name.trim();
       if (!name) return state;
@@ -1215,6 +1225,8 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
     }
     case "signal":
       return { kind: "signal", signal: { id: addr.signalId } };
+    case "artifact":
+      return { kind: "artifact", artifactId: addr.artifactId };
     case "section":
       return { kind: "section", name: addr.name, campaignId: addr.campaignId };
   }
@@ -1243,6 +1255,8 @@ export function viewToAddress(view: View): ViewAddress {
       return { kind: "campaign", campaignId: view.campaign.id };
     case "signal":
       return { kind: "signal", signalId: view.signal.id };
+    case "artifact":
+      return { kind: "artifact", artifactId: view.artifactId };
     case "section":
       return { kind: "section", name: view.name, campaignId: view.campaignId };
   }

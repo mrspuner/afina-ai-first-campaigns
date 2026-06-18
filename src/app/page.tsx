@@ -26,6 +26,7 @@ import { GuidedSignalSection } from "@/sections/signals/guided-signal-section";
 import { SignalsSection } from "@/sections/signals/signals-section";
 import { CampaignsSection } from "@/sections/campaigns/campaigns-section";
 import { ArtifactsSection } from "@/sections/artifacts/artifacts-section";
+import { ArtifactScreen } from "@/sections/artifacts/artifact-screen";
 import { WorkflowSection } from "@/sections/campaigns/workflow-section";
 import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-screen";
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
@@ -92,6 +93,7 @@ export default function Home() {
     if (view.kind === "campaign-payment") return <CampaignPaymentScreen />;
     if (view.kind === "campaign") return <CampaignScreen />;
     if (view.kind === "signal") return <SignalScreen />;
+    if (view.kind === "artifact") return <ArtifactScreen />;
     if (view.kind === "section") {
       if (view.name === "Статистика") return <StatisticsSection />;
       if (view.name === "Сигналы") return <SignalsSection />;

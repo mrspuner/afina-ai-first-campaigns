@@ -171,10 +171,11 @@ export function selectPromptSuggestions(
     case "survey":
     case "campaign-payment":
     case "signal":
+    case "artifact":
       // Fullscreen views: chrome (and therefore the promptbar) is hidden by
       // page.tsx, but the bottom-bar can briefly re-render during the exit
       // transition. Return hidden so the suggestion bar has nothing to draw.
-      // The signal card is also a fullscreen entity view with no prompt suggestions.
+      // The signal/artifact cards are also fullscreen entity views with no prompt suggestions.
       return { kind: "hidden" };
     case "guided-signal": {
       const step = state.wizardCurrentStep;
