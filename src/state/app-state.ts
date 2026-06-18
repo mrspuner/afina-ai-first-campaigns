@@ -136,7 +136,7 @@ export type Preset = {
   campaigns: Campaign[];
 };
 
-export type SectionName = "Статистика" | "Сигналы" | "Кампании" | "Настройки";
+export type SectionName = "Статистика" | "Сигналы" | "Артефакты" | "Кампании" | "Настройки";
 
 export type View =
   | { kind: "welcome" }
@@ -249,6 +249,7 @@ export type AppState = {
 
 export type Action =
   | { type: "start_signal_flow"; initialScenario?: { id: string; name: string } }
+  | { type: "start_campaign_flow"; initialScenario?: { id: string; name: string } }
   | { type: "signal_added"; signal: Signal }
   | { type: "signal_complete" }
   | { type: "step2_clicked" }
@@ -363,6 +364,7 @@ export const initialState: AppState = {
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "start_signal_flow":
+    case "start_campaign_flow":
       // Анкета не пройдена — ведём пользователя сначала в survey-view
       // (fullscreen без sidebar/bottom-bar). После `survey_completed`
       // SurveySection повторно диспатчит `start_signal_flow`, и тогда
