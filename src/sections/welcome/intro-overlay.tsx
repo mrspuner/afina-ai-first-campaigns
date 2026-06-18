@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Первый вход: полноэкранный оверлей «Знакомство с ИИ афина» поверх welcome.
- * Три состояния листаются «Далее»; «Пропустить» доступно на первых двух; на
- * последнем — финальный CTA. Любой из этих выходов вызывает onDismiss, после
- * чего оверлей помечается показанным и больше не появляется.
+ * Три состояния листаются «Далее»; на последнем — финальный CTA. Любой из
+ * этих выходов вызывает onDismiss, после чего оверлей помечается показанным и
+ * больше не появляется.
  *
  * Порядок на каждом состоянии: крупный маскот → заголовок → текст — значок
  * маскота и есть «знак ИИ», с которым пользователь должен познакомиться.
@@ -48,17 +48,6 @@ export function IntroOverlay({ onDismiss }: { onDismiss: () => void }) {
         transition={{ duration: 0.32, ease: EASE_OUT }}
         className="relative w-full max-w-[420px] rounded-2xl border border-border bg-card p-8 shadow-2xl"
       >
-        {/* «Пропустить» — тихий выход, доступен на любом состоянии. В углу
-            карточки, чтобы не конкурировать с основным CTA. */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onDismiss}
-          className="absolute right-3 top-3 h-7 px-2 text-xs text-muted-foreground"
-        >
-          Пропустить
-        </Button>
-
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
