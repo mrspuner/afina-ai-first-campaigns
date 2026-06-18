@@ -185,8 +185,6 @@ export function selectPromptSuggestions(
     }
     case "awaiting-campaign":
       return resolved({ kind: "awaiting-campaign" });
-    case "campaign-select":
-      return resolved({ kind: "campaign-select" });
     case "workflow": {
       // Запущенный (read-only) workflow → лента кампании по её статусу.
       // Редактируемый draft без выбранной ноды → подсказки уровня сценария

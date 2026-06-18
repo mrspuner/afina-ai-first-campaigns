@@ -305,12 +305,9 @@ describe("selectPromptSuggestions — welcome / awaiting / select", () => {
     expect(r.scope.kind).toBe("welcome-wave");
   });
 
-  it("awaiting / select имеют чипы", () => {
+  it("awaiting имеет чипы", () => {
     expect(
       selectPromptSuggestions(withView({ kind: "awaiting-campaign" }), ctx()).kind
-    ).toBe("items");
-    expect(
-      selectPromptSuggestions(withView({ kind: "campaign-select" }), ctx()).kind
     ).toBe("items");
   });
 });

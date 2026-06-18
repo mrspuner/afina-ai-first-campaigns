@@ -1367,9 +1367,6 @@ describe("activeNavSection — подсветка пункта меню по vie
         view: { kind: "campaign-payment", campaign: { id: "c1", name: "C" } },
       })
     ).toBe("Кампании");
-    expect(
-      activeNavSection({ ...initialState, view: { kind: "campaign-select" } })
-    ).toBe("Кампании");
   });
 
   it("раздел → имя раздела; welcome → activeSection (null)", () => {

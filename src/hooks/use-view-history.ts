@@ -19,7 +19,6 @@ function addressKey(a: ViewAddress): string {
   switch (a.kind) {
     case "welcome":
     case "awaiting-campaign":
-    case "campaign-select":
       return a.kind;
     case "guided-signal":
       return `guided-signal:${a.scenarioId ?? ""}`;

@@ -50,9 +50,7 @@ export function ShellBottomBar() {
     ? "Задайте вопрос…"
     : isWorkflowView(state)
       ? "Опишите изменение сценария..."
-      : view.kind === "campaign-select"
-        ? "Опишите вашу кампанию..."
-        : view.kind === "guided-signal"
+      : view.kind === "guided-signal"
           ? "Введите ваши параметры или задайте вопрос"
           : view.kind === "section" &&
               (view.name === "Сигналы" || view.name === "Кампании")

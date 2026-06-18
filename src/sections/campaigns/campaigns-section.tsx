@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { CampaignCard } from "./campaign-card";
 import { NewCampaignCard } from "./new-campaign-card";
-import { NewCampaignMenu } from "./new-campaign-menu";
 import { CampaignFilterChips } from "./campaign-filter-chips";
 import { CampaignsNoResults } from "./campaigns-no-results";
 import { getCampaignCardMetrics } from "./campaign-metrics";
@@ -70,7 +71,13 @@ export function CampaignsSection() {
             Кампании
           </h1>
           {campaigns.length > 0 && (
-            <NewCampaignMenu onGoToSignals={goToSignals} />
+            <Button
+              variant="outline"
+              onClick={() => dispatch({ type: "start_campaign_flow" })}
+            >
+              <Plus className="h-4 w-4" />
+              Создать кампанию
+            </Button>
           )}
         </div>
 

@@ -143,7 +143,6 @@ export type View =
   | { kind: "survey" }
   | { kind: "guided-signal"; initialScenario?: { id: string; name: string } }
   | { kind: "awaiting-campaign" }
-  | { kind: "campaign-select" }
   | { kind: "workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
@@ -158,7 +157,6 @@ export type ViewAddress =
   | { kind: "welcome" }
   | { kind: "guided-signal"; scenarioId?: string; scenarioName?: string }
   | { kind: "awaiting-campaign" }
-  | { kind: "campaign-select" }
   | { kind: "workflow"; campaignId: string }
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
@@ -400,7 +398,7 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case "signal_complete":
     case "step2_clicked": {
-      // Скип CampaignTypeView: кампания собирается по сценарию из сигнала.
+      // Кампания собирается по сценарию из сигнала (без отдельного экрана выбора).
       // Если для сигнала уже есть черновой кампейн — открываем его, иначе
       // создаём новый с именем сценария и роутим в workflow-редактор.
       const latestSignal = state.signals[state.signals.length - 1];
@@ -1091,8 +1089,6 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
       };
     case "awaiting-campaign":
       return { kind: "awaiting-campaign" };
-    case "campaign-select":
-      return { kind: "campaign-select" };
     case "workflow": {
       const c = campaigns.find((cc) => cc.id === addr.campaignId);
       // If the campaign no longer exists, fall back to campaign list rather than
@@ -1145,8 +1141,6 @@ export function viewToAddress(view: View): ViewAddress {
       };
     case "awaiting-campaign":
       return { kind: "awaiting-campaign" };
-    case "campaign-select":
-      return { kind: "campaign-select" };
     case "workflow":
       return { kind: "workflow", campaignId: view.campaign.id };
     case "campaign-payment":
@@ -1198,8 +1192,8 @@ export function navigationScopeKey(view: View): string {
  * не гас при заполнении визарда / работе с кампанией (там activeSection
  * занулён):
  *  - guided-signal / awaiting-campaign → «Сигналы» (поток создания сигнала);
- *  - campaign-select / workflow / campaign / campaign-payment → «Кампании»
- *    (выбор типа, воркфлоу, карточка, оплата);
+ *  - workflow / campaign / campaign-payment → «Кампании»
+ *    (воркфлоу, карточка, оплата);
  *  - section → имя раздела;
  *  - иначе (welcome / survey) → activeSection (обычно null).
  */
@@ -1210,7 +1204,6 @@ export function activeNavSection(s: AppState): SectionName | null {
     case "guided-signal":
     case "awaiting-campaign":
       return "Сигналы";
-    case "campaign-select":
     case "workflow":
     case "campaign":
     case "campaign-payment":
