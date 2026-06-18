@@ -168,6 +168,7 @@ export type ViewAddress =
 export type AppState = {
   view: View;
   signals: Signal[];
+  artifacts: Artifact[];
   campaigns: Campaign[];
   workflowCommand: string | null;
   workflowNodeCommand: { commands: Array<{ nodeLabel?: string; nodeId?: string; text: string }> } | null;
@@ -255,6 +256,7 @@ export type Action =
   | { type: "step2_clicked" }
   | { type: "campaign_selected"; campaign: { id: string; name: string } }
   | { type: "campaign_from_signal"; signalId: string }
+  | { type: "campaign_artifact_ready"; campaignId: string; kind: Artifact["kind"]; count: number }
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
   | { type: "campaign_saved_draft"; id: string }
@@ -332,6 +334,7 @@ export type Action =
 export const initialState: AppState = {
   view: { kind: "welcome" },
   signals: [],
+  artifacts: [],
   campaigns: [],
   workflowCommand: null,
   workflowNodeCommand: null,
@@ -405,7 +408,9 @@ export function appReducer(state: AppState, action: Action): AppState {
         return { ...state, view: { kind: "campaign-select" } };
       }
       const existingDraft = state.campaigns.find(
-        (c) => c.signalId === latestSignal.id && c.status === "draft"
+        (c) =>
+          c.status === "draft" &&
+          c.scenario?.id === (latestSignal.wizardData?.scenario ?? "")
       );
       if (existingDraft) {
         return {
@@ -419,17 +424,19 @@ export function appReducer(state: AppState, action: Action): AppState {
         };
       }
       const scenarioName = scenarioNameForSignal(latestSignal);
+      const scenarioId = latestSignal.wizardData?.scenario ?? "";
       const n =
-        state.campaigns.filter((c) => c.signalId === latestSignal.id).length + 1;
+        state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
       const campaignName = defaultCampaignName(scenarioName, n);
       const campaignId = `cmp_${nanoid(6)}`;
       const newCampaign: Campaign = {
         id: campaignId,
         name: campaignName,
-        signalId: latestSignal.id,
         status: "draft",
         createdAt: new Date().toISOString(),
-        scenario: { id: latestSignal.wizardData?.scenario ?? "", name: scenarioName },
+        sourceType: "new",
+        channels: [],
+        scenario: { id: scenarioId, name: scenarioName },
       };
       return {
         ...state,
@@ -466,9 +473,10 @@ export function appReducer(state: AppState, action: Action): AppState {
         ? {
             id: action.campaign.id,
             name: action.campaign.name,
-            signalId: latestSignal.id,
             status: "draft",
             createdAt: new Date().toISOString(),
+            sourceType: "new",
+            channels: [],
           }
         : null;
       return {
@@ -486,16 +494,18 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "campaign_from_signal": {
       const signal = state.signals.find((s) => s.id === action.signalId);
       if (!signal) return state;
-      const n =
-        state.campaigns.filter((c) => c.signalId === signal.id).length + 1;
       const scenarioName = scenarioNameForSignal(signal);
+      const scenarioId = signal.wizardData?.scenario ?? "";
+      const n =
+        state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
       const newCampaign: Campaign = {
         id: `cmp_${nanoid(6)}`,
         name: defaultCampaignName(scenarioName, n),
-        signalId: signal.id,
         status: "draft",
         createdAt: new Date().toISOString(),
-        scenario: { id: signal.wizardData?.scenario ?? "", name: scenarioName },
+        sourceType: "new",
+        channels: [],
+        scenario: { id: scenarioId, name: scenarioName },
       };
       return {
         ...state,
@@ -509,6 +519,17 @@ export function appReducer(state: AppState, action: Action): AppState {
         campaignFilter: [],
         campaignSort: "default",
       };
+    }
+
+    case "campaign_artifact_ready": {
+      const artifact: Artifact = {
+        id: `art_${nanoid(8)}`,
+        campaignId: action.campaignId,
+        kind: action.kind,
+        count: action.count,
+        createdAt: new Date().toISOString(),
+      };
+      return { ...state, artifacts: [...state.artifacts, artifact] };
     }
 
     case "campaign_opened": {

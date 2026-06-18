@@ -232,16 +232,26 @@ describe("appReducer — campaign_from_signal", () => {
     const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
     expect(next.campaigns).toHaveLength(1);
     const c = next.campaigns[0];
-    expect(c.signalId).toBe("sig_A");
+    // Campaign-first inversion (Task 6): new campaigns no longer carry signalId;
+    // they are root entities with sourceType/channels.
+    expect(c.signalId).toBeUndefined();
+    expect(c.sourceType).toBe("new");
+    expect(c.channels).toEqual([]);
     expect(c.status).toBe("draft");
     expect(c.name).toBe("Апсейл №1");
     expect(c.id).toMatch(/^cmp_/);
     expect(typeof c.createdAt).toBe("string");
   });
 
-  it("numbers the second campaign per signal as №2", () => {
+  it("numbers the second campaign per scenario as №2", () => {
     const signal = makeSignal({ id: "sig_A", type: "Апсейл" });
-    const existing = makeCampaign({ id: "cmp_old", signalId: "sig_A", name: "Апсейл №1" });
+    // Dedup/numbering is now keyed by scenario.id (the inverted contract),
+    // so the existing campaign must share the same scenario the new one derives.
+    const existing = makeCampaign({
+      id: "cmp_old",
+      name: "Апсейл №1",
+      scenario: { id: "", name: "Апсейл" },
+    });
     const state: AppState = { ...initialState, signals: [signal], campaigns: [existing] };
     const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
     expect(next.campaigns).toHaveLength(2);
