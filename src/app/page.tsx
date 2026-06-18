@@ -25,7 +25,7 @@ import { useOnboardingChat } from "@/sections/welcome/use-onboarding-chat";
 import { GuidedSignalSection } from "@/sections/signals/guided-signal-section";
 import { SignalsSection } from "@/sections/signals/signals-section";
 import { CampaignsSection } from "@/sections/campaigns/campaigns-section";
-import { CampaignTypeView } from "@/sections/campaigns/campaign-type-view";
+import { ArtifactsSection } from "@/sections/artifacts/artifacts-section";
 import { WorkflowSection } from "@/sections/campaigns/workflow-section";
 import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-screen";
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
@@ -88,14 +88,6 @@ export default function Home() {
     }
     if (view.kind === "guided-signal" || view.kind === "awaiting-campaign")
       return <GuidedSignalSection />;
-    if (view.kind === "campaign-select")
-      return (
-        <CampaignTypeView
-          onSelect={(id, name) =>
-            dispatch({ type: "campaign_selected", campaign: { id, name } })
-          }
-        />
-      );
     if (view.kind === "workflow") return <WorkflowSection />;
     if (view.kind === "campaign-payment") return <CampaignPaymentScreen />;
     if (view.kind === "campaign") return <CampaignScreen />;
@@ -104,6 +96,7 @@ export default function Home() {
       if (view.name === "Статистика") return <StatisticsSection />;
       if (view.name === "Сигналы") return <SignalsSection />;
       if (view.name === "Кампании") return <CampaignsSection />;
+      if (view.name === "Артефакты") return <ArtifactsSection />;
       if (view.name === "Настройки") return <SettingsSection />;
     }
     return null;

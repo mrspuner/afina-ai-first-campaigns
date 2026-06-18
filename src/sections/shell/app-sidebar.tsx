@@ -5,6 +5,7 @@ import {
   Search,
   Bell,
   Megaphone,
+  Files,
   BarChart2,
   Wallet,
   Settings,
@@ -41,8 +42,8 @@ export function AppSidebar({
   const { balance, notifications } = useAppState();
 
   const navItems = [
-    { icon: Bell, label: "Сигналы" },
     { icon: Megaphone, label: "Кампании" },
+    { icon: Files, label: "Артефакты" },
     { icon: BarChart2, label: "Статистика" },
   ] as const satisfies ReadonlyArray<{ icon: typeof Bell; label: SectionName }>;
 
@@ -73,7 +74,7 @@ export function AppSidebar({
           {/* Основная навигация */}
           <div className="flex flex-col">
             {navItems.map(({ icon: Icon, label }) => {
-              const showBadge = label === "Сигналы" && notifications.signalsBadge;
+              const showBadge = label === "Артефакты" && notifications.signalsBadge;
               return (
                 <button
                   key={label}

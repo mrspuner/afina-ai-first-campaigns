@@ -405,7 +405,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       // создаём новый с именем сценария и роутим в workflow-редактор.
       const latestSignal = state.signals[state.signals.length - 1];
       if (!latestSignal) {
-        return { ...state, view: { kind: "campaign-select" } };
+        return appReducer(state, { type: "start_campaign_flow" });
       }
       const existingDraft = state.campaigns.find(
         (c) =>
@@ -816,15 +816,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         resumingSignalId: undefined,
       };
 
-    case "flyout_campaign_select": {
-      const hasSignal = state.signals.length > 0;
-      return {
-        ...state,
-        launchFlyoutOpen: false,
-        view: hasSignal ? { kind: "campaign-select" } : { kind: "section", name: "Сигналы" },
-        activeSection: hasSignal ? null : "Сигналы",
-      };
-    }
+    case "flyout_campaign_select":
+      return appReducer(state, { type: "start_campaign_flow" });
 
     case "go_welcome":
       return {
