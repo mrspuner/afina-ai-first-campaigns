@@ -6,6 +6,12 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -67,6 +73,13 @@ interface CanvasHeaderProps {
    * Клик по иконке афины рядом со стоимостью — ассистент объясняет расчёт.
    */
   onExplainCost?: () => void;
+  /**
+   * A1: можно ли запускать кампанию. Когда `false`, кнопка «Запустить»
+   * disabled и показывает причину в тултипе. `undefined` → не гейтим.
+   */
+  canLaunch?: boolean;
+  /** Причина блокировки запуска (текст тултипа над disabled-кнопкой). */
+  launchBlockReason?: string;
 }
 
 function formatDate(iso: string): string {
@@ -126,6 +139,8 @@ export function CanvasHeader({
   saveState,
   cost,
   onExplainCost,
+  canLaunch,
+  launchBlockReason,
 }: CanvasHeaderProps) {
   const isReadOnly = mode === "read-only";
   const [editing, setEditing] = useState(false);
@@ -237,7 +252,9 @@ export function CanvasHeader({
             <StatusBadge status={campaign.status} />
             <span className="text-xs text-muted-foreground">
               {!isReadOnly && campaign.status === "draft" && saveState
-                ? "Изменения сохранены"
+                ? saveState === "unsaved"
+                  ? "Сохранение…"
+                  : "Изменения сохранены"
                 : statusDescription(campaign)}
             </span>
           </div>
@@ -266,7 +283,24 @@ export function CanvasHeader({
             </div>
           )}
           {campaign.status === "draft" && (
-            <Button onClick={onLaunch}>Запустить</Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    className={cn(
+                      canLaunch === false ? "cursor-not-allowed" : undefined
+                    )}
+                  />
+                }
+              >
+                <Button onClick={onLaunch} disabled={canLaunch === false}>
+                  Запустить
+                </Button>
+              </TooltipTrigger>
+              {canLaunch === false && launchBlockReason && (
+                <TooltipContent>{launchBlockReason}</TooltipContent>
+              )}
+            </Tooltip>
           )}
           {campaign.status === "active" && (
             <Button

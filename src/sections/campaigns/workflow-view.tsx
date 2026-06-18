@@ -16,7 +16,9 @@ import type {
   WorkflowEdge,
 } from "@/types/workflow";
 import type { Signal, SignalType } from "@/state/app-state";
+import type { SourceType } from "@/types/campaign";
 import { createTemplate } from "@/state/workflow-templates";
+import { computeNeedsAttention } from "@/state/workflow-validation";
 import { matchActions } from "@/state/node-actions";
 import {
   applyOps,
@@ -47,14 +49,24 @@ interface WorkflowViewProps {
   campaignId?: string;
   signalType?: SignalType;
   signal?: Signal;
+  /** A3: источник аудитории кампании — определяет вставку ноды «Скоринг». */
+  sourceType?: SourceType;
   onGraphChange?: (graph: GraphState) => void;
   onNodeClick?: (id: string, label: string, nodeType?: string) => void;
   onPaneClick?: () => void;
 }
 
-function initialGraph(signalType?: SignalType, signal?: Signal): GraphState {
-  if (signalType) return createTemplate(signalType, signal);
-  return { nodes: createBaseNodes(), edges: createBaseEdges() };
+function initialGraph(
+  signalType?: SignalType,
+  signal?: Signal,
+  sourceType?: SourceType
+): GraphState {
+  const base = signalType
+    ? createTemplate(signalType, signal, sourceType)
+    : { nodes: createBaseNodes(), edges: createBaseEdges() };
+  // A1: template graphs must start with correct needs-attention flags so the
+  // launch gate reflects empty required fields immediately.
+  return { ...base, nodes: computeNeedsAttention(base.nodes) };
 }
 
 function computeDynamicSublabel(
@@ -263,6 +275,7 @@ export function WorkflowView({
   campaignId,
   signalType,
   signal,
+  sourceType,
   onGraphChange,
   onNodeClick,
   onPaneClick,
@@ -273,7 +286,7 @@ export function WorkflowView({
   // Rehydrate from the durable cache so manual edits survive the unmount on
   // launch (workflow → campaign) and navigation; fall back to the template.
   const [graph, setGraph] = useState<GraphState>(
-    () => getCachedGraph(campaignId) ?? initialGraph(signalType, signal)
+    () => getCachedGraph(campaignId) ?? initialGraph(signalType, signal, sourceType)
   );
 
   useEffect(() => {
@@ -424,7 +437,6 @@ export function WorkflowView({
             ? Array.from(new Set([...existingDirty, ...Object.keys(p.paramsPatch)]))
             : existingDirty;
           nodes = patchNode(nodes, p.nodeId, {
-            needsAttention: false,
             attentionReason: undefined,
             ...(p.sublabel ? { sublabel: p.sublabel } : {}),
             ...(p.paramsPatch ? { dirtyParams } : {}),
@@ -434,6 +446,8 @@ export function WorkflowView({
           }
           changedIds.add(p.nodeId);
         }
+        // A1: пересчёт needs-attention от итоговых params после AI-правок.
+        nodes = computeNeedsAttention(nodes);
         return { graph: { ...prev, nodes }, changedIds };
       },
       finalReply: `${finalReply}: ${ids}.`,
@@ -456,11 +470,13 @@ export function WorkflowView({
         new Set([...existingDirty, ...Object.keys(nodeFieldPatch.patch)])
       );
       let nodes = patchNode(prev.nodes, nodeFieldPatch.nodeId, {
-        needsAttention: false,
         attentionReason: undefined,
         dirtyParams,
       });
       nodes = patchNodeParams(nodes, nodeFieldPatch.nodeId, nodeFieldPatch.patch);
+      // A1: пересчитываем needs-attention от итоговых params — правка поля в
+      // пустоту снова поднимает флаг, заполнение — снимает.
+      nodes = computeNeedsAttention(nodes);
       return { ...prev, nodes };
     });
     onNodeFieldPatchHandled?.();
