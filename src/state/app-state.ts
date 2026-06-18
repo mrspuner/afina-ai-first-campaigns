@@ -4,7 +4,7 @@ import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { SignalStatus } from "@/types/signal-status";
-import type { StepData, Channel } from "@/types/campaign";
+import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import { scenarioNameForSignal, defaultCampaignName } from "./scenario-display";
 import {
@@ -78,7 +78,8 @@ export type CampaignStatus =
 export type Campaign = {
   id: string;
   name: string;
-  signalId: string;
+  /** @deprecated removed by campaign-first inversion (Task 6). Optional during migration. */
+  signalId?: string;
   status: CampaignStatus;
   createdAt: string;
   launchedAt?: string;
@@ -90,6 +91,16 @@ export type Campaign = {
    * (campaign-screen) keep working when the field is absent.
    */
   budget?: number;
+  sourceType?: SourceType;
+  channels?: Channel[];
+  interests?: string[];
+  file?: { name: string; rowCount: number };
+  dailyBudget?: number;
+  /**
+   * Distinguishes "scoring running" from "communication started" — `status`
+   * alone ("active") cannot. Drives the in-card progress block (design §4).
+   */
+  phase?: "scoring" | "communicating";
   scenario?: { id: string; name: string };
 };
 
