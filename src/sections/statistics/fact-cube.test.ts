@@ -208,7 +208,7 @@ describe("cube invariants", () => {
 
   it("общий итог не зависит от выбора разреза (инвариант куба)", () => {
     const byDays = aggregate(facts);
-    for (const dim of ["campaigns", "channels", "scenarios", "weekdays"] as const) {
+    for (const dim of ["campaigns", "channels", "scenarios", "templates", "weekdays"] as const) {
       const total = groupFacts(facts, dim).reduce(
         (acc, g) => {
           const a = aggregate(g.facts);
@@ -270,6 +270,7 @@ describe("cube invariants", () => {
       for (const dim of [
         "campaigns",
         "scenarios",
+        "templates",
         "channels",
         "creatives",
         "offers",
@@ -283,6 +284,55 @@ describe("cube invariants", () => {
         expect(f.dims[dim]?.label).toBeTruthy();
       }
     }
+  });
+});
+
+describe("templates dimension — facts", () => {
+  it("каждый факт несёт значение по измерению templates", () => {
+    const facts = buildFacts(CTX_WITH_TEMPLATES, PERIOD_JUNE, { now: NOW });
+    expect(facts.length).toBeGreaterThan(0);
+    for (const f of facts) {
+      expect(f.dims.templates?.label).toBeTruthy();
+      expect(f.dims.templates?.key).toBeTruthy();
+    }
+  });
+
+  it("факты email-канала несут email-шаблон, sms-канала — sms-шаблон", () => {
+    const facts = buildFacts(CTX_WITH_TEMPLATES, PERIOD_JUNE, { now: NOW });
+    for (const f of facts) {
+      if (f.dims.channels.label === "Email") {
+        expect(f.dims.templates.label).toBe("Email-дайджест");
+      }
+      if (f.dims.channels.label === "SMS") {
+        expect(f.dims.templates.label).toBe("SMS-напоминание");
+      }
+    }
+  });
+
+  it("канал без шаблона → факт получает «Без шаблона»", () => {
+    // CTX (no templates anywhere) → every fact falls back.
+    const facts = buildFacts(CTX, PERIOD, { now: NOW });
+    expect(facts.length).toBeGreaterThan(0);
+    expect(facts.every((f) => f.dims.templates.key === "tpl-none")).toBe(true);
+    expect(facts.every((f) => f.dims.templates.label === "Без шаблона")).toBe(true);
+  });
+
+  it("группировка по templates сохраняет инвариант: подстроки = родитель", () => {
+    const facts = buildFacts(CTX_WITH_TEMPLATES, PERIOD_JUNE, { now: NOW });
+    const byTemplate = groupFacts(facts, "templates");
+    const total = aggregate(facts);
+    const summed = byTemplate.reduce(
+      (acc, g) => {
+        const a = aggregate(g.facts);
+        for (const k of ADDITIVE) acc[k] += a[k];
+        return acc;
+      },
+      { sends: 0, clicks: 0, actions: 0, holds: 0, approves: 0, rejects: 0 } as Record<
+        (typeof ADDITIVE)[number],
+        number
+      >,
+    );
+    for (const k of ADDITIVE) expect(summed[k]).toBe(total[k]);
   });
 });
 

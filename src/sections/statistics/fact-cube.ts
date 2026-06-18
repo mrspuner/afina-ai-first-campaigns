@@ -187,6 +187,26 @@ export const POOLS: Record<
   ],
 };
 
+// Stable fallback for facts whose channel has no matching template (or for
+// campaigns that carry no templates at all). Keeps `dims.templates` total so the
+// cube invariants hold for template-less inputs too.
+const NO_TEMPLATE_DIM: DimValue = { key: "tpl-none", label: "Без шаблона", order: 0 };
+
+// Maps the cube's invented channel labels (POOLS.channels) to the typed Channel
+// a template targets. Labels with no template channel (Viber/WhatsApp/Звонок/…)
+// map to null → those facts get the "Без шаблона" fallback dim. MUST stay in
+// sync with POOLS.channels above.
+const CHANNEL_LABEL_TO_TEMPLATE_CHANNEL: Record<string, Channel | null> = {
+  SMS: "sms",
+  Push: "push",
+  Email: "email",
+  Звонок: "ivr",
+  Viber: null,
+  WhatsApp: null,
+  "Личный кабинет": null,
+  "Мобильное приложение": null,
+};
+
 const WEEKDAY_NAMES = [
   "Понедельник",
   "Вторник",
@@ -327,6 +347,13 @@ function buildCampaignFacts(
     ? { key: `scn-${c.scenario.id}`, label: c.scenario.name, order: 0 }
     : { key: "scn-none", label: "Без сценария", order: 0 };
 
+  // Templates this campaign uses, indexed by the typed Channel they target.
+  // Last-wins if a campaign somehow lists two templates for one channel.
+  const templateByChannel = new Map<Channel, DimValue>();
+  for (const t of c.templates ?? []) {
+    templateByChannel.set(t.channel, { key: `tpl-${t.id}`, label: t.name, order: 0 });
+  }
+
   // Weighted cells over (day × channel); distribute the campaign's total sends.
   const cells: { day: Date; channel: DimValue; weight: number }[] = [];
   for (const day of days) {
@@ -357,12 +384,18 @@ function buildCampaignFacts(
     // растут в течение сессии. Прошлые дни детерминированы и не меняются.
     const rawMetrics = computeFunnel(metricRng, s);
     const metrics = dayKey === today ? scaleFunnel(rawMetrics, fraction) : rawMetrics;
+    // Channel-weighted template: the fact's channel determines which template
+    // (if any) colours it; channels with no template fall back to "Без шаблона".
+    const tplChannel = CHANNEL_LABEL_TO_TEMPLATE_CHANNEL[cell.channel.label] ?? null;
+    const templateDim =
+      (tplChannel && templateByChannel.get(tplChannel)) || NO_TEMPLATE_DIM;
     facts.push({
       date: cell.day,
       metrics,
       dims: {
         campaigns: campaignDim,
         scenarios: scenarioDim,
+        templates: templateDim,
         strategies: strategy,
         advertisers: advertiser,
         "traffic-suppliers": trafficSupplier,
