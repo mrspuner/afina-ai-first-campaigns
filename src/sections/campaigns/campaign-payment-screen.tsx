@@ -10,6 +10,7 @@ import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { cn } from "@/lib/utils";
 import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
+import { splitCampaignPayments } from "./campaign-payments";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -80,6 +81,19 @@ export function CampaignPaymentScreen() {
   }, [campaign?.id, scenarioSignalType, audienceSize, campaign?.sourceType]);
   const recommended = cost?.total ?? 0;
 
+  // Two-payment split (scoring + communication), source-aware. Free lines are
+  // shown as «бесплатно»; degenerate own bases yield zero payments.
+  const paymentSplit = useMemo(() => {
+    if (!campaign) return null;
+    return splitCampaignPayments({
+      sourceType: campaign.sourceType ?? "new",
+      channels: campaign.channels ?? [],
+      baseSize: audienceSize,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, campaign?.sourceType, campaign?.channels, audienceSize]);
+  const streamDailyBudget = paymentSplit?.dailyBudget;
+
   const [mode, setMode] = useState<Mode>("recommended");
   const [customValue, setCustomValue] = useState<string>(
     recommended > 0 ? String(recommended) : ""
@@ -100,7 +114,11 @@ export function CampaignPaymentScreen() {
   // The actual campaign_launched dispatch fires after the animation completes,
   // so the user sees feedback before being navigated to CampaignScreen.
   const [launching, setLaunching] = useState(false);
-  const launchPayloadRef = useRef<{ id: string; budget: number } | null>(null);
+  const launchPayloadRef = useRef<{
+    id: string;
+    budget: number;
+    dailyBudget?: number;
+  } | null>(null);
 
   function handleBack() {
     if (!campaign) return;
@@ -112,7 +130,12 @@ export function CampaignPaymentScreen() {
   }
 
   function startLaunchAnimation(campaignId: string, budget: number) {
-    launchPayloadRef.current = { id: campaignId, budget };
+    launchPayloadRef.current = {
+      id: campaignId,
+      budget,
+      // Stream campaigns launch with a per-day budget alongside the cap (FD-5).
+      ...(streamDailyBudget !== undefined ? { dailyBudget: streamDailyBudget } : {}),
+    };
     setLaunching(true);
   }
 
@@ -164,6 +187,9 @@ export function CampaignPaymentScreen() {
             id: payload.id,
             timestamp: new Date().toISOString(),
             budget: payload.budget,
+            ...(payload.dailyBudget !== undefined
+              ? { dailyBudget: payload.dailyBudget }
+              : {}),
           });
         }}
       />
@@ -233,7 +259,43 @@ export function CampaignPaymentScreen() {
           </div>
         )}
 
-        {/* Budget cards — mirror of step-5-limit.tsx */}
+        {/* Two-payment split — scoring + communication (source-aware, §5) */}
+        {paymentSplit && (
+          <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+            <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Платежи
+            </h2>
+            <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-muted-foreground">Скоринг (сигналы)</span>
+                <span className="shrink-0 font-medium tabular-nums text-foreground">
+                  {paymentSplit.scoring > 0
+                    ? formatRubPlain(paymentSplit.scoring)
+                    : "бесплатно"}
+                </span>
+              </li>
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-muted-foreground">Коммуникация</span>
+                <span className="shrink-0 font-medium tabular-nums text-foreground">
+                  {paymentSplit.communication > 0
+                    ? formatRubPlain(paymentSplit.communication)
+                    : "—"}
+                </span>
+              </li>
+              {streamDailyBudget !== undefined && (
+                <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
+                  <span className="text-muted-foreground">Дневной бюджет · потолок</span>
+                  <span className="shrink-0 tabular-nums text-foreground">
+                    {formatRubPlain(streamDailyBudget)} ·{" "}
+                    {formatRubPlain(paymentSplit.total)}
+                  </span>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        {/* Budget cards — mirror of the wizard budget step */}
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
