@@ -6,21 +6,14 @@ import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
-import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
-import { Step4Upload } from "@/sections/campaigns/wizard/steps/step-4-upload";
-import { Step5Limit } from "@/sections/campaigns/wizard/steps/step-5-limit";
-import { Step6Summary } from "@/sections/campaigns/wizard/steps/step-6-summary";
-import { Step7Processing } from "@/sections/campaigns/wizard/steps/step-7-processing";
-import { Step8Result } from "@/sections/campaigns/wizard/steps/step-8-result";
+import { StepSource } from "@/sections/campaigns/wizard/steps/step-source";
+import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
+import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
 import type { Signal } from "@/state/app-state";
-import { estimateSignalCount } from "@/state/metrics";
-import { SEGMENTS } from "@/sections/signals/segments-catalog";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
 
-// Сегментный шаг визарда удалён (Task 10). Оценку количества сигналов считаем
-// по полному набору сегментов — estimateSignalCount делит бюджет на самый
-// дешёвый сегмент, давая стабильную верхнюю оценку независимо от выбора.
-const ALL_SEGMENT_IDS = SEGMENTS.map((s) => s.id);
+/** Fallback audience base when no file row-count is known (mirrors estimator). */
+const FALLBACK_BASE = 10_000;
 
 export interface LaunchRequest {
   scenarioId: string;
@@ -33,21 +26,22 @@ export interface LaunchRequest {
 }
 
 function WorkspaceInner({
-  onSignalComplete,
   onLaunchRequested,
   initialScenario,
   initialStepDataOverride,
   initialStep,
-  pendingSignal,
 }: {
+  // Kept for API compatibility with the section consumer; the 4-step campaign
+  // flow no longer renders the wizard's own processing/result steps, so the
+  // signal-completion + pending-signal props are unused here (open-campaign
+  // progress lives in the campaign card — sub-track D).
   onSignalComplete?: () => void;
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   /** Hydrate the wizard with a previously captured StepData snapshot —
    *  used by the "Открыть и редактировать" path on awaiting-payment signals. */
   initialStepDataOverride?: StepData;
-  /** Override the starting step. Defaults to 2 when `initialScenario` is
-   *  set, 1 otherwise. The resume-edit path passes 6 to land on the summary. */
+  /** Override the starting step. Defaults to 2 when `initialScenario` is set. */
   initialStep?: number;
   pendingSignal?: Signal | null;
 }) {
@@ -159,35 +153,25 @@ function WorkspaceInner({
     pendingScroll.current = { step, behavior: "smooth" };
   }, []);
 
-  const handleLaunchNew = useCallback(() => {
-    setStepData(initialStepData);
-    setCurrentStep(1);
-    setMaxStep(1);
-    setAnimatingStep(1);
-    pendingScroll.current = { step: 1, behavior: "instant" };
-  }, []);
-
-  // Step 6 launch handoff — tells the section to create the signal & maybe
-  // open the top-up modal. The proceed callback advances the workspace to
-  // step 7 once the section is ready (immediately if balance ≥ cost,
-  // post-payment otherwise).
-  const handleLaunchFromSummary = useCallback(() => {
+  // Launch handoff from the Бюджет step (no summary step). Builds the
+  // LaunchRequest the section consumer expects. Post-segments the audience
+  // count is derived from the uploaded base size (own/new) or a scenario
+  // fallback (stream). `proceed` is a no-op: open-campaign progress now lives
+  // in the campaign card (sub-track D), so there is no step-7 to advance to —
+  // the reducer routes the view after the signal/campaign is created.
+  const handleLaunchFromBudget = useCallback(() => {
     if (!onLaunchRequested) {
-      // Fallback: just advance.
       handleNext({});
       return;
     }
     onLaunchRequested({
       scenarioId: stepData.scenario ?? "",
       cost: stepData.budget ?? 0,
-      // Estimated count — единая формула бюджет→сигналы из движка чисел.
-      // Сегментный шаг визарда удалён (Task 10): оценка считается по всем
-      // сегментам, а не по выбору пользователя.
-      count: estimateSignalCount(ALL_SEGMENT_IDS, stepData.budget ?? 0),
+      count: stepData.fileRowCount ?? FALLBACK_BASE,
       stepData,
-      proceed: () => advanceTo(6),
+      proceed: () => {},
     });
-  }, [advanceTo, handleNext, onLaunchRequested, stepData]);
+  }, [handleNext, onLaunchRequested, stepData]);
 
   function renderStepContent(step: number) {
     const props = { data: stepData, onNext: handleNext };
@@ -195,35 +179,18 @@ function WorkspaceInner({
     // автопереходит по выбору сценария и футера не имеет, поэтому начинаем
     // прокидывать onBack со 2-го.
     const onBack = () => handleGoToStep(step - 1);
-    // Шаги после удаления сегментного шага (Task 10):
-    // 1 Сценарий · 2 Интересы · 3 База · 4 Бюджет · 5 Сводка · 6 Обработка · 7 Результат
+    // 4-шаговый кампейн-флоу (spec §8):
+    // 1 Сценарий · 2 Источник · 3 Каналы · 4 Бюджет → запуск
     switch (step) {
       case 1: return <Step1Scenario {...props} />;
-      case 2: return <Step2Interests {...props} onBack={onBack} />;
-      case 3: return <Step4Upload {...props} onBack={onBack} />;
-      case 4: return <Step5Limit {...props} onBack={onBack} />;
-      case 5:
+      case 2: return <StepSource {...props} onBack={onBack} />;
+      case 3: return <StepChannels {...props} onBack={onBack} />;
+      case 4:
         return (
-          <Step6Summary
+          <StepBudget
             {...props}
             onBack={onBack}
-            onGoToStep={handleGoToStep}
-            onNext={() => handleLaunchFromSummary()}
-          />
-        );
-      case 6:
-        return (
-          <Step7Processing
-            {...props}
-            signal={pendingSignal ?? null}
-            onAdvance={() => advanceTo(7)}
-          />
-        );
-      case 7:
-        return (
-          <Step8Result
-            signal={pendingSignal ?? null}
-            onUseInCampaign={onSignalComplete ?? handleLaunchNew}
+            onNext={() => handleLaunchFromBudget()}
           />
         );
       default: return null;
