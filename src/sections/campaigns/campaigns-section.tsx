@@ -63,8 +63,7 @@ export function CampaignsSection() {
     [sorted, campaignFilter]
   );
 
-  const goToSignals = () =>
-    dispatch({ type: "sidebar_nav", section: "Сигналы" });
+  const startCampaign = () => dispatch({ type: "start_campaign_flow" });
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto px-8 pb-promptbar pt-[140px]">
@@ -85,7 +84,7 @@ export function CampaignsSection() {
         </div>
 
         {campaigns.length === 0 ? (
-          <NewCampaignCard onGoToSignals={goToSignals} />
+          <NewCampaignCard onCreate={startCampaign} />
         ) : (
           <>
             <CampaignFilterChips
