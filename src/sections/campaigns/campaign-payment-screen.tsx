@@ -9,6 +9,7 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { cn } from "@/lib/utils";
 import { createTemplate } from "@/state/workflow-templates";
+import { getScenario } from "@/data/scenarios";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -16,6 +17,9 @@ import {
   CHANNEL_LABEL,
   type CampaignCost,
 } from "./campaign-cost";
+
+/** Fallback audience base when neither a file nor an artifact is available. */
+const FALLBACK_BASE = 10_000;
 
 type Mode = "recommended" | "custom";
 
@@ -33,7 +37,7 @@ function formatRub(n: number): string {
 }
 
 export function CampaignPaymentScreen() {
-  const { view, campaigns, signals, balance } = useAppState();
+  const { view, campaigns, artifacts, balance } = useAppState();
   const dispatch = useAppDispatch();
 
   // Hook order is fixed across renders: we always call hooks unconditionally
@@ -44,21 +48,36 @@ export function CampaignPaymentScreen() {
   const campaign = campaignFromView
     ? campaigns.find((c) => c.id === campaignFromView.id) ?? null
     : null;
-  const signal = campaign
-    ? signals.find((s) => s.id === campaign.signalId) ?? null
-    : null;
-  const audienceSize = signal?.count ?? 0;
+
+  // Campaign-first audience size: uploaded base, else the campaign's artifact
+  // count, else a sensible fallback. No signal join.
+  const campaignArtifact = campaign
+    ? artifacts
+        .filter((a) => a.campaignId === campaign.id)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
+    : undefined;
+  const audienceSize =
+    campaign?.file?.rowCount ?? campaignArtifact?.count ?? FALLBACK_BASE;
+
+  // The signal type the cost model needs comes from the campaign's scenario.
+  const scenarioSignalType = campaign?.scenario
+    ? getScenario(campaign.scenario.id)?.signalType
+    : undefined;
 
   // Расчётная стоимость кампании из её workflow (тот же модуль, что в шапке).
-  // Граф берём из durable-кэша (учитывает ручные правки) либо строим из
-  // шаблона; N = signal.count. Рекомендуемая сумма = computeCampaignCost.total.
+  // Граф берём из durable-кэша (учитывает ручные правки) либо строим из шаблона
+  // по сценарию + источнику кампании; N = размер аудитории кампании.
   const cost = useMemo<CampaignCost | null>(() => {
-    if (!campaign || !signal) return null;
+    if (!campaign) return null;
     const graph =
-      getCachedGraph(campaign.id) ?? createTemplate(signal.type, signal);
-    return computeCampaignCost(graph.nodes, graph.edges, signal.count);
+      getCachedGraph(campaign.id) ??
+      (scenarioSignalType
+        ? createTemplate(scenarioSignalType, undefined, campaign.sourceType)
+        : null);
+    if (!graph) return null;
+    return computeCampaignCost(graph.nodes, graph.edges, audienceSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign?.id, signal?.id, audienceSize]);
+  }, [campaign?.id, scenarioSignalType, audienceSize, campaign?.sourceType]);
   const recommended = cost?.total ?? 0;
 
   const [mode, setMode] = useState<Mode>("recommended");
