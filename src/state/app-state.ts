@@ -586,7 +586,14 @@ export function appReducer(state: AppState, action: Action): AppState {
         count: action.count,
         createdAt: new Date().toISOString(),
       };
-      return { ...state, artifacts: [...state.artifacts, artifact] };
+      return {
+        ...state,
+        artifacts: [...state.artifacts, artifact],
+        // Reuse the existing badge field (rename to artifactsBadge is optional
+        // Wave-1 polish — see task note). Lighting it here makes the Артефакты
+        // badge fire for real artifacts.
+        notifications: { ...state.notifications, signalsBadge: true },
+      };
     }
 
     case "campaign_opened": {
