@@ -1,3 +1,9 @@
+export type SourceType = "new" | "stream" | "own";
+
+export type Channel = "sms" | "push" | "email" | "ivr";
+
+export const CHANNELS = ["sms", "push", "email", "ivr"] as const satisfies readonly Channel[];
+
 export interface TriggerConfig {
   add: string;
   exclude: string;
@@ -8,7 +14,9 @@ export interface StepData {
   interests: string[];
   triggers: string[];
   triggerConfig: Record<string, TriggerConfig>;
-  segments: string[];
+  sourceType: SourceType;
+  /** Selected communication channels. Empty array = degenerate campaign (no comms). */
+  channels: Channel[];
   budget: number | null;
   file: File | null;
   /**
@@ -23,6 +31,8 @@ export interface StepData {
    * user's manual entry. Lets us restore the correct active card on revisit.
    */
   budgetMode?: "recommended" | "custom";
+  /** Stream source only: per-day cap, alongside `budget` as the total ceiling. */
+  dailyBudget?: number;
 }
 
 export const initialStepData: StepData = {
@@ -30,7 +40,8 @@ export const initialStepData: StepData = {
   interests: [],
   triggers: [],
   triggerConfig: {},
-  segments: [],
+  sourceType: "new",
+  channels: [],
   budget: null,
   file: null,
 };
