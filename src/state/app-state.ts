@@ -359,6 +359,7 @@ export type Action =
   | { type: "signal_deleted"; id: string }
   | { type: "signal_opened"; id: string }
   | { type: "artifact_opened"; id: string }
+  | { type: "artifact_deleted"; id: string }
   | { type: "signal_renamed"; id: string; name: string }
   | { type: "signals_badge_set"; value: boolean }
   | { type: "resume_signal_in_wizard"; signalId: string }
@@ -1046,6 +1047,20 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         view: { kind: "artifact", artifactId: action.id },
         activeSection: null,
+      };
+
+    case "artifact_deleted":
+      return {
+        ...state,
+        artifacts: state.artifacts.filter((a) => a.id !== action.id),
+        view:
+          state.view.kind === "artifact" && state.view.artifactId === action.id
+            ? { kind: "section", name: "Артефакты" }
+            : state.view,
+        activeSection:
+          state.view.kind === "artifact" && state.view.artifactId === action.id
+            ? "Артефакты"
+            : state.activeSection,
       };
 
     case "signal_renamed": {

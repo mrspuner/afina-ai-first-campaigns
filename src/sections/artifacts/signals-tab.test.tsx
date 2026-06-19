@@ -41,8 +41,10 @@ describe("SignalsTabView", () => {
       <SignalsTabView
         artifacts={[]}
         campaigns={campaigns}
+        onOpen={vi.fn()}
         onOpenCampaign={vi.fn()}
         onDownload={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText(/Пока нет артефактов/i)).toBeInTheDocument();
@@ -53,17 +55,23 @@ describe("SignalsTabView", () => {
       <SignalsTabView
         artifacts={artifacts}
         campaigns={campaigns}
+        onOpen={vi.fn()}
         onOpenCampaign={vi.fn()}
         onDownload={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText("Сигналы")).toBeInTheDocument();
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Лето 2026/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Осень 2026/ }),
-    ).toBeInTheDocument();
+    // Cards are role=button and contain the campaign name text, so use getAllByRole
+    // and verify we can find a native <button> element for each campaign link.
+    const letoBtns = screen
+      .getAllByRole("button", { name: /Лето 2026/ })
+      .filter((el) => el.tagName === "BUTTON");
+    expect(letoBtns.length).toBeGreaterThan(0);
+    const osenBtns = screen
+      .getAllByRole("button", { name: /Осень 2026/ })
+      .filter((el) => el.tagName === "BUTTON");
+    expect(osenBtns.length).toBeGreaterThan(0);
   });
 });

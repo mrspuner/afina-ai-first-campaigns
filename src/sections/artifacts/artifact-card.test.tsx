@@ -18,13 +18,21 @@ describe("ArtifactCard", () => {
       <ArtifactCard
         artifact={artifact}
         campaignName="Лето 2026"
+        onOpen={vi.fn()}
         onOpenCampaign={onOpenCampaign}
         onDownload={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
     expect(screen.getByText(/12\s?345/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Лето 2026/ }));
+    // The campaign link is a <button> inside the card; use getAllByRole and find the one
+    // that is NOT the card itself (card is role=button but contains "Лето 2026" in its subtree).
+    const campaignBtn = screen
+      .getAllByRole("button", { name: /Лето 2026/ })
+      .find((el) => el.tagName === "BUTTON");
+    expect(campaignBtn).toBeInTheDocument();
+    fireEvent.click(campaignBtn!);
     expect(onOpenCampaign).toHaveBeenCalledWith("cmp_1");
   });
 
@@ -34,8 +42,10 @@ describe("ArtifactCard", () => {
       <ArtifactCard
         artifact={artifact}
         campaignName="X"
+        onOpen={vi.fn()}
         onOpenCampaign={vi.fn()}
         onDownload={onDownload}
+        onDelete={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Скачать/i }));
@@ -47,10 +57,28 @@ describe("ArtifactCard", () => {
       <ArtifactCard
         artifact={artifact}
         campaignName="X"
+        onOpen={vi.fn()}
         onOpenCampaign={vi.fn()}
         onDownload={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
     expect(screen.queryByText(/Макс/)).not.toBeInTheDocument();
+  });
+
+  it("fires onOpen when the card body is clicked", () => {
+    const onOpen = vi.fn();
+    render(
+      <ArtifactCard
+        artifact={artifact}
+        campaignName="X"
+        onOpen={onOpen}
+        onOpenCampaign={vi.fn()}
+        onDownload={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Сигналы и конверсии"));
+    expect(onOpen).toHaveBeenCalledWith("art_1");
   });
 });

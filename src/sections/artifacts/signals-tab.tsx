@@ -9,16 +9,20 @@ import { ArtifactsEmptyState } from "./artifacts-empty-state";
 interface SignalsTabViewProps {
   artifacts: Artifact[];
   campaigns: Campaign[];
+  onOpen: (artifactId: string) => void;
   onOpenCampaign: (campaignId: string) => void;
   onDownload: (artifactId: string) => void;
+  onDelete: (artifactId: string) => void;
 }
 
 /** Presentational list — pure, no state access (testable in isolation). */
 export function SignalsTabView({
   artifacts,
   campaigns,
+  onOpen,
   onOpenCampaign,
   onDownload,
+  onDelete,
 }: SignalsTabViewProps) {
   if (artifacts.length === 0) {
     return <ArtifactsEmptyState />;
@@ -38,8 +42,10 @@ export function SignalsTabView({
           campaignName={
             campaigns.find((c) => c.id === artifact.campaignId)?.name ?? "—"
           }
+          onOpen={onOpen}
           onOpenCampaign={onOpenCampaign}
           onDownload={onDownload}
+          onDelete={onDelete}
         />
       ))}
     </div>
@@ -69,8 +75,10 @@ export function SignalsTab() {
     <SignalsTabView
       artifacts={artifacts}
       campaigns={campaigns}
+      onOpen={(id) => dispatch({ type: "artifact_opened", id })}
       onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
+      onDelete={(id) => dispatch({ type: "artifact_deleted", id })}
     />
   );
 }
