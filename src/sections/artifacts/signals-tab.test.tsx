@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { SignalsTabView } from "./signals-tab";
 import type { Artifact, Campaign } from "@/state/app-state";
 
@@ -63,15 +63,27 @@ describe("SignalsTabView", () => {
     );
     expect(screen.getByText("Сигналы")).toBeInTheDocument();
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
-    // Cards are role=button and contain the campaign name text, so use getAllByRole
-    // and verify we can find a native <button> element for each campaign link.
-    const letoBtns = screen
+  });
+
+  it("calls onOpenCampaign with the campaign id when the campaign link button is clicked", () => {
+    const onOpenCampaign = vi.fn();
+    render(
+      <SignalsTabView
+        artifacts={artifacts}
+        campaigns={campaigns}
+        onOpen={vi.fn()}
+        onOpenCampaign={onOpenCampaign}
+        onDownload={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    // The campaign link is a native <button> whose accessible name includes the campaign name.
+    // Disambiguate from the card (role="button" div) by selecting only native <button> elements.
+    const campaignBtn = screen
       .getAllByRole("button", { name: /Лето 2026/ })
-      .filter((el) => el.tagName === "BUTTON");
-    expect(letoBtns.length).toBeGreaterThan(0);
-    const osenBtns = screen
-      .getAllByRole("button", { name: /Осень 2026/ })
-      .filter((el) => el.tagName === "BUTTON");
-    expect(osenBtns.length).toBeGreaterThan(0);
+      .find((el) => el.tagName === "BUTTON");
+    expect(campaignBtn).toBeTruthy();
+    fireEvent.click(campaignBtn!);
+    expect(onOpenCampaign).toHaveBeenCalledWith("cmp_1");
   });
 });
