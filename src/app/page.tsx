@@ -22,7 +22,7 @@ import { IntroOverlay } from "@/sections/welcome/intro-overlay";
 import { SurveySection } from "@/sections/survey/survey-section";
 import { WelcomeChatProvider } from "@/sections/welcome/welcome-chat-context";
 import { useOnboardingChat } from "@/sections/welcome/use-onboarding-chat";
-import { GuidedSignalSection } from "@/sections/signals/guided-signal-section";
+import { GuidedCampaignSection } from "@/sections/campaigns/wizard/guided-campaign-section";
 import { SignalsSection } from "@/sections/signals/signals-section";
 import { CampaignsSection } from "@/sections/campaigns/campaigns-section";
 import { ArtifactsSection } from "@/sections/artifacts/artifacts-section";
@@ -69,8 +69,8 @@ export default function Home() {
 
   // Routing key for the renderMain animation. View kinds that render the
   // SAME section component must collapse to one key, otherwise switching
-  // between them (e.g. signal_added flips guided-signal → awaiting-campaign,
-  // both routed to GuidedSignalSection) causes a remount and wipes the
+  // between them (e.g. guided-signal → awaiting-campaign,
+  // both routed to GuidedCampaignSection) causes a remount and wipes the
   // section's local state (pendingSignalId, current wizard step, etc).
   const viewKey =
     view.kind === "awaiting-campaign" ? "guided-signal" : view.kind;
@@ -88,7 +88,7 @@ export default function Home() {
       );
     }
     if (view.kind === "guided-signal" || view.kind === "awaiting-campaign")
-      return <GuidedSignalSection />;
+      return <GuidedCampaignSection />;
     if (view.kind === "workflow") return <WorkflowSection />;
     if (view.kind === "campaign-payment") return <CampaignPaymentScreen />;
     if (view.kind === "campaign") return <CampaignScreen />;

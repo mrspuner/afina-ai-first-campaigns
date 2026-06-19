@@ -314,6 +314,7 @@ export type Action =
   | { type: "step2_clicked" }
   | { type: "campaign_selected"; campaign: { id: string; name: string } }
   | { type: "campaign_from_signal"; signalId: string }
+  | { type: "campaign_created_from_wizard"; stepData: StepData; scenarioName: string }
   | { type: "campaign_artifact_ready"; campaignId: string; kind: Artifact["kind"]; count: number }
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
@@ -567,6 +568,44 @@ export function appReducer(state: AppState, action: Action): AppState {
         sourceType: "new",
         channels: [],
         scenario: { id: scenarioId, name: scenarioName },
+      };
+      return {
+        ...state,
+        campaigns: [...state.campaigns, newCampaign],
+        view: {
+          kind: "workflow",
+          campaign: { id: newCampaign.id, name: newCampaign.name },
+          launched: false,
+        },
+        activeSection: null,
+        campaignFilter: [],
+        campaignSort: "default",
+      };
+    }
+
+    case "campaign_created_from_wizard": {
+      const sd = action.stepData;
+      const scenarioId = sd.scenario ?? "";
+      const n =
+        state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
+      // StepData.file is the raw browser `File | null`; Campaign.file is the
+      // lightweight `{ name; rowCount }` snapshot. Map explicitly, pulling the
+      // approximate row count from StepData.fileRowCount.
+      const file = sd.file
+        ? { name: sd.file.name, rowCount: sd.fileRowCount ?? 0 }
+        : undefined;
+      const newCampaign: Campaign = {
+        id: `cmp_${nanoid(6)}`,
+        name: defaultCampaignName(action.scenarioName, n),
+        status: "draft",
+        createdAt: new Date().toISOString(),
+        sourceType: sd.sourceType,
+        channels: sd.channels,
+        interests: sd.interests,
+        file,
+        budget: sd.budget ?? undefined,
+        dailyBudget: sd.dailyBudget,
+        scenario: scenarioId ? { id: scenarioId, name: action.scenarioName } : undefined,
       };
       return {
         ...state,

@@ -40,7 +40,7 @@ export interface PromptBarContext {
   welcomeChips: readonly WelcomeChip[];
   /**
    * Опциональный снимок wizard'а — wizard живёт в локальном state компонента
-   * guided-signal-section, в AppState протекает только current step. Если
+   * guided-campaign-section, в AppState протекает только current step. Если
    * этот объект не передан, реестр трактует поля как `false` (≈ «пусто»),
    * что даёт стартовые подсказки на шагах 2/6.
    */
