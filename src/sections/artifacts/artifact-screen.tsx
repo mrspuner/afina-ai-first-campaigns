@@ -1,13 +1,21 @@
 "use client";
 
-import { CheckCircle2, Download } from "lucide-react";
+import { CheckCircle2, Download, Trash2 } from "lucide-react";
 import {
   EntityCardShell,
   CardSection,
 } from "@/components/ui/entity-card";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
-import type { Artifact } from "@/state/app-state";
+import type { Artifact, Campaign } from "@/state/app-state";
+import type { Channel } from "@/types/campaign";
 import { ARTIFACT_KIND_LABEL } from "./artifact-labels";
+
+const SOURCE_LABEL: Record<NonNullable<Campaign["sourceType"]>, string> = {
+  new: "Новая база", stream: "Поток", own: "Своя база",
+};
+const CHANNEL_LABEL: Record<Channel, string> = {
+  sms: "SMS", push: "Push", email: "Email", ivr: "IVR",
+};
 
 function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
@@ -30,19 +38,23 @@ function SummaryRow({
 
 interface ArtifactScreenViewProps {
   artifact: Artifact;
+  campaign: Campaign | undefined;
   campaignName: string;
   onBack: () => void;
   onOpenCampaign: (campaignId: string) => void;
   onDownload: () => void;
+  onDelete: () => void;
 }
 
 /** Presentational artifact detail — pure, no state access. */
 export function ArtifactScreenView({
   artifact,
+  campaign,
   campaignName,
   onBack,
   onOpenCampaign,
   onDownload,
+  onDelete,
 }: ArtifactScreenViewProps) {
   const kindLabel = ARTIFACT_KIND_LABEL[artifact.kind];
 
@@ -64,6 +76,7 @@ export function ArtifactScreenView({
           onClick: onDownload,
           icon: <Download className="h-4 w-4" />,
         },
+        { label: "Удалить", onClick: onDelete, icon: <Trash2 className="h-4 w-4" /> },
       ]}
     >
       <CardSection label="Всего сигналов">
@@ -90,6 +103,19 @@ export function ArtifactScreenView({
           </SummaryRow>
         </div>
       </CardSection>
+
+      {campaign && (
+        <CardSection label="Настройки кампании-источника">
+          <div className="divide-y divide-border">
+            <SummaryRow label="Сценарий">{campaign.scenario?.name ?? "—"}</SummaryRow>
+            <SummaryRow label="Источник">{SOURCE_LABEL[campaign.sourceType ?? "new"]}</SummaryRow>
+            <SummaryRow label="Интересы">{campaign.interests?.length ? campaign.interests.join(", ") : "—"}</SummaryRow>
+            <SummaryRow label="Каналы">{campaign.channels?.length ? campaign.channels.map((c) => CHANNEL_LABEL[c]).join(", ") : "—"}</SummaryRow>
+            <SummaryRow label="Файл базы">{campaign.file ? campaign.file.name : "—"}</SummaryRow>
+            <SummaryRow label="Бюджет">{campaign.budget ? `₽ ${campaign.budget.toLocaleString("ru-RU")}` : "—"}</SummaryRow>
+          </div>
+        </CardSection>
+      )}
     </EntityCardShell>
   );
 }
@@ -104,8 +130,7 @@ export function ArtifactScreen() {
   const artifact = artifacts.find((a) => a.id === view.artifactId);
   if (!artifact) return null;
 
-  const campaignName =
-    campaigns.find((c) => c.id === artifact.campaignId)?.name ?? "—";
+  const campaign = campaigns.find((c) => c.id === artifact.campaignId);
 
   function handleDownload() {
     // Prototype: a real backend would emit a CSV here.
@@ -118,10 +143,12 @@ export function ArtifactScreen() {
   return (
     <ArtifactScreenView
       artifact={artifact}
-      campaignName={campaignName}
+      campaign={campaign}
+      campaignName={campaign?.name ?? "—"}
       onBack={() => dispatch({ type: "sidebar_nav", section: "Артефакты" })}
       onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
+      onDelete={() => dispatch({ type: "artifact_deleted", id: artifact.id })}
     />
   );
 }

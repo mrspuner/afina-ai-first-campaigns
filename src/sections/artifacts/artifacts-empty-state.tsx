@@ -3,8 +3,9 @@
 import { Card } from "@/components/ui/card";
 
 /**
- * Empty state for the Сигналы tab. Artifacts are produced by launched
- * campaigns — there is no manual create/upload here (spec block 13).
+ * Empty state for the Сигналы tab in Артефакты. Artifacts are produced by
+ * launched campaigns — there is no manual create/upload (spec §3/§13). Copy
+ * tone carried over from the old signals empty state.
  */
 export function ArtifactsEmptyState() {
   return (
@@ -12,7 +13,11 @@ export function ArtifactsEmptyState() {
       <p className="text-sm font-semibold text-foreground">Пока нет артефактов</p>
       <p className="text-xs text-muted-foreground">
         Артефакты появляются здесь, когда кампания собирает сигналы. Запустите
-        кампанию — результат окажется тут.
+        кампанию — собранная база окажется тут.
+      </p>
+      <p className="text-xs text-muted-foreground/80">
+        Своя база подключается на шаге «Источник» при создании кампании — без
+        отдельной загрузки в этом разделе.
       </p>
     </Card>
   );
