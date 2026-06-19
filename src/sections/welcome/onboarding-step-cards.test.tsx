@@ -3,12 +3,12 @@ import { render, screen } from "@testing-library/react";
 import { OnboardingStepCards } from "./onboarding-step-cards";
 
 describe("OnboardingStepCards — block-7 copy", () => {
-  it("renders the three concept headings with the middle card as Коммуникация", () => {
+  it("renders the three concept headings with the first card as Кампании", () => {
     render(<OnboardingStepCards />);
-    expect(screen.getByText("Сигналы")).toBeInTheDocument();
+    expect(screen.getByText("Кампании")).toBeInTheDocument();
     expect(screen.getByText("Коммуникация")).toBeInTheDocument();
     expect(screen.getByText("Статистика")).toBeInTheDocument();
-    expect(screen.queryByText("Кампании")).not.toBeInTheDocument();
+    expect(screen.queryByText("Сигналы")).not.toBeInTheDocument();
   });
 
   it("renders the Коммуникация description", () => {

@@ -23,14 +23,12 @@ import { SurveySection } from "@/sections/survey/survey-section";
 import { WelcomeChatProvider } from "@/sections/welcome/welcome-chat-context";
 import { useOnboardingChat } from "@/sections/welcome/use-onboarding-chat";
 import { GuidedCampaignSection } from "@/sections/campaigns/wizard/guided-campaign-section";
-import { SignalsSection } from "@/sections/signals/signals-section";
 import { CampaignsSection } from "@/sections/campaigns/campaigns-section";
 import { ArtifactsSection } from "@/sections/artifacts/artifacts-section";
 import { ArtifactScreen } from "@/sections/artifacts/artifact-screen";
 import { WorkflowSection } from "@/sections/campaigns/workflow-section";
 import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-screen";
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
-import { SignalScreen } from "@/sections/signals/signal-screen";
 import { StatisticsSection } from "@/sections/statistics/statistics-section";
 import { SettingsSection } from "@/sections/settings/settings-section";
 import { DevPanel } from "@/components/dev/dev-panel";
@@ -92,11 +90,9 @@ export default function Home() {
     if (view.kind === "workflow") return <WorkflowSection />;
     if (view.kind === "campaign-payment") return <CampaignPaymentScreen />;
     if (view.kind === "campaign") return <CampaignScreen />;
-    if (view.kind === "signal") return <SignalScreen />;
     if (view.kind === "artifact") return <ArtifactScreen />;
     if (view.kind === "section") {
       if (view.name === "Статистика") return <StatisticsSection />;
-      if (view.name === "Сигналы") return <SignalsSection />;
       if (view.name === "Кампании") return <CampaignsSection />;
       if (view.name === "Артефакты") return <ArtifactsSection />;
       if (view.name === "Настройки") return <SettingsSection />;
