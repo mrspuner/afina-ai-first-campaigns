@@ -15,7 +15,7 @@ import { DraftQueueList } from "./draft-queue-list";
 import { TransientReply } from "./transient-reply";
 
 /**
- * Нижний промпт-бар для всех экранов, кроме guided-signal (там ChatPanel).
+ * Нижний промпт-бар для всех экранов, кроме guided-campaign (там ChatPanel).
  * Тонкая обёртка над общим {@link PromptComposer} — submit/clear/подсказки и
  * состояние едины с drawer и chat-panel.
  */
@@ -50,10 +50,9 @@ export function ShellBottomBar() {
     ? "Задайте вопрос…"
     : isWorkflowView(state)
       ? "Опишите изменение сценария..."
-      : view.kind === "guided-signal"
+      : view.kind === "guided-campaign"
           ? "Введите ваши параметры или задайте вопрос"
-          : view.kind === "section" &&
-              (view.name === "Сигналы" || view.name === "Кампании")
+          : view.kind === "section" && view.name === "Кампании"
             ? "Напишите, что вы хотите сделать"
             : "Выберите шаг или задайте вопрос…";
 

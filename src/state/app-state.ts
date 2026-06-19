@@ -3,10 +3,9 @@ import type { StructuralOp } from "./structural-commands";
 import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
-import type { SignalStatus } from "@/types/signal-status";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
-import { scenarioNameForSignal, defaultCampaignName } from "./scenario-display";
+import { defaultCampaignName } from "./scenario-display";
 import { estimateArtifactCount, artifactKindForCampaign } from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
 import {
@@ -35,42 +34,6 @@ export type SignalType =
   | "Возврат"
   | "Удержание";
 
-export const SIGNAL_TYPES = [
-  "Регистрация",
-  "Первая сделка",
-  "Апсейл",
-  "Реактивация",
-  "Возврат",
-  "Удержание",
-] as const satisfies readonly SignalType[];
-
-export type Signal = {
-  id: string;
-  type: SignalType;
-  // User-editable display name; falls back to `type` when absent.
-  name?: string;
-  count: number;
-  segments: {
-    max: number;
-    high: number;
-    mid: number;
-    low: number;
-  };
-  createdAt: string;
-  updatedAt: string;
-  isCustom?: boolean;
-  // Owned by feature/signal-flow worktree (E). Defaults to "ready" when
-  // omitted — preserves behaviour of existing presets that don't set status.
-  status?: SignalStatus;
-  /**
-   * Snapshot of the wizard form at the moment this signal was launched.
-   * Lets `Открыть и редактировать` re-hydrate the wizard at step-6 with
-   * every field intact. Optional — older signals or seeded presets won't
-   * carry it.
-   */
-  wizardData?: StepData;
-};
-
 export type CampaignStatus =
   | "draft"
   | "active"
@@ -80,8 +43,6 @@ export type CampaignStatus =
 export type Campaign = {
   id: string;
   name: string;
-  /** @deprecated removed by campaign-first inversion (Task 6). Optional during migration. */
-  signalId?: string;
   status: CampaignStatus;
   createdAt: string;
   launchedAt?: string;
@@ -193,17 +154,15 @@ export type Preset = {
   artifacts: Artifact[];
 };
 
-export type SectionName = "Статистика" | "Сигналы" | "Артефакты" | "Кампании" | "Настройки";
+export type SectionName = "Статистика" | "Артефакты" | "Кампании" | "Настройки";
 
 export type View =
   | { kind: "welcome" }
   | { kind: "survey" }
-  | { kind: "guided-signal"; initialScenario?: { id: string; name: string } }
-  | { kind: "awaiting-campaign" }
+  | { kind: "guided-campaign"; initialScenario?: { id: string; name: string } }
   | { kind: "workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
-  | { kind: "signal"; signal: { id: string } }
   | { kind: "artifact"; artifactId: string }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
@@ -213,18 +172,15 @@ export type View =
 // full View from this address + current campaigns[].
 export type ViewAddress =
   | { kind: "welcome" }
-  | { kind: "guided-signal"; scenarioId?: string; scenarioName?: string }
-  | { kind: "awaiting-campaign" }
+  | { kind: "guided-campaign"; scenarioId?: string; scenarioName?: string }
   | { kind: "workflow"; campaignId: string }
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
-  | { kind: "signal"; signalId: string }
   | { kind: "artifact"; artifactId: string }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
 export type AppState = {
   view: View;
-  signals: Signal[];
   artifacts: Artifact[];
   templates: MessageTemplate[];
   campaigns: Campaign[];
@@ -248,14 +204,7 @@ export type AppState = {
   balance: number;
   notifications: { signalsBadge: boolean };
   /**
-   * Set when the user picks "Открыть и редактировать" on an awaiting-payment
-   * signal. The wizard reads this on mount, hydrates step-6 from the
-   * signal's `wizardData`, and clears the field. Only one signal can be
-   * "resumed" at a time — entering the wizard from any other path clears it.
-   */
-  resumingSignalId?: string;
-  /**
-   * Bumped on every `start_signal_flow` so consumers (the wizard) can use it
+   * Bumped on every `start_campaign_flow` so consumers (the wizard) can use it
    * as a React `key` to force a fresh mount. Without it, hopping out of the
    * wizard mid-flight (e.g. to a section) and re-entering via "Создать
    * сигнал" would resume the previous session — `currentStep` and `maxStep`
@@ -307,13 +256,8 @@ export type AppState = {
 };
 
 export type Action =
-  | { type: "start_signal_flow"; initialScenario?: { id: string; name: string } }
   | { type: "start_campaign_flow"; initialScenario?: { id: string; name: string } }
-  | { type: "signal_added"; signal: Signal }
-  | { type: "signal_complete" }
-  | { type: "step2_clicked" }
   | { type: "campaign_selected"; campaign: { id: string; name: string } }
-  | { type: "campaign_from_signal"; signalId: string }
   | { type: "campaign_created_from_wizard"; stepData: StepData; scenarioName: string }
   | { type: "campaign_artifact_ready"; campaignId: string; kind: Artifact["kind"]; count: number }
   | { type: "campaign_opened"; id: string }
@@ -343,7 +287,6 @@ export type Action =
   | { type: "sidebar_nav"; section: SectionName }
   | { type: "flyout_open" }
   | { type: "flyout_close" }
-  | { type: "flyout_signal_select"; id: string; name: string }
   | { type: "flyout_campaign_select" }
   | { type: "go_welcome" }
   | { type: "restore_address"; address: ViewAddress }
@@ -355,15 +298,9 @@ export type Action =
   | { type: "settings_updated"; patch: Partial<AccountSettings> }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
-  | { type: "signal_status_changed"; id: string; status: SignalStatus }
-  | { type: "signal_deleted"; id: string }
-  | { type: "signal_opened"; id: string }
   | { type: "artifact_opened"; id: string }
   | { type: "artifact_deleted"; id: string }
-  | { type: "signal_renamed"; id: string; name: string }
   | { type: "signals_badge_set"; value: boolean }
-  | { type: "resume_signal_in_wizard"; signalId: string }
-  | { type: "resume_signal_in_wizard_handled" }
   | { type: "wizard_step_changed"; step: number | null }
   | { type: "budget_help_shown" }
   | { type: "wizard_random_remix" }
@@ -395,7 +332,6 @@ export type Action =
 
 export const initialState: AppState = {
   view: { kind: "welcome" },
-  signals: [],
   artifacts: [],
   templates: PRESET_TEMPLATES,
   campaigns: [],
@@ -429,11 +365,10 @@ export const initialState: AppState = {
 
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case "start_signal_flow":
     case "start_campaign_flow":
       // Анкета не пройдена — ведём пользователя сначала в survey-view
       // (fullscreen без sidebar/bottom-bar). После `survey_completed`
-      // SurveySection повторно диспатчит `start_signal_flow`, и тогда
+      // SurveySection повторно диспатчит `start_campaign_flow`, и тогда
       // условие ниже даст ему мастер. initialScenario при гейте теряется —
       // в прототипе его никто из пользовательских путей не передаёт.
       if (state.surveyStatus !== "completed") {
@@ -442,76 +377,15 @@ export function appReducer(state: AppState, action: Action): AppState {
           view: { kind: "survey" },
           launchFlyoutOpen: false,
           activeSection: null,
-          resumingSignalId: undefined,
         };
       }
       return {
         ...state,
-        view: { kind: "guided-signal", initialScenario: action.initialScenario },
+        view: { kind: "guided-campaign", initialScenario: action.initialScenario },
         launchFlyoutOpen: false,
         activeSection: null,
-        resumingSignalId: undefined,
         wizardSessionId: state.wizardSessionId + 1,
       };
-
-    case "signal_added":
-      return {
-        ...state,
-        signals: [...state.signals, action.signal],
-        view: { kind: "awaiting-campaign" },
-      };
-
-    case "signal_complete":
-    case "step2_clicked": {
-      // Кампания собирается по сценарию из сигнала (без отдельного экрана выбора).
-      // Если для сигнала уже есть черновой кампейн — открываем его, иначе
-      // создаём новый с именем сценария и роутим в workflow-редактор.
-      const latestSignal = state.signals[state.signals.length - 1];
-      if (!latestSignal) {
-        return appReducer(state, { type: "start_campaign_flow" });
-      }
-      const existingDraft = state.campaigns.find(
-        (c) =>
-          c.status === "draft" &&
-          c.scenario?.id === (latestSignal.wizardData?.scenario ?? "")
-      );
-      if (existingDraft) {
-        return {
-          ...state,
-          view: {
-            kind: "workflow",
-            campaign: { id: existingDraft.id, name: existingDraft.name },
-            launched: false,
-          },
-          activeSection: null,
-        };
-      }
-      const scenarioName = scenarioNameForSignal(latestSignal);
-      const scenarioId = latestSignal.wizardData?.scenario ?? "";
-      const n =
-        state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
-      const campaignName = defaultCampaignName(scenarioName, n);
-      const campaignId = `cmp_${nanoid(6)}`;
-      const newCampaign: Campaign = {
-        id: campaignId,
-        name: campaignName,
-        status: "draft",
-        createdAt: new Date().toISOString(),
-        sourceType: "new",
-        channels: [],
-        scenario: { id: scenarioId, name: scenarioName },
-      };
-      return {
-        ...state,
-        campaigns: [...state.campaigns, newCampaign],
-        view: {
-          kind: "workflow",
-          campaign: { id: campaignId, name: campaignName },
-          launched: false,
-        },
-        activeSection: null,
-      };
-    }
 
     case "campaign_selected": {
       const existing = state.campaigns.find((c) => c.id === action.campaign.id);
@@ -531,53 +405,18 @@ export function appReducer(state: AppState, action: Action): AppState {
           campaignSort: "default",
         };
       }
-      const latestSignal = state.signals[state.signals.length - 1];
-      const newCampaign: Campaign | null = latestSignal
-        ? {
-            id: action.campaign.id,
-            name: action.campaign.name,
-            status: "draft",
-            createdAt: new Date().toISOString(),
-            sourceType: "new",
-            channels: [],
-          }
-        : null;
-      return {
-        ...state,
-        campaigns: newCampaign
-          ? [...state.campaigns, newCampaign]
-          : state.campaigns,
-        view: { kind: "workflow", campaign: action.campaign, launched: false },
-        activeSection: null,
-        campaignFilter: [],
-        campaignSort: "default",
-      };
-    }
-
-    case "campaign_from_signal": {
-      const signal = state.signals.find((s) => s.id === action.signalId);
-      if (!signal) return state;
-      const scenarioName = scenarioNameForSignal(signal);
-      const scenarioId = signal.wizardData?.scenario ?? "";
-      const n =
-        state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
       const newCampaign: Campaign = {
-        id: `cmp_${nanoid(6)}`,
-        name: defaultCampaignName(scenarioName, n),
+        id: action.campaign.id,
+        name: action.campaign.name,
         status: "draft",
         createdAt: new Date().toISOString(),
         sourceType: "new",
         channels: [],
-        scenario: { id: scenarioId, name: scenarioName },
       };
       return {
         ...state,
         campaigns: [...state.campaigns, newCampaign],
-        view: {
-          kind: "workflow",
-          campaign: { id: newCampaign.id, name: newCampaign.name },
-          launched: false,
-        },
+        view: { kind: "workflow", campaign: action.campaign, launched: false },
         activeSection: null,
         campaignFilter: [],
         campaignSort: "default",
@@ -719,7 +558,6 @@ export function appReducer(state: AppState, action: Action): AppState {
       const dup: Campaign = {
         id: `cmp_${nanoid(6)}`,
         name: `Копия — ${original.name}`,
-        signalId: original.signalId,
         status: "draft",
         createdAt: new Date().toISOString(),
         scenario: original.scenario,
@@ -800,9 +638,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           };
       return {
         ...state,
-        // Campaign-first presets seed campaigns + artifacts, no top-level
-        // signals — applying any preset clears the (legacy) signals list.
-        signals: [],
+        // Campaign-first presets seed campaigns + artifacts.
         artifacts: action.preset.artifacts,
         campaigns: action.preset.campaigns,
         stats,
@@ -915,18 +751,6 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "flyout_close":
       return { ...state, launchFlyoutOpen: false };
 
-    case "flyout_signal_select":
-      return {
-        ...state,
-        view: {
-          kind: "guided-signal",
-          initialScenario: { id: action.id, name: action.name },
-        },
-        launchFlyoutOpen: false,
-        activeSection: null,
-        resumingSignalId: undefined,
-      };
-
     case "flyout_campaign_select":
       return appReducer(state, { type: "start_campaign_flow" });
 
@@ -1012,39 +836,6 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "balance_topup":
       return { ...state, balance: state.balance + Math.max(0, action.amount) };
 
-    case "signal_status_changed": {
-      const exists = state.signals.some((s) => s.id === action.id);
-      if (!exists) return state;
-      return {
-        ...state,
-        signals: state.signals.map((s) =>
-          s.id === action.id
-            ? { ...s, status: action.status, updatedAt: new Date().toISOString() }
-            : s
-        ),
-        notifications:
-          action.status === "ready" || action.status === "error" || action.status === "expired"
-            ? { ...state.notifications, signalsBadge: true }
-            : state.notifications,
-      };
-    }
-
-    case "signal_deleted":
-      return {
-        ...state,
-        signals: state.signals.filter((s) => s.id !== action.id),
-      };
-
-    case "signal_opened": {
-      const s = state.signals.find((ss) => ss.id === action.id);
-      if (!s) return state;
-      return {
-        ...state,
-        view: { kind: "signal", signal: { id: s.id } },
-        activeSection: null,
-      };
-    }
-
     case "artifact_opened":
       return {
         ...state,
@@ -1066,38 +857,10 @@ export function appReducer(state: AppState, action: Action): AppState {
             : state.activeSection,
       };
 
-    case "signal_renamed": {
-      const name = action.name.trim();
-      if (!name) return state;
-      if (!state.signals.some((s) => s.id === action.id)) return state;
-      return {
-        ...state,
-        signals: state.signals.map((s) =>
-          s.id === action.id ? { ...s, name } : s
-        ),
-      };
-    }
-
     case "signals_badge_set":
       return {
         ...state,
         notifications: { ...state.notifications, signalsBadge: action.value },
-      };
-
-    case "resume_signal_in_wizard":
-      return {
-        ...state,
-        view: { kind: "guided-signal" },
-        resumingSignalId: action.signalId,
-        launchFlyoutOpen: false,
-        activeSection: null,
-        wizardSessionId: state.wizardSessionId + 1,
-      };
-
-    case "resume_signal_in_wizard_handled":
-      return {
-        ...state,
-        resumingSignalId: undefined,
       };
 
     case "wizard_step_changed":
@@ -1279,16 +1042,14 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
   switch (addr.kind) {
     case "welcome":
       return { kind: "welcome" };
-    case "guided-signal":
+    case "guided-campaign":
       return {
-        kind: "guided-signal",
+        kind: "guided-campaign",
         initialScenario:
           addr.scenarioId && addr.scenarioName
             ? { id: addr.scenarioId, name: addr.scenarioName }
             : undefined,
       };
-    case "awaiting-campaign":
-      return { kind: "awaiting-campaign" };
     case "workflow": {
       const c = campaigns.find((cc) => cc.id === addr.campaignId);
       // If the campaign no longer exists, fall back to campaign list rather than
@@ -1319,8 +1080,6 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
       if (!c) return { kind: "section", name: "Кампании" };
       return { kind: "campaign", campaign: { id: c.id, name: c.name } };
     }
-    case "signal":
-      return { kind: "signal", signal: { id: addr.signalId } };
     case "artifact":
       return { kind: "artifact", artifactId: addr.artifactId };
     case "section":
@@ -1335,22 +1094,18 @@ export function viewToAddress(view: View): ViewAddress {
       // Survey — транзиентный fullscreen-стейт; back/forward не должен
       // возвращать пользователя в survey как отдельный URL — мапим в welcome.
       return { kind: "welcome" };
-    case "guided-signal":
+    case "guided-campaign":
       return {
-        kind: "guided-signal",
+        kind: "guided-campaign",
         scenarioId: view.initialScenario?.id,
         scenarioName: view.initialScenario?.name,
       };
-    case "awaiting-campaign":
-      return { kind: "awaiting-campaign" };
     case "workflow":
       return { kind: "workflow", campaignId: view.campaign.id };
     case "campaign-payment":
       return { kind: "campaign-payment", campaignId: view.campaign.id };
     case "campaign":
       return { kind: "campaign", campaignId: view.campaign.id };
-    case "signal":
-      return { kind: "signal", signalId: view.signal.id };
     case "artifact":
       return { kind: "artifact", artifactId: view.artifactId };
     case "section":
@@ -1358,7 +1113,6 @@ export function viewToAddress(view: View): ViewAddress {
   }
 }
 
-export const isSignalDone = (s: AppState) => s.signals.length > 0;
 export const isCampaignDone = (s: AppState) =>
   s.campaigns.some(
     (c) =>
@@ -1366,8 +1120,6 @@ export const isCampaignDone = (s: AppState) =>
       c.status === "paused" ||
       c.status === "completed"
   );
-export const isStep1Active = (s: AppState) => !isSignalDone(s);
-export const isStep2Active = (s: AppState) => isSignalDone(s) && !isCampaignDone(s);
 export const isStep3Active = (s: AppState) => isCampaignDone(s);
 export const isWorkflowView = (s: AppState) => s.view.kind === "workflow";
 export const isOnWelcome = (s: AppState) => s.view.kind === "welcome";
@@ -1380,24 +1132,20 @@ export const isOnStatisticsSection = (s: AppState): boolean =>
  * чипы, очередь черновиков). Все драйверы подписаны на него через
  * `useScopeReset`, поэтому очищаются синхронно и предсказуемо.
  *
- * Секции различаем по имени (переход Сигналы→Статистика — смена scope), прочие
- * экраны — по kind. `awaiting-campaign` сворачиваем в `guided-signal`: это
- * продолжение того же signal-флоу (как и в page.tsx viewKey), а не новый scope,
- * иначе ввод стирался бы в середине создания сигнала.
+ * Секции различаем по имени (переход Кампании→Статистика — смена scope), прочие
+ * экраны — по kind.
  */
 export function navigationScopeKey(view: View): string {
   if (view.kind === "section") return `section:${view.name}`;
-  const kind = view.kind === "awaiting-campaign" ? "guided-signal" : view.kind;
-  return `view:${kind}`;
+  return `view:${view.kind}`;
 }
 
 /**
  * Какой пункт левого меню подсвечен. Выводится из текущего view, чтобы пункт
  * не гас при заполнении визарда / работе с кампанией (там activeSection
  * занулён):
- *  - guided-signal / awaiting-campaign → «Сигналы» (поток создания сигнала);
- *  - workflow / campaign / campaign-payment → «Кампании»
- *    (воркфлоу, карточка, оплата);
+ *  - guided-campaign / workflow / campaign / campaign-payment → «Кампании»
+ *    (создание кампании, воркфлоу, карточка, оплата);
  *  - section → имя раздела;
  *  - иначе (welcome / survey) → activeSection (обычно null).
  */
@@ -1405,9 +1153,7 @@ export function activeNavSection(s: AppState): SectionName | null {
   switch (s.view.kind) {
     case "section":
       return s.view.name;
-    case "guided-signal":
-    case "awaiting-campaign":
-      return "Сигналы";
+    case "guided-campaign":
     case "workflow":
     case "campaign":
     case "campaign-payment":

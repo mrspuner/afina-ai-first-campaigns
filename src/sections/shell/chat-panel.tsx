@@ -11,7 +11,7 @@ import {
 import { DraftQueueList } from "./draft-queue-list";
 import { TransientReply } from "./transient-reply";
 
-/** Промпт-бар для guided-signal. Тот же PromptComposer, что в шелле и drawer. */
+/** Промпт-бар для guided-campaign. Тот же PromptComposer, что в шелле и drawer. */
 export function ChatPanel({ placeholder }: { placeholder: string }) {
   const chat = useChat();
   const composerRef = useRef<PromptComposerHandle>(null);

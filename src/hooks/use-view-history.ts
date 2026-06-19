@@ -18,18 +18,15 @@ const HISTORY_KEY = "__afina_view__";
 function addressKey(a: ViewAddress): string {
   switch (a.kind) {
     case "welcome":
-    case "awaiting-campaign":
       return a.kind;
-    case "guided-signal":
-      return `guided-signal:${a.scenarioId ?? ""}`;
+    case "guided-campaign":
+      return `guided-campaign:${a.scenarioId ?? ""}`;
     case "workflow":
       return `workflow:${a.campaignId}`;
     case "campaign":
       return `campaign:${a.campaignId}`;
     case "campaign-payment":
       return `campaign-payment:${a.campaignId}`;
-    case "signal":
-      return `signal:${a.signalId}`;
     case "artifact":
       return `artifact:${a.artifactId}`;
     case "section":

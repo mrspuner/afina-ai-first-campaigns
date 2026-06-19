@@ -45,37 +45,6 @@ export function seededInt(rng: () => number, min: number, max: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Signal segments
-// ---------------------------------------------------------------------------
-
-export type Segments = { max: number; high: number; mid: number; low: number };
-
-/**
- * Splits a total into the four signal-quality buckets. The low bucket absorbs
- * the rounding remainder so the four parts always sum to EXACTLY `count` — the
- * invariant that keeps "сигналов найдено" (sum of segments) equal to the
- * signal's `count` shown on its card.
- */
-export function splitSegments(count: number, rng: () => number): Segments {
-  const weights = [rng(), rng(), rng(), rng()];
-  const total = weights.reduce((a, b) => a + b, 0) || 1;
-  const max = Math.floor((count * weights[0]) / total);
-  const high = Math.floor((count * weights[1]) / total);
-  const mid = Math.floor((count * weights[2]) / total);
-  const low = count - max - high - mid;
-  return { max, high, mid, low };
-}
-
-/**
- * Stable segment breakdown for a signal, keyed by its id so it never drifts
- * between renders and always sums to `count`. Use this anywhere a signal's
- * segments are materialised (wizard launch, file upload, presets).
- */
-export function segmentsForSignal(signalId: string, count: number): Segments {
-  return splitSegments(count, rngFor("segments", signalId));
-}
-
-// ---------------------------------------------------------------------------
 // Budget → reachable signal count (single canonical formula)
 // ---------------------------------------------------------------------------
 

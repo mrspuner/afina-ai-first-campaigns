@@ -116,7 +116,7 @@ export function useOnboardingChat(): OnboardingChatState {
       if (chip.next === "post-create-signal") {
         clearReplyTimer();
         setChips([]);
-        dispatch({ type: "start_signal_flow" });
+        dispatch({ type: "start_campaign_flow" });
         return;
       }
       if (chip.next === "post-create-campaign") {

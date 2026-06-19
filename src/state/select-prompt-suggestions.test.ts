@@ -105,21 +105,9 @@ describe("selectPromptSuggestions — section.statistics", () => {
   });
 });
 
-describe("selectPromptSuggestions — section.signals", () => {
-  it("пусто → 2 чипа: вопрос + создание", () => {
-    const r = selectPromptSuggestions(
-      withView({ kind: "section", name: "Сигналы" }, { signals: [] }),
-      ctx()
-    );
-    if (r.kind !== "items") throw new Error();
-    expect(r.items).toHaveLength(2);
-    expect(r.items.some((i) => i.id === "sec-sig-empty-what")).toBe(true);
-    expect(r.items.some((i) => i.id === "sec-sig-empty-create")).toBe(true);
-  });
-
-  it("раздел «Артефакты» переиспользует тот же набор онбординг-чипов", () => {
-    // Сигналы как сущность удалены — подсказки больше не зависят от их статусов;
-    // раздел «Артефакты» временно отдаёт те же онбординг-чипы.
+describe("selectPromptSuggestions — section.artifacts", () => {
+  it("раздел «Артефакты» отдаёт набор онбординг-чипов", () => {
+    // Сигналы как сущность удалены — раздел «Артефакты» отдаёт онбординг-чипы.
     const r = selectPromptSuggestions(
       withView({ kind: "section", name: "Артефакты" }),
       ctx()
@@ -147,7 +135,7 @@ describe("selectPromptSuggestions — section.settings", () => {
 describe("selectPromptSuggestions — wizard", () => {
   it("step null → hidden", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: null }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: null }),
       ctx()
     );
     expect(r.kind).toBe("hidden");
@@ -155,7 +143,7 @@ describe("selectPromptSuggestions — wizard", () => {
 
   it("step 1 → 2 ask-вопроса", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: 1 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 1 }),
       ctx()
     );
     if (r.kind !== "items") throw new Error();
@@ -165,7 +153,7 @@ describe("selectPromptSuggestions — wizard", () => {
 
   it("step 2 без snapshot → стартовые вопросы", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: 2 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 2 }),
       ctx()
     );
     if (r.kind !== "items") throw new Error();
@@ -174,7 +162,7 @@ describe("selectPromptSuggestions — wizard", () => {
 
   it("step 2 с snapshot.hasInterests → ветка 'есть интересы'", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: 2 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 2 }),
       ctx({ wizard: { hasInterests: true, hasDomains: false } })
     );
     if (r.kind !== "items") throw new Error();
@@ -183,7 +171,7 @@ describe("selectPromptSuggestions — wizard", () => {
 
   it("step 5 → 3 вопроса про бюджет (без dispatch)", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: 5 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 5 }),
       ctx()
     );
     if (r.kind !== "items") throw new Error();
@@ -193,7 +181,7 @@ describe("selectPromptSuggestions — wizard", () => {
 
   it("step 6 snapshot.signalNameSet → 'Поменять название?'", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-signal" }, { wizardCurrentStep: 6 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 6 }),
       ctx({ wizard: { signalNameSet: true } })
     );
     if (r.kind !== "items") throw new Error();
@@ -296,11 +284,5 @@ describe("selectPromptSuggestions — welcome / awaiting / select", () => {
     );
     if (r.kind !== "items") throw new Error();
     expect(r.scope.kind).toBe("welcome-wave");
-  });
-
-  it("awaiting имеет чипы", () => {
-    expect(
-      selectPromptSuggestions(withView({ kind: "awaiting-campaign" }), ctx()).kind
-    ).toBe("items");
   });
 });

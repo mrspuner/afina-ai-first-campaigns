@@ -5,7 +5,6 @@ import {
   isCampaignDone,
   viewToAddress,
   type AppState,
-  type Signal,
   type Campaign,
   type View,
 } from "./app-state";
@@ -14,23 +13,10 @@ import {
   EMPTY_ACCOUNT_SETTINGS,
 } from "@/types/account-settings";
 
-function makeSignal(overrides: Partial<Signal> = {}): Signal {
-  return {
-    id: "sig_1",
-    type: "Регистрация",
-    count: 1000,
-    segments: { max: 100, high: 300, mid: 400, low: 200 },
-    createdAt: "2026-04-01T00:00:00.000Z",
-    updatedAt: "2026-04-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
 function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   return {
     id: "cmp_1",
     name: "Campaign 1",
-    signalId: "sig_1",
     status: "draft",
     createdAt: "2026-04-01T00:00:00.000Z",
     ...overrides,
@@ -38,36 +24,12 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
 }
 
 describe("appReducer — initial state", () => {
-  it("has empty signals and campaigns arrays", () => {
-    expect(initialState.signals).toEqual([]);
+  it("has an empty campaigns array", () => {
     expect(initialState.campaigns).toEqual([]);
   });
 
   it("starts on welcome view", () => {
     expect(initialState.view).toEqual({ kind: "welcome" });
-  });
-});
-
-describe("appReducer — signal_added", () => {
-  it("appends a signal to the array", () => {
-    const signal = makeSignal();
-    const next = appReducer(initialState, { type: "signal_added", signal });
-    expect(next.signals).toHaveLength(1);
-    expect(next.signals[0]).toEqual(signal);
-  });
-
-  it("preserves existing signals", () => {
-    const first = makeSignal({ id: "sig_1" });
-    const second = makeSignal({ id: "sig_2", type: "Апсейл" });
-    const state1 = appReducer(initialState, { type: "signal_added", signal: first });
-    const state2 = appReducer(state1, { type: "signal_added", signal: second });
-    expect(state2.signals).toEqual([first, second]);
-  });
-
-  it("does not touch campaigns", () => {
-    const signal = makeSignal();
-    const next = appReducer(initialState, { type: "signal_added", signal });
-    expect(next.campaigns).toEqual([]);
   });
 });
 
@@ -157,10 +119,9 @@ describe("appReducer — campaign_status_changed", () => {
 });
 
 describe("appReducer — preset_applied", () => {
-  it("replaces campaigns + artifacts and clears legacy signals", () => {
+  it("replaces campaigns + artifacts", () => {
     const state: AppState = {
       ...initialState,
-      signals: [makeSignal({ id: "old" })],
       campaigns: [makeCampaign({ id: "old-cmp" })],
     };
     const preset = {
@@ -178,8 +139,6 @@ describe("appReducer — preset_applied", () => {
       ],
     };
     const next = appReducer(state, { type: "preset_applied", preset });
-    // Campaign-first presets carry no signals; applying clears the legacy list.
-    expect(next.signals).toEqual([]);
     expect(next.campaigns.map((c) => c.id)).toEqual(["new-cmp"]);
     expect(next.artifacts.map((a) => a.id)).toEqual(["art_new"]);
   });
@@ -232,67 +191,6 @@ describe("appReducer — preset_applied", () => {
     const next = appReducer(state, { type: "preset_applied", preset });
     expect(next.workflowCommand).toBe("some-command");
     expect(next.launchFlyoutOpen).toBe(true);
-  });
-});
-
-describe("appReducer — campaign_from_signal", () => {
-  it("creates a new draft campaign tied to the signal", () => {
-    const signal = makeSignal({ id: "sig_A", type: "Апсейл" });
-    const state: AppState = { ...initialState, signals: [signal] };
-    const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
-    expect(next.campaigns).toHaveLength(1);
-    const c = next.campaigns[0];
-    // Campaign-first inversion (Task 6): new campaigns no longer carry signalId;
-    // they are root entities with sourceType/channels.
-    expect(c.signalId).toBeUndefined();
-    expect(c.sourceType).toBe("new");
-    expect(c.channels).toEqual([]);
-    expect(c.status).toBe("draft");
-    expect(c.name).toBe("Апсейл №1");
-    expect(c.id).toMatch(/^cmp_/);
-    expect(typeof c.createdAt).toBe("string");
-  });
-
-  it("numbers the second campaign per scenario as №2", () => {
-    const signal = makeSignal({ id: "sig_A", type: "Апсейл" });
-    // Dedup/numbering is now keyed by scenario.id (the inverted contract),
-    // so the existing campaign must share the same scenario the new one derives.
-    const existing = makeCampaign({
-      id: "cmp_old",
-      name: "Апсейл №1",
-      scenario: { id: "", name: "Апсейл" },
-    });
-    const state: AppState = { ...initialState, signals: [signal], campaigns: [existing] };
-    const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
-    expect(next.campaigns).toHaveLength(2);
-    expect(next.campaigns[1].name).toBe("Апсейл №2");
-  });
-
-  it("navigates to workflow view with launched=false", () => {
-    const signal = makeSignal({ id: "sig_A" });
-    const state: AppState = { ...initialState, signals: [signal] };
-    const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
-    expect(next.view.kind).toBe("workflow");
-    if (next.view.kind !== "workflow") throw new Error("unreachable");
-    expect(next.view.launched).toBe(false);
-    expect(next.view.campaign.id).toBe(next.campaigns[0].id);
-    expect(next.view.campaign.name).toBe("Регистрация №1");
-  });
-
-  it("is a no-op when signalId is unknown", () => {
-    const state: AppState = { ...initialState, signals: [makeSignal({ id: "sig_A" })] };
-    const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_unknown" });
-    expect(next).toBe(state);
-  });
-
-  it("clears activeSection so the workflow fills the pane", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_A" })],
-      activeSection: "Сигналы",
-    };
-    const next = appReducer(state, { type: "campaign_from_signal", signalId: "sig_A" });
-    expect(next.activeSection).toBeNull();
   });
 });
 
@@ -641,7 +539,7 @@ describe("appReducer — campaign_duplicated", () => {
     const dup = next.campaigns[1];
     expect(dup.name).toBe("Копия — Летний апсейл");
     expect(dup.status).toBe("draft");
-    expect(dup.signalId).toBe(original.signalId);
+    expect("signalId" in dup).toBe(false);
     expect(dup.id).not.toBe(original.id);
     expect(dup.id).toMatch(/^cmp_/);
   });
@@ -836,7 +734,7 @@ describe("appReducer — survey actions", () => {
       },
       surveyStatus: "completed",
       clientDirection: "auto",
-      signals: [makeSignal()],
+      campaigns: [makeCampaign()],
     };
     const next = appReducer(state, { type: "survey_reset" });
     expect(next.surveyStatus).toBe("not_started");
@@ -848,7 +746,7 @@ describe("appReducer — survey actions", () => {
     });
     expect(next.clientDirection).toBe("finance");
     // unrelated slices preserved
-    expect(next.signals).toBe(state.signals);
+    expect(next.campaigns).toBe(state.campaigns);
   });
 });
 
@@ -900,95 +798,6 @@ describe("appReducer — balance_topup", () => {
       amount: 1500,
     });
     expect(next.balance).toBe(1500);
-  });
-});
-
-describe("appReducer — signal_status_changed", () => {
-  it("updates the matching signal's status", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1", status: "awaiting_payment" })],
-    };
-    const next = appReducer(state, {
-      type: "signal_status_changed",
-      id: "sig_1",
-      status: "processing",
-    });
-    expect(next.signals[0].status).toBe("processing");
-  });
-
-  it("sets signalsBadge=true when transitioning to ready", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1", status: "processing" })],
-    };
-    const next = appReducer(state, {
-      type: "signal_status_changed",
-      id: "sig_1",
-      status: "ready",
-    });
-    expect(next.notifications.signalsBadge).toBe(true);
-  });
-
-  it("does not set badge for processing transitions", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1", status: "awaiting_payment" })],
-    };
-    const next = appReducer(state, {
-      type: "signal_status_changed",
-      id: "sig_1",
-      status: "processing",
-    });
-    expect(next.notifications.signalsBadge).toBe(false);
-  });
-
-  it("does nothing for an unknown signal id", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1" })],
-    };
-    const next = appReducer(state, {
-      type: "signal_status_changed",
-      id: "missing",
-      status: "ready",
-    });
-    expect(next).toBe(state);
-  });
-
-  it("flips badge for error and expired transitions too", () => {
-    const stateError: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1" })],
-    };
-    expect(
-      appReducer(stateError, {
-        type: "signal_status_changed",
-        id: "sig_1",
-        status: "error",
-      }).notifications.signalsBadge
-    ).toBe(true);
-    expect(
-      appReducer(stateError, {
-        type: "signal_status_changed",
-        id: "sig_1",
-        status: "expired",
-      }).notifications.signalsBadge
-    ).toBe(true);
-  });
-});
-
-describe("appReducer — signal_deleted", () => {
-  it("removes the matching signal", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [
-        makeSignal({ id: "sig_1" }),
-        makeSignal({ id: "sig_2", type: "Апсейл" }),
-      ],
-    };
-    const next = appReducer(state, { type: "signal_deleted", id: "sig_1" });
-    expect(next.signals.map((s) => s.id)).toEqual(["sig_2"]);
   });
 });
 
@@ -1205,7 +1014,7 @@ describe("isOnStatisticsSection", () => {
   it("false for other sections", () => {
     const state: AppState = {
       ...initialState,
-      view: { kind: "section", name: "Сигналы" },
+      view: { kind: "section", name: "Кампании" },
     };
     expect(isOnStatisticsSection(state)).toBe(false);
   });
@@ -1249,16 +1058,16 @@ describe("appReducer — settings actions", () => {
     expect(next.accountSettings.domainBlocklist).toEqual(["a.ru", "b.ru"]);
   });
 
-  it("settings_updated does not touch survey or signals slices", () => {
+  it("settings_updated does not touch survey or campaigns slices", () => {
     const state: AppState = {
       ...initialState,
-      signals: [makeSignal()],
+      campaigns: [makeCampaign()],
     };
     const next = appReducer(state, {
       type: "settings_updated",
       patch: { companyName: "X" },
     });
-    expect(next.signals).toBe(state.signals);
+    expect(next.campaigns).toBe(state.campaigns);
     expect(next.survey).toBe(state.survey);
   });
 
@@ -1295,20 +1104,17 @@ describe("appReducer — open_campaign_payment", () => {
     expect(next).toBe(state);
   });
 
-  it("preserves campaigns and signals arrays untouched", () => {
+  it("preserves campaigns array untouched", () => {
     const c = makeCampaign({ id: "cmp_A", name: "C" });
-    const s = makeSignal({ id: "sig_1" });
     const state: AppState = {
       ...initialState,
       campaigns: [c],
-      signals: [s],
     };
     const next = appReducer(state, {
       type: "open_campaign_payment",
       campaignId: "cmp_A",
     });
     expect(next.campaigns).toBe(state.campaigns);
-    expect(next.signals).toBe(state.signals);
   });
 });
 
@@ -1350,13 +1156,10 @@ describe("ViewAddress — campaign-payment round-trip", () => {
 import { activeNavSection } from "./app-state";
 
 describe("activeNavSection — подсветка пункта меню по view", () => {
-  it("визард сигнала → «Сигналы»", () => {
+  it("визард кампании → «Кампании»", () => {
     expect(
-      activeNavSection({ ...initialState, view: { kind: "guided-signal" } })
-    ).toBe("Сигналы");
-    expect(
-      activeNavSection({ ...initialState, view: { kind: "awaiting-campaign" } })
-    ).toBe("Сигналы");
+      activeNavSection({ ...initialState, view: { kind: "guided-campaign" } })
+    ).toBe("Кампании");
   });
 
   it("работа с кампанией (воркфлоу/карточка/оплата/выбор типа) → «Кампании»", () => {
@@ -1393,17 +1196,6 @@ describe("activeNavSection — подсветка пункта меню по vie
   });
 });
 
-describe("ViewAddress — signal round-trip", () => {
-  it("restore_address rebuilds signal view from address", () => {
-    const state: AppState = { ...initialState, signals: [makeSignal({ id: "sig_1" })] };
-    const next = appReducer(state, {
-      type: "restore_address",
-      address: { kind: "signal", signalId: "sig_1" },
-    });
-    expect(next.view).toEqual({ kind: "signal", signal: { id: "sig_1" } });
-  });
-});
-
 describe("appReducer — entity cards", () => {
   it("campaign_opened routes every status to the campaign card", () => {
     for (const status of ["draft", "active", "paused", "completed"] as const) {
@@ -1417,52 +1209,6 @@ describe("appReducer — entity cards", () => {
         campaign: { id: "cmp_A", name: "C" },
       });
     }
-  });
-
-  it("signal_opened opens the signal card", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1" })],
-    };
-    const next = appReducer(state, { type: "signal_opened", id: "sig_1" });
-    expect(next.view).toEqual({ kind: "signal", signal: { id: "sig_1" } });
-  });
-
-  it("signal_opened is a no-op for a missing signal", () => {
-    const next = appReducer(initialState, { type: "signal_opened", id: "nope" });
-    expect(next.view).toEqual(initialState.view);
-  });
-
-  it("signal_renamed updates the signal name", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1" })],
-    };
-    const next = appReducer(state, { type: "signal_renamed", id: "sig_1", name: "Тёплая база" });
-    expect(next.signals[0].name).toBe("Тёплая база");
-  });
-
-  it("signal_renamed ignores blank names", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1", name: "Keep" })],
-    };
-    const next = appReducer(state, { type: "signal_renamed", id: "sig_1", name: "   " });
-    expect(next.signals[0].name).toBe("Keep");
-  });
-
-  it("signal_renamed is a no-op for a missing signal", () => {
-    const state: AppState = {
-      ...initialState,
-      signals: [makeSignal({ id: "sig_1", name: "Keep" })],
-    };
-    const next = appReducer(state, { type: "signal_renamed", id: "nope", name: "X" });
-    expect(next.signals).toEqual(state.signals);
-  });
-
-  it("signal view round-trips through the address", () => {
-    const view: View = { kind: "signal", signal: { id: "sig_1" } };
-    expect(viewToAddress(view)).toEqual({ kind: "signal", signalId: "sig_1" });
   });
 });
 

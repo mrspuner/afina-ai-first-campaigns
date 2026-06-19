@@ -8,6 +8,7 @@ import { WorkflowView } from "./workflow-view";
 import { computeCampaignCost } from "./campaign-cost";
 import { validateWorkflow } from "@/state/workflow-validation";
 import { normalizeNodeRef } from "@/state/structural-commands";
+import { getScenario } from "@/data/scenarios";
 import type {
   WorkflowEdge,
   WorkflowNode,
@@ -51,7 +52,6 @@ export function WorkflowSection() {
     workflowStructuralCommands,
     workflowNodeFieldPatch,
     selectedWorkflowNode,
-    signals,
     campaigns,
   } = useAppState();
   const dispatch = useAppDispatch();
@@ -178,9 +178,9 @@ export function WorkflowSection() {
   if (view.kind !== "workflow") return null;
 
   const currentCampaign = campaigns.find((c) => c.id === view.campaign.id) ?? null;
-  const currentSignal = currentCampaign
-    ? signals.find((s) => s.id === currentCampaign.signalId) ?? null
-    : signals[signals.length - 1] ?? null;
+  const scenarioSignalType = currentCampaign?.scenario
+    ? getScenario(currentCampaign.scenario.id)?.signalType
+    : undefined;
 
   function handleRename(name: string) {
     if (!currentCampaign) return;
@@ -194,7 +194,7 @@ export function WorkflowSection() {
       showToast({ kind: "error", text: "Граф ещё не готов, попробуйте снова." });
       return;
     }
-    const result = validateWorkflow(graph, Boolean(currentSignal));
+    const result = validateWorkflow(graph, true);
     if (!result.ok) {
       showToast({
         kind: "error",
@@ -289,7 +289,6 @@ export function WorkflowSection() {
     <div className="relative flex flex-1 flex-col">
       <CanvasHeader
         campaign={currentCampaign}
-        signal={currentSignal}
         onRename={handleRename}
         onLaunch={handleLaunch}
         onPause={handlePause}
@@ -328,8 +327,7 @@ export function WorkflowSection() {
           onNodeFieldPatchHandled={handleNodeFieldPatchHandled}
           selectedNodeId={selectedWorkflowNode?.id ?? null}
           campaignId={currentCampaign.id}
-          signalType={currentSignal?.type}
-          signal={currentSignal ?? undefined}
+          signalType={scenarioSignalType}
           sourceType={currentCampaign.sourceType}
           onGraphChange={handleGraphChange}
           // Launched campaigns are read-only: nodes still open/expand so the

@@ -21,7 +21,7 @@ export type GraphNodeSummary = z.infer<typeof graphNodeSummarySchema>;
 
 /** Контекст момента — собирает клиент, расширяется планами 005/006. */
 export const assistContextSchema = z.object({
-  screen: z.string(), // "section:Статистика" | "workflow" | "guided-signal:2" | ...
+  screen: z.string(), // "section:Статистика" | "workflow" | "guided-campaign:2" | ...
   dataSummary: z.string(), // компактный текст из data-summary.ts
   /** Компактная сводка текущего графа воркфлоу (план 005). */
   graph: z.object({

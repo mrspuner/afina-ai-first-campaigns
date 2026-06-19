@@ -18,7 +18,6 @@ import { useAppDispatch } from "@/state/app-state-context";
 import { splitSegmentBranches } from "@/state/split-segments";
 import type { NodeParams, SplitParams } from "@/types/workflow";
 import { cn } from "@/lib/utils";
-import { useWorkflowSignal } from "./workflow-signal-context";
 
 const BY_LABELS: Record<SplitParams["by"], string> = {
   equal: "Поровну",
@@ -52,8 +51,7 @@ export function SplitFields({
   onAiHandoff: () => void;
 }) {
   const dispatch = useAppDispatch();
-  const signal = useWorkflowSignal();
-  const segmentBranches = splitSegmentBranches(signal);
+  const segmentBranches = splitSegmentBranches();
   const segmentCount = segmentBranches.length;
 
   function patch(p: Partial<SplitParams>) {

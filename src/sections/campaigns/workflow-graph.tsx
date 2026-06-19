@@ -15,8 +15,6 @@ import {
   WORKFLOW_NODE_STATE_CSS,
 } from "@/sections/campaigns/workflow-node";
 import { WorkflowReadOnlyProvider } from "@/sections/campaigns/workflow-readonly-context";
-import { WorkflowSignalProvider } from "@/sections/campaigns/workflow-signal-context";
-import type { Signal } from "@/state/app-state";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 // Defined outside component — React Flow requires stable nodeTypes reference
@@ -28,8 +26,6 @@ interface WorkflowGraphProps {
   compact?: boolean;
   /** Launched campaigns: nodes expand for inspection but fields can't be edited. */
   readOnly?: boolean;
-  /** Сигнал кампании — нужен сплиттеру для веток «по сегменту» (A6). */
-  signal?: Signal | null;
   onNodeClick?: (id: string, label: string, nodeType?: string) => void;
   onPaneClick?: () => void;
 }
@@ -129,23 +125,20 @@ export function WorkflowGraph({
   edges,
   compact,
   readOnly = false,
-  signal = null,
   onNodeClick,
   onPaneClick,
 }: WorkflowGraphProps) {
   return (
     <WorkflowReadOnlyProvider value={readOnly}>
-      <WorkflowSignalProvider value={signal}>
-        <ReactFlowProvider>
-          <GraphInner
-            nodes={nodes}
-            edges={edges}
-            compact={compact}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-          />
-        </ReactFlowProvider>
-      </WorkflowSignalProvider>
+      <ReactFlowProvider>
+        <GraphInner
+          nodes={nodes}
+          edges={edges}
+          compact={compact}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+        />
+      </ReactFlowProvider>
     </WorkflowReadOnlyProvider>
   );
 }

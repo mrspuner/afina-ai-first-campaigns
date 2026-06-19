@@ -28,7 +28,7 @@ describe("presets are campaign-first", () => {
 
   it("no preset campaign carries a signalId (campaign-first)", () => {
     for (const c of PRESETS.full.campaigns) {
-      expect(c.signalId).toBeUndefined();
+      expect("signalId" in c).toBe(false);
     }
   });
 
@@ -82,7 +82,7 @@ describe("generateCampaigns", () => {
       expect(c.status).toBe("active");
       expect(c.launchedAt).toBeDefined();
       expect(c.phase).toBe("communicating");
-      expect(c.signalId).toBeUndefined();
+      expect("signalId" in c).toBe(false);
       expect(c.scenario).toBeDefined();
     }
   });

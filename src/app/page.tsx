@@ -51,7 +51,7 @@ function BottomBarSlot() {
   const { mode } = useChat();
   // При открытом drawer нижний бар скрыт — у drawer свой композер.
   if (mode === "sidebar") return null;
-  return view.kind === "guided-signal" ? (
+  return view.kind === "guided-campaign" ? (
     <ChatPanel placeholder="Введите ваши параметры или задайте вопрос" />
   ) : (
     <ShellBottomBar />
@@ -65,13 +65,8 @@ export default function Home() {
 
   const isFullscreen = view.kind === "survey";
 
-  // Routing key for the renderMain animation. View kinds that render the
-  // SAME section component must collapse to one key, otherwise switching
-  // between them (e.g. guided-signal → awaiting-campaign,
-  // both routed to GuidedCampaignSection) causes a remount and wipes the
-  // section's local state (pendingSignalId, current wizard step, etc).
-  const viewKey =
-    view.kind === "awaiting-campaign" ? "guided-signal" : view.kind;
+  // Routing key for the renderMain animation.
+  const viewKey = view.kind;
 
   function renderMain() {
     if (view.kind === "welcome") {
@@ -81,12 +76,11 @@ export default function Home() {
       return (
         <SurveySection
           withOnboardingScreens
-          onComplete={() => { /* start_signal_flow routes the user from here */ }}
+          onComplete={() => { /* start_campaign_flow routes the user from here */ }}
         />
       );
     }
-    if (view.kind === "guided-signal" || view.kind === "awaiting-campaign")
-      return <GuidedCampaignSection />;
+    if (view.kind === "guided-campaign") return <GuidedCampaignSection />;
     if (view.kind === "workflow") return <WorkflowSection />;
     if (view.kind === "campaign-payment") return <CampaignPaymentScreen />;
     if (view.kind === "campaign") return <CampaignScreen />;

@@ -10,6 +10,6 @@ describe("artifacts routing", () => {
   it("flyout_campaign_select goes straight to the wizard (no campaign-select)", () => {
     const ready = { ...initialState, surveyStatus: "completed" as const };
     const next = appReducer(ready, { type: "flyout_campaign_select" });
-    expect(next.view.kind).toBe("guided-signal");
+    expect(next.view.kind).toBe("guided-campaign");
   });
 });

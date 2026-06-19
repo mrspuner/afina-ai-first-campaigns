@@ -5,7 +5,7 @@ describe("start_campaign_flow", () => {
   it("routes a survey-completed user into the wizard", () => {
     const ready = { ...initialState, surveyStatus: "completed" as const };
     const next = appReducer(ready, { type: "start_campaign_flow" });
-    expect(next.view.kind).toBe("guided-signal");
+    expect(next.view.kind).toBe("guided-campaign");
   });
 
   it("routes a first-time user into the survey", () => {

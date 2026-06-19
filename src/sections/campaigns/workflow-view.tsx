@@ -15,7 +15,7 @@ import type {
   WorkflowNode,
   WorkflowEdge,
 } from "@/types/workflow";
-import type { Signal, SignalType } from "@/state/app-state";
+import type { SignalType } from "@/state/app-state";
 import type { SourceType } from "@/types/campaign";
 import { createTemplate } from "@/state/workflow-templates";
 import { computeNeedsAttention } from "@/state/workflow-validation";
@@ -48,7 +48,6 @@ interface WorkflowViewProps {
   /** Кампания, к которой относится граф — ключ для durable-кэша графа. */
   campaignId?: string;
   signalType?: SignalType;
-  signal?: Signal;
   /** A3: источник аудитории кампании — определяет вставку ноды «Скоринг». */
   sourceType?: SourceType;
   onGraphChange?: (graph: GraphState) => void;
@@ -58,11 +57,10 @@ interface WorkflowViewProps {
 
 function initialGraph(
   signalType?: SignalType,
-  signal?: Signal,
   sourceType?: SourceType
 ): GraphState {
   const base = signalType
-    ? createTemplate(signalType, signal, sourceType)
+    ? createTemplate(signalType, sourceType)
     : { nodes: createBaseNodes(), edges: createBaseEdges() };
   // A1: template graphs must start with correct needs-attention flags so the
   // launch gate reflects empty required fields immediately.
@@ -274,7 +272,6 @@ export function WorkflowView({
   selectedNodeId,
   campaignId,
   signalType,
-  signal,
   sourceType,
   onGraphChange,
   onNodeClick,
@@ -286,7 +283,7 @@ export function WorkflowView({
   // Rehydrate from the durable cache so manual edits survive the unmount on
   // launch (workflow → campaign) and navigation; fall back to the template.
   const [graph, setGraph] = useState<GraphState>(
-    () => getCachedGraph(campaignId) ?? initialGraph(signalType, signal, sourceType)
+    () => getCachedGraph(campaignId) ?? initialGraph(signalType, sourceType)
   );
 
   useEffect(() => {
@@ -650,7 +647,6 @@ export function WorkflowView({
           edges={graph.edges}
           compact={launched}
           readOnly={launched}
-          signal={signal ?? null}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
         />

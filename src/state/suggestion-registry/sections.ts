@@ -79,7 +79,7 @@ const CAMPAIGNS_EMPTY: SuggestionItem[] = [
   {
     id: "sec-camp-onboard-create",
     label: "Создать первую кампанию",
-    action: { kind: "dispatch", action: { type: "start_signal_flow" } },
+    action: { kind: "dispatch", action: { type: "start_campaign_flow" } },
   },
   ask(
     "sec-camp-onboard-tour",
@@ -131,13 +131,13 @@ function resolveStatistics(_s: StatisticsSub): SuggestionItem[] {
 const SIGNALS_EMPTY: SuggestionItem[] = [
   ask(
     "sec-sig-empty-what",
-    "Что такое сигналы?",
-    "Что такое сигналы и зачем они нужны?"
+    "Что такое артефакты?",
+    "Что такое артефакты и зачем они нужны?"
   ),
   {
     id: "sec-sig-empty-create",
-    label: "Создать сигнал",
-    action: { kind: "dispatch", action: { type: "start_signal_flow" } },
+    label: "Создать кампанию",
+    action: { kind: "dispatch", action: { type: "start_campaign_flow" } },
   },
 ];
 

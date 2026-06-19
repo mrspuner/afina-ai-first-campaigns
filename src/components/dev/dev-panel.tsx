@@ -38,7 +38,7 @@ export function DevPanel() {
   const [aiLogOn, setAiLogOn] = useState(false);
   // Последняя запись журнала — для индикатора «ушёл ли последний запрос».
   const [lastAi, setLastAi] = useState<AiLogEntry | null>(null);
-  const { signals, campaigns, clientDirection, balance, surveyStatus } =
+  const { campaigns, clientDirection, balance, surveyStatus } =
     useAppState();
   const dispatch = useAppDispatch();
 
@@ -373,7 +373,7 @@ export function DevPanel() {
 
       <div className="mt-3 flex items-center justify-between border-t border-[#1f1f1f] pt-2.5">
         <span className="text-[10px] text-[#555]">
-          signals: {signals.length} · campaigns: {campaigns.length}
+          campaigns: {campaigns.length}
         </span>
         <button
           type="button"

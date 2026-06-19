@@ -89,53 +89,26 @@ describe("all template nodes have matching params.kind", () => {
   });
 });
 
-describe("createTemplate with signal", () => {
-  it("patches signal node with count/segments from provided signal", () => {
-    const signal = {
-      id: "sig1",
-      type: "Регистрация" as const,
-      count: 5000,
-      segments: { max: 1000, high: 1500, mid: 1500, low: 1000 },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const { nodes } = createTemplate("Регистрация", signal);
-    // Entry node is now typed `source`; patchNodeParams still targets it by id
-    // "signal" and its params remain the `signal` member.
-    const signalNode = nodes.find((n) => n.data.params?.kind === "signal");
-    expect(signalNode).toBeDefined();
-    const params = signalNode?.data.params;
-    expect(params?.kind).toBe("signal");
-    if (params?.kind === "signal") {
-      expect(params.count).toBe(5000);
-      expect(params.segments.max).toBe(1000);
-      expect(params.segments.high).toBe(1500);
-      expect(params.segments.mid).toBe(1500);
-      expect(params.segments.low).toBe(1000);
-    }
-  });
-});
-
 describe("source-aware generation (A3)", () => {
   it("own source has NO scoring node", () => {
-    const g = createTemplate("Регистрация", undefined, "own");
+    const g = createTemplate("Регистрация", "own");
     expect(g.nodes.some((n) => n.data.nodeType === "scoring")).toBe(false);
   });
   it("new source inserts a scoring node after source", () => {
-    const g = createTemplate("Регистрация", undefined, "new");
+    const g = createTemplate("Регистрация", "new");
     const idx = g.nodes.findIndex((n) => n.data.nodeType === "scoring");
     expect(idx).toBeGreaterThan(-1);
   });
   it("stream source also inserts scoring", () => {
-    const g = createTemplate("Регистрация", undefined, "stream");
+    const g = createTemplate("Регистрация", "stream");
     expect(g.nodes.some((n) => n.data.nodeType === "scoring")).toBe(true);
   });
   it("entry node stays type source even after scoring insertion", () => {
-    const g = createTemplate("Регистрация", undefined, "new");
+    const g = createTemplate("Регистрация", "new");
     expect(g.nodes[0].data.nodeType).toBe("source");
   });
   it("scoring node sits between source and the first communication", () => {
-    const g = createTemplate("Регистрация", undefined, "new");
+    const g = createTemplate("Регистрация", "new");
     const entryId = g.nodes[0].id;
     // No edge directly from entry to a non-scoring node remains.
     const entryEdges = g.edges.filter((e) => e.source === entryId);
@@ -145,7 +118,7 @@ describe("source-aware generation (A3)", () => {
   });
   it("source-aware graph still validates ok", () => {
     for (const st of ["new", "stream", "own"] as const) {
-      const g = createTemplate("Удержание", undefined, st);
+      const g = createTemplate("Удержание", st);
       expect(validateWorkflow(g, true).ok).toBe(true);
     }
   });

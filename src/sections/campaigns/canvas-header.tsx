@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign } from "@/state/app-state";
 import { StatusBadge } from "./status-badge";
 
 export interface CanvasHeaderToast {
@@ -31,7 +31,6 @@ type ConfirmKind = "pause";
 
 interface CanvasHeaderProps {
   campaign: Campaign;
-  signal: Signal | null;
   onRename: (name: string) => void;
   onLaunch: () => void;
   onPause: () => void;
@@ -41,10 +40,10 @@ interface CanvasHeaderProps {
   /**
    * Visual mode of the header.
    * - "edit" (default) — full editable canvas header used while a campaign
-   *   is a draft; no back arrow, signal line as subtitle.
+   *   is a draft; no back arrow, scenario name as subtitle.
    * - "read-only" — used when the workflow is opened in launched/preview
    *   mode. Adds a large «Back» arrow to the left of the title and replaces
-   *   the signal-line subtitle with a static «Просмотр workflow» label.
+   *   the scenario subtitle with a static «Просмотр workflow» label.
    *   Pencil-edit of the campaign name is preserved — renaming a launched
    *   campaign is allowed. The only status action surfaced here is start/stop
    *   (запуск/остановка); дублирование и статистика живут в карточке кампании.
@@ -80,13 +79,6 @@ interface CanvasHeaderProps {
   canLaunch?: boolean;
   /** Причина блокировки запуска (текст тултипа над disabled-кнопкой). */
   launchBlockReason?: string;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-  });
 }
 
 function formatLongDate(iso: string): string {
@@ -127,7 +119,6 @@ function formatNumber(n: number): string {
 
 export function CanvasHeader({
   campaign,
-  signal,
   onRename,
   onLaunch,
   onPause,
@@ -182,9 +173,7 @@ export function CanvasHeader({
     setEditing(false);
   }
 
-  const signalLine = signal
-    ? `${signal.type} · ${formatNumber(signal.count)} · от ${formatDate(signal.updatedAt)}`
-    : "Сигнал не привязан";
+  const scenarioLine = campaign.scenario?.name ?? "Сценарий не выбран";
 
   return (
     <div
@@ -240,12 +229,12 @@ export function CanvasHeader({
           ) : (
             <p
               className={
-                signal
+                campaign.scenario?.name
                   ? "text-xs text-muted-foreground"
                   : "text-xs font-medium text-destructive"
               }
             >
-              {signalLine}
+              {scenarioLine}
             </p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-2">

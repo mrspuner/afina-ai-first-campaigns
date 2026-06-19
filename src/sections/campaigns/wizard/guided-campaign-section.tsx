@@ -16,7 +16,7 @@ import { shouldShowSurveyGate } from "@/state/survey-gate";
 export function GuidedCampaignSection() {
   const { view, surveyStatus, wizardSessionId } = useAppState();
   const dispatch = useAppDispatch();
-  const initial = view.kind === "guided-signal" ? view.initialScenario : undefined;
+  const initial = view.kind === "guided-campaign" ? view.initialScenario : undefined;
   const [gatePassed, setGatePassed] = useState(surveyStatus === "completed");
 
   const handleLaunch = useCallback(

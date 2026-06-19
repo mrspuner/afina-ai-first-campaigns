@@ -150,22 +150,19 @@ export function selectPromptSuggestions(
       return resolved({ kind: "welcome-wave", chips: ctx.welcomeChips });
     case "survey":
     case "campaign-payment":
-    case "signal":
     case "artifact":
       // Fullscreen views: chrome (and therefore the promptbar) is hidden by
       // page.tsx, but the bottom-bar can briefly re-render during the exit
       // transition. Return hidden so the suggestion bar has nothing to draw.
-      // The signal/artifact cards are also fullscreen entity views with no prompt suggestions.
+      // The artifact card is also a fullscreen entity view with no prompt suggestions.
       return { kind: "hidden" };
-    case "guided-signal": {
+    case "guided-campaign": {
       const step = state.wizardCurrentStep;
       if (step === null) return { kind: "hidden" };
       const sub = wizardSubFor(step, ctx.wizard);
       if (sub === null) return { kind: "hidden" };
       return resolved({ kind: "wizard-step", sub });
     }
-    case "awaiting-campaign":
-      return resolved({ kind: "awaiting-campaign" });
     case "workflow": {
       // Запущенный (read-only) workflow → лента кампании по её статусу.
       // Редактируемый draft без выбранной ноды → подсказки уровня сценария
@@ -205,11 +202,9 @@ export function selectPromptSuggestions(
               rowKind: state.stats.rows,
             },
           });
-        case "Сигналы":
         // TODO(wave1): раздел «Артефакты» получит собственный suggestion-sub
         // (kind: "artifacts"). Пока переиспользуем «signals», чтобы exhaustive
-        // switch по SectionName компилировался. Сигналы как сущность удалены —
-        // подсказки больше не зависят от их статусов.
+        // switch по SectionName компилировался.
         case "Артефакты":
           return resolved({
             kind: "section",

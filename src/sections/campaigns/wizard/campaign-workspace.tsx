@@ -9,7 +9,6 @@ import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario
 import { StepSource } from "@/sections/campaigns/wizard/steps/step-source";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
-import type { Signal } from "@/state/app-state";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
@@ -31,19 +30,13 @@ function WorkspaceInner({
   initialStepDataOverride,
   initialStep,
 }: {
-  // Kept for API compatibility with the section consumer; the 4-step campaign
-  // flow no longer renders the wizard's own processing/result steps, so the
-  // signal-completion + pending-signal props are unused here (open-campaign
-  // progress lives in the campaign card — sub-track D).
-  onSignalComplete?: () => void;
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   /** Hydrate the wizard with a previously captured StepData snapshot —
-   *  used by the "Открыть и редактировать" path on awaiting-payment signals. */
+   *  used by the "Открыть и редактировать" path. */
   initialStepDataOverride?: StepData;
   /** Override the starting step. Defaults to 2 when `initialScenario` is set. */
   initialStep?: number;
-  pendingSignal?: Signal | null;
 }) {
   const defaultStartStep = initialScenario ? 2 : 1;
   const startStep = initialStep ?? defaultStartStep;
@@ -242,28 +235,22 @@ function WorkspaceInner({
 }
 
 export function CampaignWorkspace({
-  onSignalComplete,
   onLaunchRequested,
   initialScenario,
   initialStepDataOverride,
   initialStep,
-  pendingSignal,
 }: {
-  onSignalComplete?: () => void;
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   initialStepDataOverride?: StepData;
   initialStep?: number;
-  pendingSignal?: Signal | null;
 } = {}) {
   return (
     <WorkspaceInner
-      onSignalComplete={onSignalComplete}
       onLaunchRequested={onLaunchRequested}
       initialScenario={initialScenario}
       initialStepDataOverride={initialStepDataOverride}
       initialStep={initialStep}
-      pendingSignal={pendingSignal}
     />
   );
 }

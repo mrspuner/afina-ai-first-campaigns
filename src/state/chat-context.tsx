@@ -193,7 +193,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT_STATE);
-  const { wizardSessionId, signals, resumingSignalId } = useAppState();
+  const { wizardSessionId } = useAppState();
 
   // Reset the chat when the navigation scope changes (section→section or
   // view→view). Ask-чипы используют чат как локальную историю раздела; при
@@ -209,24 +209,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, []);
   useScopeReset(resetChat);
 
-  // Reset the chat when the wizard session id changes (new signal flow started).
+  // Reset the chat when the wizard session id changes (new campaign flow started).
   useEffect(() => {
     dispatch({ type: "clear" });
   }, [wizardSessionId]);
-
-  // Resume-then-launch path: when the actively-resumed signal leaves draft
-  // status, clear history. Skipped when no signal is resumed (the
-  // wizardSessionId effect already covers fresh-start / restart paths).
-  const resumedSignal = useMemo(
-    () => (resumingSignalId ? signals.find((s) => s.id === resumingSignalId) ?? null : null),
-    [resumingSignalId, signals]
-  );
-  const resumedStatus = resumedSignal?.status;
-  useEffect(() => {
-    if (resumedStatus && resumedStatus !== "draft") {
-      dispatch({ type: "clear" });
-    }
-  }, [resumedStatus]);
 
   const append = useCallback(
     (input: Omit<ChatMessage, "id" | "createdAt">) => {

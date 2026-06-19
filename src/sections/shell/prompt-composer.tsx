@@ -59,7 +59,7 @@ export const SHELL_INPUT_CLASS = cn(
   "[&_[data-slot=input-group]]:shadow-[0_0_17px_9px_rgba(0,0,0,0.19)]"
 );
 
-/** Тон инпута в drawer / guided-signal (плотный тёмный). */
+/** Тон инпута в drawer / guided-campaign (плотный тёмный). */
 export const DRAWER_INPUT_CLASS = cn(
   "[&_[data-slot=input-group]]:rounded-[10px]!",
   "[&_[data-slot=input-group]]:border!",
@@ -243,7 +243,7 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       }
 
       // 5. Everything except an editable (not launched) workflow goes to chat:
-      // guided-signal trigger tags, sections Сигналы/Настройки, campaign feeds,
+      // guided-campaign trigger tags, sections Кампании/Настройки, campaign feeds,
       // and launched (read-only) workflows.
       if (view.kind !== "workflow" || view.launched) {
         if (rawText.trim() || segments.length > 0) {

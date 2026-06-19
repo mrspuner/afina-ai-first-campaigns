@@ -17,7 +17,7 @@ import { CampaignSignalProgress } from "./campaign-signal-progress";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
-import { scenarioNameForSignal } from "@/state/scenario-display";
+import { getScenario } from "@/data/scenarios";
 
 /** Prototype scoring window (ms) before a new/stream campaign auto-advances
  *  from `scoring` to `communicating`. */
@@ -28,12 +28,8 @@ function formatDate(iso: string | undefined): string {
   return new Date(iso).toLocaleDateString("ru-RU");
 }
 
-function formatNumber(n: number): string {
-  return n.toLocaleString("ru-RU");
-}
-
 export function CampaignScreen() {
-  const { view, campaigns, signals, artifacts } = useAppState();
+  const { view, campaigns, artifacts } = useAppState();
   const dispatch = useAppDispatch();
 
   const campaign =
@@ -61,8 +57,9 @@ export function CampaignScreen() {
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
-  const signal = signals.find((s) => s.id === campaign.signalId);
-  const signalType = signal?.type;
+  const signalType = campaign.scenario
+    ? getScenario(campaign.scenario.id)?.signalType
+    : undefined;
 
   const status = campaign.status;
   const isActive = status === "active";
@@ -81,8 +78,7 @@ export function CampaignScreen() {
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   const campaignArtifact = campaignArtifacts[0];
 
-  const scenarioName =
-    campaign.scenario?.name ?? (signal ? scenarioNameForSignal(signal) : "—");
+  const scenarioName = campaign.scenario?.name ?? "—";
 
   const metaDate =
     status === "active"
@@ -159,11 +155,6 @@ export function CampaignScreen() {
       tags={
         <>
           <CardTag>Сценарий: {scenarioName}</CardTag>
-          {signal && (
-            <CardTag>
-              Сигнал: {signal.type} · {formatNumber(signal.count)}
-            </CardTag>
-          )}
         </>
       }
       meta={metaDate}

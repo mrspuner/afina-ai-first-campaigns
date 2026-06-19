@@ -1,6 +1,5 @@
-import type { Signal, SignalType } from "./app-state";
+import type { SignalType } from "./app-state";
 import type { SourceType } from "@/types/campaign";
-import { patchNodeParams } from "@/types/workflow";
 import type {
   NodeParams,
   WorkflowNode,
@@ -297,19 +296,8 @@ function withScoring(t: Template): Template {
 
 export function createTemplate(
   signalType: SignalType,
-  signal?: Signal,
   sourceType: SourceType = "new"
 ): Template {
   const base = TEMPLATE_BY_TYPE[signalType]();
-  const template = sourceType === "own" ? base : withScoring(base);
-  if (!signal) return template;
-  const fileName = `сигнал_${signalType.toLowerCase()}.json`;
-  return {
-    nodes: patchNodeParams(template.nodes, "signal", {
-      fileName,
-      count: signal.count,
-      segments: signal.segments,
-    }),
-    edges: template.edges,
-  };
+  return sourceType === "own" ? base : withScoring(base);
 }
