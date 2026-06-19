@@ -4,9 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign } from "@/state/app-state";
 import { STATUS_LABELS } from "@/sections/campaigns/status-badge";
-import { SIGNAL_STATUS_LABEL } from "@/types/signal-status";
 import { cn } from "@/lib/utils";
 
 interface LaunchFlyoutProps {
@@ -14,11 +13,9 @@ interface LaunchFlyoutProps {
   onClose: () => void;
 }
 
-type RecentItem =
-  | { kind: "signal"; date: string; signal: Signal }
-  | { kind: "campaign"; date: string; campaign: Campaign };
+type RecentItem = { date: string; campaign: Campaign };
 
-const RECENT_LIMIT_PER_KIND = 10;
+const RECENT_LIMIT = 10;
 
 function campaignDate(c: Campaign): string {
   return c.launchedAt ?? c.completedAt ?? c.createdAt;
@@ -31,17 +28,8 @@ const CAMPAIGN_DOT: Record<Campaign["status"], string> = {
   completed: "bg-muted-foreground/50",
 };
 
-const SIGNAL_DOT: Record<NonNullable<Signal["status"]>, string> = {
-  draft: "bg-muted-foreground",
-  awaiting_payment: "bg-amber-500",
-  processing: "bg-sky-500",
-  ready: "bg-green-500",
-  expired: "bg-muted-foreground/50",
-  error: "bg-red-500",
-};
-
 export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
-  const { signals, campaigns } = useAppState();
+  const { campaigns } = useAppState();
   const dispatch = useAppDispatch();
   const [query, setQuery] = useState("");
   const dialogRef = useRef<HTMLElement>(null);
@@ -49,44 +37,28 @@ export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
   const normalized = query.trim().toLocaleLowerCase("ru-RU");
 
   const recentItems = useMemo<RecentItem[]>(() => {
-    const sigItems: RecentItem[] = [...signals]
-      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-      .slice(0, RECENT_LIMIT_PER_KIND)
-      .map((s) => ({ kind: "signal", date: s.updatedAt, signal: s }));
-    const cmpItems: RecentItem[] = [...campaigns]
+    return [...campaigns]
       .sort((a, b) => (campaignDate(a) < campaignDate(b) ? 1 : -1))
-      .slice(0, RECENT_LIMIT_PER_KIND)
-      .map((c) => ({ kind: "campaign", date: campaignDate(c), campaign: c }));
-    return [...sigItems, ...cmpItems].sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [signals, campaigns]);
+      .slice(0, RECENT_LIMIT)
+      .map((c) => ({ date: campaignDate(c), campaign: c }));
+  }, [campaigns]);
 
   const filteredItems = useMemo(() => {
     if (!normalized) return recentItems;
-    return recentItems.filter((it) => {
-      const name = it.kind === "signal" ? it.signal.type : it.campaign.name;
-      return name.toLocaleLowerCase("ru-RU").includes(normalized);
-    });
+    return recentItems.filter((it) =>
+      it.campaign.name.toLocaleLowerCase("ru-RU").includes(normalized),
+    );
   }, [normalized, recentItems]);
 
   const searchPool = useMemo<RecentItem[]>(() => {
     if (!normalized) return [];
-    const sigItems: RecentItem[] = signals.map((s) => ({
-      kind: "signal",
-      date: s.updatedAt,
-      signal: s,
-    }));
-    const cmpItems: RecentItem[] = campaigns.map((c) => ({
-      kind: "campaign",
-      date: campaignDate(c),
-      campaign: c,
-    }));
-    return [...sigItems, ...cmpItems]
-      .filter((it) => {
-        const name = it.kind === "signal" ? it.signal.type : it.campaign.name;
-        return name.toLocaleLowerCase("ru-RU").includes(normalized);
-      })
+    return campaigns
+      .map((c) => ({ date: campaignDate(c), campaign: c }))
+      .filter((it) =>
+        it.campaign.name.toLocaleLowerCase("ru-RU").includes(normalized),
+      )
       .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [normalized, signals, campaigns]);
+  }, [normalized, campaigns]);
 
   const listToRender = normalized ? searchPool : filteredItems;
   const nothingFound = Boolean(normalized) && searchPool.length === 0;
@@ -128,11 +100,6 @@ export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
 
   if (!open) return null;
 
-  function openSignal() {
-    dispatch({ type: "sidebar_nav", section: "Сигналы" });
-    onClose();
-  }
-
   function openCampaign(id: string) {
     dispatch({ type: "campaign_opened", id });
     onClose();
@@ -169,8 +136,8 @@ export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по сигналам и кампаниям"
-              aria-label="Поиск по сигналам и кампаниям"
+              placeholder="Поиск по кампаниям"
+              aria-label="Поиск по кампаниям"
               className="pl-9"
             />
           </div>
@@ -183,32 +150,21 @@ export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
             </p>
           ) : recentEmpty ? (
             <p className="mt-8 text-center text-sm text-muted-foreground">
-              Здесь появятся ваши сигналы и кампании.
+              Здесь появятся ваши кампании.
             </p>
           ) : (
             <section>
               <div className="flex flex-col gap-2">
-                {listToRender.map((it) =>
-                  it.kind === "signal" ? (
-                    <RecentRow
-                      key={`s-${it.signal.id}`}
-                      kindLabel="Сигнал"
-                      name={it.signal.type}
-                      statusLabel={SIGNAL_STATUS_LABEL[it.signal.status ?? "ready"]}
-                      statusDot={SIGNAL_DOT[it.signal.status ?? "ready"]}
-                      onClick={openSignal}
-                    />
-                  ) : (
-                    <RecentRow
-                      key={`c-${it.campaign.id}`}
-                      kindLabel="Кампания"
-                      name={it.campaign.name}
-                      statusLabel={STATUS_LABELS[it.campaign.status]}
-                      statusDot={CAMPAIGN_DOT[it.campaign.status]}
-                      onClick={() => openCampaign(it.campaign.id)}
-                    />
-                  )
-                )}
+                {listToRender.map((it) => (
+                  <RecentRow
+                    key={`c-${it.campaign.id}`}
+                    kindLabel="Кампания"
+                    name={it.campaign.name}
+                    statusLabel={STATUS_LABELS[it.campaign.status]}
+                    statusDot={CAMPAIGN_DOT[it.campaign.status]}
+                    onClick={() => openCampaign(it.campaign.id)}
+                  />
+                ))}
               </div>
             </section>
           )}
@@ -219,7 +175,7 @@ export function LaunchFlyout({ open, onClose }: LaunchFlyoutProps) {
 }
 
 interface RecentRowProps {
-  /** Тип сущности — «Сигнал» или «Кампания», показывается над именем. */
+  /** Тип сущности — показывается над именем. */
   kindLabel: string;
   name: string;
   statusLabel: string;

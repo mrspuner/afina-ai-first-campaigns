@@ -351,7 +351,7 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
     chat.append({ role: "user", text });
     const pendingId = chat.append({ role: "assistant", text: "", pending: true });
 
-    const { view, campaigns, signals } = appState;
+    const { view, campaigns, artifacts } = appState;
     const screen = view.kind === "section" ? `section:${view.name}` : view.kind;
 
     void (async () => {
@@ -369,7 +369,7 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
         .filter((m) => !m.pending)
         .slice(-8)
         .map((m) => ({ role: m.role, text: m.text }));
-      const dataSummary = buildDataSummary({ campaigns, statsLines: buildStatsLines(campaigns, signals, new Date()) });
+      const dataSummary = buildDataSummary({ campaigns, statsLines: buildStatsLines(campaigns, artifacts, new Date()) });
 
       // Граф/выбранную ноду/undo шлём ТОЛЬКО для редактируемого workflow —
       // на запущенном (read-only) сценарии правки запрещены (нет графовых tools).

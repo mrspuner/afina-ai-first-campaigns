@@ -134,7 +134,7 @@ export function StatisticsView({ campaignId }: { campaignId?: string } = {}) {
   // `messageTemplates` (not `templates`) avoids clashing with the local
   // ReportTemplate state below; these are the app-state MessageTemplate[] the
   // cube's templates dimension is derived from.
-  const { campaigns, signals, templates: messageTemplates } = useAppState();
+  const { campaigns, artifacts, templates: messageTemplates } = useAppState();
 
   // Stats only become meaningful once a campaign has actually been
   // launched — having signals or draft campaigns isn't enough to
@@ -205,8 +205,8 @@ export function StatisticsView({ campaignId }: { campaignId?: string } = {}) {
     [campaigns, messageTemplates],
   );
   const rows = useMemo(
-    () => generateRows(applied, { campaigns: cubeCampaigns, signals }, { now }),
-    [applied, cubeCampaigns, signals, now],
+    () => generateRows(applied, { campaigns: cubeCampaigns, artifacts }, { now }),
+    [applied, cubeCampaigns, artifacts, now],
   );
   const resolvedRange = useMemo(
     () => resolvePeriod(applied.period),

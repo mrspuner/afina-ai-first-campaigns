@@ -273,16 +273,17 @@ export function formatFunnel(n: FunnelNumbers, currency: Currency): FunnelDispla
 }
 
 /**
- * Deterministic total send volume for a campaign, anchored to its source
- * signal and capped by `signal.count` — you can't message more people than the
- * signal found. The statistics cube distributes this total across the
- * campaign's active days and channels, so every breakdown rolls back up to it.
+ * Deterministic total send volume for a campaign, anchored to its reach and
+ * capped by it — you can't message more people than the campaign reached.
+ * Reach is campaign-first: the sum of the campaign's Artifact counts (keyed by
+ * campaignId). The statistics cube distributes this total across the campaign's
+ * active days and channels, so every breakdown rolls back up to it.
  */
 export function campaignBaseSends(
   campaignId: string,
-  signalCount: number | undefined,
+  reachCount: number | undefined,
 ): number {
-  const reach = signalCount ?? 0;
+  const reach = reachCount ?? 0;
   if (reach <= 0) return 0;
   const rng = rngFor("campaign-sends", campaignId);
   return Math.max(1, Math.floor(reach * (0.4 + rng() * 0.5)));

@@ -47,18 +47,14 @@ export function getCampaignCardMetrics(
 
   // Считаем факты только для этой кампании за всё её время жизни (широкий
   // период — границы куб всё равно обрежет по реальному окну кампании).
-  // Базу касаний питаем количеством из артефакта кампании (если есть);
-  // иначе fact-cube выводит детерминированную базу из id кампании.
+  // Reach (база касаний) — из артефакта кампании, ключ — campaignId; без
+  // артефакта fact-cube даёт нулевой reach → нулевые отправки.
   const now = new Date();
   const period = { from: new Date(2000, 0, 1), to: now };
   const facts = buildFacts(
     {
-      campaigns: campaign.signalId
-        ? [campaign]
-        : [{ ...campaign, signalId: `art_${campaign.id}` }],
-      signals: artifact
-        ? [{ id: campaign.signalId ?? `art_${campaign.id}`, count: artifact.count }]
-        : [],
+      campaigns: [campaign],
+      artifacts: artifact ? [artifact] : [],
     },
     period,
     { now },

@@ -29,13 +29,13 @@ const NOW_EOD = new Date(DAY.getFullYear(), DAY.getMonth(), DAY.getDate(), 23, 5
 const YESTERDAY = new Date(2026, 5, 14); // 14 Jun 2026
 
 // Кампания, активная с начала периода вплоть до «сегодня» включительно.
+// Reach питается из артефакта кампании (ключ — campaignId), не из сигнала.
 const CTX_ACTIVE: StatsContext = {
-  signals: [{ id: "sig_x", count: 30000 }],
+  artifacts: [{ campaignId: "cmp_x", count: 30000 }],
   campaigns: [
     {
       id: "cmp_x",
       name: "Активная",
-      signalId: "sig_x",
       status: "active",
       createdAt: new Date(2026, 5, 1).toISOString(),
       launchedAt: new Date(2026, 5, 1).toISOString(),
@@ -53,12 +53,11 @@ function iso(y: number, m: number, d: number): string {
 }
 
 const CTX_WITH_TEMPLATES: StatsContext = {
-  signals: [{ id: "sig_t", count: 20000 }],
+  artifacts: [{ campaignId: "cmp_t", count: 20000 }],
   campaigns: [
     {
       id: "cmp_t",
       name: "С шаблонами",
-      signalId: "sig_t",
       status: "active",
       createdAt: iso(2026, 5, 1),
       launchedAt: iso(2026, 5, 1),
@@ -77,15 +76,14 @@ describe("StatsContext — per-campaign templates field", () => {
 });
 
 const CTX: StatsContext = {
-  signals: [
-    { id: "sig_a", count: 40000 },
-    { id: "sig_b", count: 12000 },
+  artifacts: [
+    { campaignId: "cmp_a", count: 40000 },
+    { campaignId: "cmp_b", count: 12000 },
   ],
   campaigns: [
     {
       id: "cmp_a",
       name: "Кампания A",
-      signalId: "sig_a",
       status: "active",
       createdAt: iso(2026, 3, 10),
       launchedAt: iso(2026, 3, 12),
@@ -94,7 +92,6 @@ const CTX: StatsContext = {
     {
       id: "cmp_b",
       name: "Кампания B",
-      signalId: "sig_b",
       status: "completed",
       createdAt: iso(2026, 3, 1),
       launchedAt: iso(2026, 4, 5),
@@ -115,12 +112,11 @@ const ADDITIVE = [
 describe("buildFacts — околореальные дни", () => {
   it("кампания, запущенная сегодня, даёт ровно один активный день", () => {
     const ctx: StatsContext = {
-      signals: [{ id: "s", count: 5000 }],
+      artifacts: [{ campaignId: "c", count: 5000 }],
       campaigns: [
         {
           id: "c",
           name: "Сегодня",
-          signalId: "s",
           status: "active",
           createdAt: NOW.toISOString(),
           launchedAt: NOW.toISOString(),
@@ -145,12 +141,11 @@ describe("buildFacts — околореальные дни", () => {
 
   it("кампания вне периода не даёт фактов", () => {
     const ctx: StatsContext = {
-      signals: [{ id: "s", count: 5000 }],
+      artifacts: [{ campaignId: "c", count: 5000 }],
       campaigns: [
         {
           id: "c",
           name: "Старая",
-          signalId: "s",
           status: "completed",
           createdAt: iso(2025, 0, 1),
           launchedAt: iso(2025, 0, 5),
@@ -163,12 +158,11 @@ describe("buildFacts — околореальные дни", () => {
 
   it("draft-кампании не попадают в куб", () => {
     const ctx: StatsContext = {
-      signals: [{ id: "s", count: 5000 }],
+      artifacts: [{ campaignId: "c", count: 5000 }],
       campaigns: [
         {
           id: "c",
           name: "Черновик",
-          signalId: "s",
           status: "draft",
           createdAt: NOW.toISOString(),
         },
@@ -181,10 +175,11 @@ describe("buildFacts — околореальные дни", () => {
 describe("cube invariants", () => {
   const facts = buildFacts(CTX, PERIOD, { now: NOW });
 
-  it("кампания не отправляет больше, чем count её сигнала", () => {
+  it("кампания не отправляет больше, чем сумма count её артефактов (reach)", () => {
     const a = aggregate(
       groupFacts(facts, "campaigns").find((g) => g.key === "cmp-cmp_a")!.facts,
     );
+    // reach cmp_a = сумма артефактов campaignId=cmp_a = 40000.
     expect(a.sends).toBeLessThanOrEqual(40000);
   });
 
@@ -339,10 +334,10 @@ describe("templates dimension — facts", () => {
 describe("cacheKey — template identity", () => {
   it("смена шаблонов кампании инвалидирует кэш (другое распределение по templates)", () => {
     const ctxA: StatsContext = {
-      signals: [{ id: "s", count: 20000 }],
+      artifacts: [{ campaignId: "cmp_c", count: 20000 }],
       campaigns: [
         {
-          id: "cmp_c", name: "C", signalId: "s", status: "active",
+          id: "cmp_c", name: "C", status: "active",
           createdAt: iso(2026, 5, 1), launchedAt: iso(2026, 5, 1),
           templates: [{ channel: "sms", id: "tpl_1", name: "Шаблон 1" }],
         },
@@ -363,6 +358,63 @@ describe("cacheKey — template identity", () => {
     expect(labelsA.has("Шаблон 1")).toBe(true);
     expect(labelsB.has("Шаблон 2")).toBe(true);
     expect(labelsB.has("Шаблон 1")).toBe(false);
+  });
+
+  it("смена count артефакта инвалидирует кэш (другая база отправок)", () => {
+    const base: StatsContext = {
+      artifacts: [{ campaignId: "cmp_k", count: 5000 }],
+      campaigns: [
+        {
+          id: "cmp_k", name: "K", status: "active",
+          createdAt: iso(2026, 5, 1), launchedAt: iso(2026, 5, 1),
+        },
+      ],
+    };
+    const bigger: StatsContext = {
+      ...base,
+      artifacts: [{ campaignId: "cmp_k", count: 50000 }],
+    };
+    const sendsBase = aggregate(buildFacts(base, PERIOD_JUNE, { now: NOW })).sends;
+    const sendsBigger = aggregate(buildFacts(bigger, PERIOD_JUNE, { now: NOW })).sends;
+    // Если бы кэш игнорировал count артефактов, bigger вернул бы те же факты.
+    expect(sendsBigger).toBeGreaterThan(sendsBase);
+  });
+});
+
+describe("reach из артефактов (campaign-first)", () => {
+  it("reach кампании = сумма count её артефактов; sends ≤ этой суммы", () => {
+    const ctx: StatsContext = {
+      artifacts: [
+        { campaignId: "cmp_m", count: 4000 },
+        { campaignId: "cmp_m", count: 6000 }, // два артефакта одной кампании
+      ],
+      campaigns: [
+        {
+          id: "cmp_m", name: "M", status: "active",
+          createdAt: iso(2026, 5, 1), launchedAt: iso(2026, 5, 1),
+        },
+      ],
+    };
+    const facts = buildFacts(ctx, PERIOD_JUNE, { now: NOW });
+    const sends = aggregate(facts).sends;
+    expect(sends).toBeGreaterThan(0);
+    // Инвариант reach: нельзя отправить больше, чем суммарный охват (4000+6000).
+    expect(sends).toBeLessThanOrEqual(10000);
+  });
+
+  it("кампания без артефакта → нулевой reach → нулевые отправки (нет фактов)", () => {
+    const ctx: StatsContext = {
+      artifacts: [],
+      campaigns: [
+        {
+          id: "cmp_n", name: "N", status: "active",
+          createdAt: iso(2026, 5, 1), launchedAt: iso(2026, 5, 1),
+        },
+      ],
+    };
+    const facts = buildFacts(ctx, PERIOD_JUNE, { now: NOW });
+    expect(facts).toHaveLength(0);
+    expect(aggregate(facts).sends).toBe(0);
   });
 });
 

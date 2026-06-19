@@ -26,6 +26,7 @@ import {
 } from "@/state/metrics";
 import type { RowKind, SearchConditions } from "./statistics-state";
 import type { Channel } from "@/types/campaign";
+import type { Artifact } from "@/state/app-state";
 import {
   eachDay,
   formatDateRangeRu,
@@ -63,15 +64,11 @@ export type Fact = {
   dims: Record<EntityDim, DimValue>;
 };
 
-/** Real launched campaigns + their signals, injected from app state. */
+/** Real launched campaigns + their artifacts, injected from app state. */
 export type StatsContext = {
   campaigns?: readonly {
     id: string;
     name: string;
-    // TODO(wave1): campaign-first инверсия сделала signalId опциональным —
-    // статистика перейдёт на campaignId-keyed Artifact. Пока допускаем
-    // отсутствие связи: кампания без signalId просто не подтянет count сигнала.
-    signalId?: string;
     status: string;
     createdAt: string;
     launchedAt?: string;
@@ -86,7 +83,13 @@ export type StatsContext = {
      */
     templates?: readonly { channel: Channel; id: string; name: string }[];
   }[];
-  signals?: readonly { id: string; count: number }[];
+  /**
+   * Campaign-first source of reach (campaign-first inversion, Task 8). Artifacts
+   * are keyed by `campaignId`; a campaign's reach is the SUM of its artifacts'
+   * counts. Campaigns with no artifact resolve to 0 reach → zero sends. Replaces
+   * the old `signalId → signal.count` join (signals removed from the cube).
+   */
+  artifacts?: readonly Pick<Artifact, "campaignId" | "count">[];
 };
 
 // ---------------------------------------------------------------------------
@@ -320,11 +323,11 @@ function todayKey(now: Date): string {
 
 function buildCampaignFacts(
   c: CampaignLike,
-  signalCount: number | undefined,
+  reach: number | undefined,
   days: Date[],
   now: Date,
 ): Fact[] {
-  const base = campaignBaseSends(c.id, signalCount);
+  const base = campaignBaseSends(c.id, reach);
   if (base <= 0 || days.length === 0) return [];
 
   // Per-campaign dimension values.
@@ -424,11 +427,26 @@ function cacheKey(ctx: StatsContext, period: DateRange, now: Date): string {
       const tpls = (x.templates ?? [])
         .map((t) => `${t.channel}:${t.id}`)
         .join(",");
-      return `${x.id}:${x.status}:${x.signalId ?? ""}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}:${tpls}`;
+      return `${x.id}:${x.status}:${x.launchedAt ?? ""}:${x.pausedAt ?? ""}:${x.completedAt ?? ""}:${x.createdAt}:${x.scenario?.id ?? ""}:${tpls}`;
     })
     .join("|");
-  const s = (ctx.signals ?? []).map((x) => `${x.id}:${x.count}`).join("|");
-  return `${period.from.getTime()}-${period.to.getTime()}|${now.getTime()}|${c}|${s}`;
+  // Reach now comes from artifacts (keyed by campaignId); the key must include
+  // their counts so a count change invalidates the memo. Sum per campaign so
+  // ordering of artifacts can't perturb the key.
+  const a = [...reachByCampaign(ctx).entries()]
+    .sort((x, y) => (x[0] < y[0] ? -1 : 1))
+    .map(([id, count]) => `${id}:${count}`)
+    .join(",");
+  return `${period.from.getTime()}-${period.to.getTime()}|${now.getTime()}|${c}|${a}`;
+}
+
+/** Per-campaign reach: SUM of each campaign's artifact counts (keyed by campaignId). */
+function reachByCampaign(ctx: StatsContext): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const art of ctx.artifacts ?? []) {
+    m.set(art.campaignId, (m.get(art.campaignId) ?? 0) + art.count);
+  }
+  return m;
 }
 
 /**
@@ -445,9 +463,7 @@ export function buildFacts(
   const key = cacheKey(ctx, period, now);
   if (factCache && factCache.key === key) return factCache.facts;
 
-  const countById = new Map(
-    (ctx.signals ?? []).map((s) => [s.id, s.count] as const),
-  );
+  const reach = reachByCampaign(ctx);
   const facts: Fact[] = [];
   for (const c of ctx.campaigns ?? []) {
     const window = campaignWindow(c, now);
@@ -455,14 +471,7 @@ export function buildFacts(
     const span = intersect(window, period);
     if (!span) continue; // campaign not active during this period → no rows
     const days = eachDay(span);
-    facts.push(
-      ...buildCampaignFacts(
-        c,
-        c.signalId ? countById.get(c.signalId) : undefined,
-        days,
-        now,
-      ),
-    );
+    facts.push(...buildCampaignFacts(c, reach.get(c.id), days, now));
   }
   factCache = { key, facts };
   return facts;

@@ -85,10 +85,10 @@ describe("sortRows", () => {
 describe("generateRows — группировка по шаблонам", () => {
   const now = new Date(2026, 5, 15);
   const ctx: StatsContext = {
-    signals: [{ id: "s", count: 20000 }],
+    artifacts: [{ campaignId: "cmp", count: 20000 }],
     campaigns: [
       {
-        id: "cmp", name: "К", signalId: "s", status: "active",
+        id: "cmp", name: "К", status: "active",
         createdAt: new Date(2026, 5, 1).toISOString(),
         launchedAt: new Date(2026, 5, 1).toISOString(),
         templates: [

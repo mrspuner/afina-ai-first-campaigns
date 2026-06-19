@@ -1,4 +1,4 @@
-import type { Campaign, Signal } from "@/state/app-state";
+import type { Campaign, Artifact } from "@/state/app-state";
 import type { FunnelNumbers } from "@/state/metrics";
 import { buildFacts, aggregate, groupFacts } from "@/sections/statistics/fact-cube";
 
@@ -38,22 +38,24 @@ export function statsLinesFromFunnel(total: FunnelNumbers): string[] {
 }
 
 /**
- * Строит строки статистики из fact-cube для заданных кампаний и сигналов.
+ * Строит строки статистики из fact-cube для заданных кампаний и артефактов.
  * Период: с начала текущего года по now.
- * Использует реальные count сигналов — campaignBaseSends опирается на них;
- * без count > 0 fact-cube даёт нулевые агрегаты.
+ * Reach кампании = сумма count её артефактов (ключ — campaignId); без артефакта
+ * (или count = 0) fact-cube даёт нулевые агрегаты для этой кампании.
  * Включает до 5 строк топ-кампаний по доходу — чтобы оркестратор мог
  * ответить «какая кампания принесла больше всего?» без галлюцинаций.
  * Используется в buildDataSummary чтобы не дублировать логику в потребителях.
  */
-export function buildStatsLines(campaigns: Campaign[], signals: Signal[], now: Date): string[] {
-  // Маппим только нужные поля: id + count — именно их читает fact-cube.
-  const signalStubs = signals.map((s) => ({ id: s.id, count: s.count }));
+export function buildStatsLines(
+  campaigns: Campaign[],
+  artifacts: Artifact[],
+  now: Date,
+): string[] {
   const period = {
     from: new Date(now.getFullYear(), 0, 1),
     to: new Date(now.getFullYear(), 11, 31),
   };
-  const facts = buildFacts({ campaigns, signals: signalStubs }, period, { now });
+  const facts = buildFacts({ campaigns, artifacts }, period, { now });
   const total = aggregate(facts);
   const lines = statsLinesFromFunnel(total);
 
