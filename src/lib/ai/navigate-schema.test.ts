@@ -7,6 +7,11 @@ describe("wireNavigateSchema", () => {
     expect(r.success).toBe(true);
   });
 
+  it("section Артефакты валиден", () => {
+    const r = wireNavigateSchema.safeParse({ kind: "section", section: "Артефакты" });
+    expect(r.success).toBe(true);
+  });
+
   it("section без поля section валиден (схема не делает его required)", () => {
     // section опциональное в схеме; toNavigateTarget вернёт null
     const r = wireNavigateSchema.safeParse({ kind: "section" });
@@ -20,11 +25,6 @@ describe("wireNavigateSchema", () => {
 
   it("campaign-workflow с campaignId валиден", () => {
     const r = wireNavigateSchema.safeParse({ kind: "campaign-workflow", campaignId: "cmp_abc" });
-    expect(r.success).toBe(true);
-  });
-
-  it("signal без signalId валиден схемой (signalId опционально)", () => {
-    const r = wireNavigateSchema.safeParse({ kind: "signal" });
     expect(r.success).toBe(true);
   });
 
@@ -50,13 +50,8 @@ describe("toNavigateTarget", () => {
     expect(target).toEqual({ kind: "campaign-workflow", campaignId: "cmp_abc" });
   });
 
-  it("signal без signalId → null", () => {
-    const target = toNavigateTarget({ kind: "signal" });
+  it("campaign-workflow без id → null", () => {
+    const target = toNavigateTarget({ kind: "campaign-workflow" });
     expect(target).toBeNull();
-  });
-
-  it("signal с id → target", () => {
-    const target = toNavigateTarget({ kind: "signal", signalId: "sig_xyz" });
-    expect(target).toEqual({ kind: "signal", signalId: "sig_xyz" });
   });
 });

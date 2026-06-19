@@ -30,7 +30,6 @@ export interface ExecuteDeps {
   };
   triggerEdit: Pick<TriggerEditApi, "applyToTrigger">;
   campaigns: Array<{ id: string; name: string; status: string }>;
-  signals: Array<{ id: string }>;
   activeTriggerId?: string;
   /** Текст, которым закрываем пузырь, если ничего не исполнилось. */
   fallbackText: string;
@@ -74,12 +73,6 @@ export function executeAssistResults(results: AssistResult[], d: ExecuteDeps): v
           const c = d.campaigns.find((x) => x.id === t.campaignId);
           if (c) {
             d.dispatch({ type: "open_workflow", campaign: { id: c.id, name: c.name }, launched: c.status !== "draft" });
-            confirmations.push(r.confirmation);
-          }
-        } else if (t.kind === "signal") {
-          const s = d.signals.find((x) => x.id === t.signalId);
-          if (s) {
-            d.dispatch({ type: "signal_opened", id: s.id });
             confirmations.push(r.confirmation);
           }
         }
@@ -205,7 +198,6 @@ export function useAssistRunner() {
           chat,
           triggerEdit,
           campaigns: appState.campaigns,
-          signals: appState.signals,
           activeTriggerId: args.activeTriggerId,
           fallbackText,
           cachedSignalLabel: args.cachedSignalLabel ?? "Сигнал",

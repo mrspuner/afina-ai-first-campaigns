@@ -25,7 +25,6 @@ import {
 } from "@/state/prompt-chips-context";
 import type { Chip as WelcomeChip } from "@/sections/welcome/onboarding-chat";
 import type { WorkflowNodeType } from "@/types/workflow";
-import type { SignalStatus } from "@/types/signal-status";
 import type { Scope, SuggestionItem, WizardSub } from "@/state/suggestion-registry";
 import { resolveSuggestions } from "@/state/suggestion-registry";
 
@@ -61,25 +60,6 @@ function resolved(scope: Scope): SuggestionResolution {
   const items = resolveSuggestions(scope);
   if (items.length === 0) return { kind: "hidden" };
   return { kind: "items", scope, items };
-}
-
-function countSignalStatuses(
-  signals: AppState["signals"]
-): Record<SignalStatus, number> {
-  const counts: Record<SignalStatus, number> = {
-    draft: 0,
-    awaiting_payment: 0,
-    processing: 0,
-    ready: 0,
-    expired: 0,
-    error: 0,
-  };
-  for (const s of signals) {
-    // Signal.status опционален; AppState считает дефолтом "ready".
-    const status: SignalStatus = s.status ?? "ready";
-    counts[status] += 1;
-  }
-  return counts;
 }
 
 function wizardSubFor(
@@ -228,14 +208,12 @@ export function selectPromptSuggestions(
         case "Сигналы":
         // TODO(wave1): раздел «Артефакты» получит собственный suggestion-sub
         // (kind: "artifacts"). Пока переиспользуем «signals», чтобы exhaustive
-        // switch по SectionName компилировался.
+        // switch по SectionName компилировался. Сигналы как сущность удалены —
+        // подсказки больше не зависят от их статусов.
         case "Артефакты":
           return resolved({
             kind: "section",
-            sub: {
-              kind: "signals",
-              statusCounts: countSignalStatuses(state.signals),
-            },
+            sub: { kind: "signals" },
           });
         case "Настройки":
           return resolved({

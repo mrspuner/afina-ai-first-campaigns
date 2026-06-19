@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { resolveSuggestions } from "./registry";
 import type { Scope, SuggestionItem } from "./types";
 import type { WorkflowNodeType, NodeParams } from "@/types/workflow";
-import type { SignalStatus } from "@/types/signal-status";
 import type { CampaignStatus } from "@/state/app-state";
 
 const NODE_FIXTURE: Array<{ nodeType: WorkflowNodeType; params: string[] }> = [
@@ -28,10 +27,6 @@ const PARAMS_KINDS = [
 type _ExhaustiveCheck = Exclude<NodeParams["kind"], (typeof PARAMS_KINDS)[number]>;
 const _verifyExhaustive: _ExhaustiveCheck extends never ? true : false = true;
 void _verifyExhaustive;
-
-const EMPTY_SIGNAL_COUNTS: Record<SignalStatus, number> = {
-  draft: 0, awaiting_payment: 0, processing: 0, ready: 0, expired: 0, error: 0,
-};
 
 function assertValid(items: SuggestionItem[], hint: string) {
   expect(items.length, `${hint}: empty`).toBeGreaterThan(0);
@@ -146,56 +141,19 @@ describe("registry — section.statistics (3 рабочих запроса)", ()
   });
 });
 
-describe("registry — section.signals (status-aware)", () => {
-  it("статусов нет → ровно 2 чипа: вопрос и создание", () => {
+describe("registry — section.signals (онбординг)", () => {
+  // Сигналы как сущность удалены (campaign-first); sub отдаёт онбординг-чипы,
+  // которые временно переиспользует раздел «Артефакты».
+  it("отдаёт ровно 2 онбординг-чипа: вопрос и создание", () => {
     const items = resolveSuggestions({
       kind: "section",
-      sub: { kind: "signals", statusCounts: EMPTY_SIGNAL_COUNTS },
+      sub: { kind: "signals" },
     });
     expect(items).toHaveLength(2);
     expect(items.some((i) => i.id === "sec-sig-empty-what")).toBe(true);
     expect(items.some((i) => i.id === "sec-sig-empty-create")).toBe(true);
     const createChip = items.find((i) => i.id === "sec-sig-empty-create")!;
     expect(createChip.action.kind).toBe("dispatch");
-  });
-
-  it("только ready → один чип 'Готовые'", () => {
-    const items = resolveSuggestions({
-      kind: "section",
-      sub: { kind: "signals", statusCounts: { ...EMPTY_SIGNAL_COUNTS, ready: 3 } },
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe("sec-sig-filter-ready");
-  });
-
-  it("есть несколько статусов → фильтры по каждому, max 3", () => {
-    const items = resolveSuggestions({
-      kind: "section",
-      sub: {
-        kind: "signals",
-        statusCounts: {
-          ...EMPTY_SIGNAL_COUNTS,
-          ready: 2,
-          processing: 1,
-          awaiting_payment: 5,
-          draft: 1,
-        },
-      },
-    });
-    expect(items).toHaveLength(3);
-    // Порядок: ready, processing, awaiting_payment (по объявлению в реестре).
-    expect(items[0].id).toBe("sec-sig-filter-ready");
-    expect(items[1].id).toBe("sec-sig-filter-processing");
-    expect(items[2].id).toBe("sec-sig-filter-awaiting");
-  });
-
-  it("статус есть, но счётчик 0 → чипа нет", () => {
-    const items = resolveSuggestions({
-      kind: "section",
-      sub: { kind: "signals", statusCounts: { ...EMPTY_SIGNAL_COUNTS, error: 1 } },
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe("sec-sig-filter-error");
   });
 });
 
@@ -336,7 +294,7 @@ describe("registry — глобальная уникальность id", () => 
       { kind: "section", sub: { kind: "campaigns", hasCampaigns: true, activeFilter: [], sort: "default" } },
       { kind: "section", sub: { kind: "campaigns", hasCampaigns: false, activeFilter: [], sort: "default" } },
       { kind: "section", sub: { kind: "statistics", period: "this-month", rowKind: "campaigns" } },
-      { kind: "section", sub: { kind: "signals", statusCounts: EMPTY_SIGNAL_COUNTS } },
+      { kind: "section", sub: { kind: "signals" } },
       { kind: "section", sub: { kind: "settings", hasIntegrations: true, isBasicTariff: false } },
       { kind: "wizard-step", sub: { step: 1 } },
       { kind: "wizard-step", sub: { step: 2, hasInterests: false, hasDomains: false } },

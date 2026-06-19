@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { selectPromptSuggestions, type PromptBarContext } from "./select-prompt-suggestions";
 import { initialState, type AppState, type CampaignStatus } from "./app-state";
 import type { PromptChip, NodeTagPayload } from "./prompt-chips-context";
-import type { Signal } from "./app-state";
 
 function nodeChip(nodeType: string, paramLabel?: string): PromptChip {
   const payload: NodeTagPayload = { nodeId: "n1", nodeType, color: "#fff", paramLabel };
@@ -118,23 +117,17 @@ describe("selectPromptSuggestions — section.signals", () => {
     expect(r.items.some((i) => i.id === "sec-sig-empty-create")).toBe(true);
   });
 
-  it("есть awaiting_payment → ровно фильтр-чип по этому статусу", () => {
-    const signal: Signal = {
-      id: "s1",
-      type: "Удержание",
-      count: 0,
-      segments: { max: 0, high: 0, mid: 0, low: 0 },
-      createdAt: "2026-01-01",
-      updatedAt: "2026-01-01",
-      status: "awaiting_payment",
-    };
+  it("раздел «Артефакты» переиспользует тот же набор онбординг-чипов", () => {
+    // Сигналы как сущность удалены — подсказки больше не зависят от их статусов;
+    // раздел «Артефакты» временно отдаёт те же онбординг-чипы.
     const r = selectPromptSuggestions(
-      withView({ kind: "section", name: "Сигналы" }, { signals: [signal] }),
+      withView({ kind: "section", name: "Артефакты" }),
       ctx()
     );
     if (r.kind !== "items") throw new Error();
-    expect(r.items).toHaveLength(1);
-    expect(r.items[0].id).toBe("sec-sig-filter-awaiting");
+    expect(r.items).toHaveLength(2);
+    expect(r.items.some((i) => i.id === "sec-sig-empty-what")).toBe(true);
+    expect(r.items.some((i) => i.id === "sec-sig-empty-create")).toBe(true);
   });
 });
 

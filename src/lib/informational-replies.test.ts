@@ -37,19 +37,9 @@ function collectRegistryAsks(): SuggestionItem[] {
 
   // Разделы: эмпти-варианты + полные фильтры.
   items.push(...resolveSection({ kind: "campaigns", hasCampaigns: false, activeFilter: [], sort: "default" }));
-  items.push(
-    ...resolveSection({
-      kind: "signals",
-      statusCounts: { draft: 1, awaiting_payment: 1, processing: 1, ready: 1, expired: 1, error: 1 },
-    })
-  );
-  // SIGNALS_EMPTY (что такое сигналы).
-  items.push(
-    ...resolveSection({
-      kind: "signals",
-      statusCounts: { draft: 0, awaiting_payment: 0, processing: 0, ready: 0, expired: 0, error: 0 },
-    })
-  );
+  // SIGNALS_EMPTY (что такое сигналы) — единственный набор для signals-sub
+  // после удаления сигналов как сущности.
+  items.push(...resolveSection({ kind: "signals" }));
   items.push(...resolveSection({ kind: "settings", isBasicTariff: true, hasIntegrations: false }));
   items.push(...resolveSection({ kind: "settings", isBasicTariff: false, hasIntegrations: true }));
 

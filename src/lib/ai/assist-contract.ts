@@ -67,16 +67,15 @@ export const assistResultSchema = z.discriminatedUnion("kind", [
   /** Патч фильтров таблицы статистики (план 006). */
   z.object({ kind: z.literal("stats"), patch: statsPatchSchema, confirmation: z.string() }),
   /**
-   * Навигация к разделу/кампании/сигналу (план 006).
+   * Навигация к разделу/кампании (план 006).
    * В контракте используем discriminatedUnion — его парсит наш клиент, не Gemini.
    * Wire-форма для Gemini описана в navigate-schema.ts (wireNavigateSchema).
    */
   z.object({
     kind: z.literal("navigate"),
     target: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("section"), name: z.enum(["Статистика", "Сигналы", "Кампании", "Настройки"]) }),
+      z.object({ kind: z.literal("section"), name: z.enum(["Статистика", "Артефакты", "Кампании", "Настройки"]) }),
       z.object({ kind: z.literal("campaign-workflow"), campaignId: z.string() }),
-      z.object({ kind: z.literal("signal"), signalId: z.string() }),
     ]),
     confirmation: z.string(),
   }),

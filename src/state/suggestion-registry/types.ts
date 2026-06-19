@@ -11,7 +11,6 @@
 import type { Action as AppAction, CampaignStatus } from "@/state/app-state";
 import type { WorkflowNodeType } from "@/types/workflow";
 import type { Chip as WelcomeChip } from "@/sections/welcome/onboarding-chat";
-import type { SignalStatus } from "@/types/signal-status";
 import type { PeriodPreset, RowKind } from "@/sections/statistics/statistics-state";
 import type { CampaignSort } from "@/state/parse-campaign-filter";
 
@@ -65,8 +64,6 @@ export type StatisticsSub = {
 
 export type SignalsSub = {
   kind: "signals";
-  /** Сколько каких статусов сейчас в `state.signals` — реестр приоритезирует. */
-  statusCounts: Readonly<Record<SignalStatus, number>>;
 };
 
 export type SettingsSub = {

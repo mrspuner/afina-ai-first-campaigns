@@ -4,13 +4,12 @@ import { buildFacts, aggregate, groupFacts } from "@/sections/statistics/fact-cu
 
 /**
  * Компактная текстовая сводка реального стейта для промпта оркестратора.
- * Только то, что нужно для ответов: имена/статусы/бюджеты кампаний,
- * сигналы с размерами сегментов. Без параметров нод, без ключей.
+ * Только то, что нужно для ответов: имена/статусы/бюджеты кампаний.
+ * Без параметров нод, без ключей.
  * Формат — плоский текст: модель читает его лучше, чем JSON, и он дешевле.
  */
 export function buildDataSummary(input: {
   campaigns: Campaign[];
-  signals: Signal[];
   /** Готовые строки статистики — собирает вызывающий из fact-cube. */
   statsLines?: string[];
 }): string {
@@ -21,13 +20,6 @@ export function buildDataSummary(input: {
       `- кампания "${c.name}" (id ${c.id}): статус ${c.status}` +
         (c.budget ? `, бюджет ${c.budget} ₽` : "") +
         (c.scenario ? `, сценарий «${c.scenario.name}»` : "")
-    );
-  }
-  lines.push(`Сигналов: ${input.signals.length}`);
-  for (const s of input.signals.slice(0, 20)) {
-    lines.push(
-      `- сигнал "${s.name ?? s.type}" (id ${s.id}): тип ${s.type}, ` +
-        `аудитория ${s.count}, сегменты max ${s.segments.max} / high ${s.segments.high} / mid ${s.segments.mid} / low ${s.segments.low}`
     );
   }
   if (input.statsLines?.length) {

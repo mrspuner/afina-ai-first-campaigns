@@ -142,52 +142,11 @@ const SIGNALS_EMPTY: SuggestionItem[] = [
 ];
 
 /**
- * Чипы для непустого раздела: фильтры по статусу. Реестр приоритезирует те
- * статусы, по которым реально есть сигналы — пустые подсказки не показываем.
+ * Сигналы как сущность удалены (campaign-first). Раздел временно
+ * переиспользует этот sub для «Артефактов» — отдаём онбординг-подсказки.
  */
-const SIGNAL_FILTER_CHIPS: Array<{
-  status: keyof SignalsSub["statusCounts"];
-  chip: SuggestionItem;
-}> = [
-  {
-    status: "ready",
-    chip: ask("sec-sig-filter-ready", "Готовые", "Покажи готовые сигналы"),
-  },
-  {
-    status: "processing",
-    chip: ask("sec-sig-filter-processing", "В обработке", "Покажи сигналы в обработке"),
-  },
-  {
-    status: "awaiting_payment",
-    chip: ask(
-      "sec-sig-filter-awaiting",
-      "Ожидают оплаты",
-      "Покажи сигналы, ожидающие оплаты"
-    ),
-  },
-  {
-    status: "draft",
-    chip: ask("sec-sig-filter-draft", "Черновики", "Покажи сигналы-черновики"),
-  },
-  {
-    status: "expired",
-    chip: ask("sec-sig-filter-expired", "Устаревшие", "Покажи устаревшие сигналы"),
-  },
-  {
-    status: "error",
-    chip: ask("sec-sig-filter-error", "С ошибкой", "Покажи сигналы с ошибкой"),
-  },
-];
-
-function resolveSignals(s: SignalsSub): SuggestionItem[] {
-  const c = s.statusCounts;
-  const total = c.draft + c.awaiting_payment + c.processing + c.ready + c.expired + c.error;
-  if (total === 0) return SIGNALS_EMPTY;
-
-  // Берём чипы только для статусов, в которых есть сигналы.
-  return SIGNAL_FILTER_CHIPS.filter(({ status }) => c[status] > 0)
-    .slice(0, 3)
-    .map(({ chip }) => chip);
+function resolveSignals(_s: SignalsSub): SuggestionItem[] {
+  return SIGNALS_EMPTY;
 }
 
 // ─── Настройки ──────────────────────────────────────────────────────────────

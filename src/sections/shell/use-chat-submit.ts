@@ -369,7 +369,7 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
         .filter((m) => !m.pending)
         .slice(-8)
         .map((m) => ({ role: m.role, text: m.text }));
-      const dataSummary = buildDataSummary({ campaigns, signals, statsLines: buildStatsLines(campaigns, signals, new Date()) });
+      const dataSummary = buildDataSummary({ campaigns, statsLines: buildStatsLines(campaigns, signals, new Date()) });
 
       // Граф/выбранную ноду/undo шлём ТОЛЬКО для редактируемого workflow —
       // на запущенном (read-only) сценарии правки запрещены (нет графовых tools).

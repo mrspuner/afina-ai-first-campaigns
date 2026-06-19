@@ -6,26 +6,21 @@ import { z } from "zod";
  * toNavigateTarget собирает строгую цель.
  */
 export const wireNavigateSchema = z.object({
-  kind: z.enum(["section", "campaign-workflow", "signal"]),
+  kind: z.enum(["section", "campaign-workflow"]),
   section: z
-    .enum(["Статистика", "Сигналы", "Кампании", "Настройки"])
+    .enum(["Статистика", "Артефакты", "Кампании", "Настройки"])
     .optional()
     .describe("Для kind=section"),
   campaignId: z
     .string()
     .optional()
     .describe("Для kind=campaign-workflow: id из данных аккаунта"),
-  signalId: z
-    .string()
-    .optional()
-    .describe("Для kind=signal: id из данных аккаунта"),
 });
 export type WireNavigate = z.infer<typeof wireNavigateSchema>;
 
 export type NavigateTarget =
-  | { kind: "section"; name: "Статистика" | "Сигналы" | "Кампании" | "Настройки" }
-  | { kind: "campaign-workflow"; campaignId: string }
-  | { kind: "signal"; signalId: string };
+  | { kind: "section"; name: "Статистика" | "Артефакты" | "Кампании" | "Настройки" }
+  | { kind: "campaign-workflow"; campaignId: string };
 
 /**
  * Маппит плоскую wire-форму в строгую NavigateTarget.
@@ -35,9 +30,6 @@ export function toNavigateTarget(w: WireNavigate): NavigateTarget | null {
   if (w.kind === "section") {
     return w.section ? { kind: "section", name: w.section } : null;
   }
-  if (w.kind === "campaign-workflow") {
-    return w.campaignId ? { kind: "campaign-workflow", campaignId: w.campaignId } : null;
-  }
-  // signal
-  return w.signalId ? { kind: "signal", signalId: w.signalId } : null;
+  // campaign-workflow
+  return w.campaignId ? { kind: "campaign-workflow", campaignId: w.campaignId } : null;
 }
