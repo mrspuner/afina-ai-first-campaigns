@@ -7,6 +7,7 @@ import type { SignalStatus } from "@/types/signal-status";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import { scenarioNameForSignal, defaultCampaignName } from "./scenario-display";
+import { estimateArtifactCount, artifactKindForCampaign } from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
 import {
   DEFAULT_DIRECTION_ID,
@@ -1084,23 +1085,43 @@ export function appReducer(state: AppState, action: Action): AppState {
         }
       }
 
+      // Phase + artifact by source matrix (spec §3):
+      //  own    → no scoring; artifact ready immediately; phase communicating.
+      //  new    → scoring phase; artifact lands when scoring finishes (separate task).
+      //  stream → perpetual; artifact at launch; phase communicating.
+      const source = c.sourceType ?? "new";
+      const phase: Campaign["phase"] = source === "new" ? "scoring" : "communicating";
+      const makeArtifact = source !== "new";
+      const newArtifacts: Artifact[] = makeArtifact
+        ? [{
+            id: `art_${nanoid(8)}`,
+            campaignId: c.id,
+            kind: artifactKindForCampaign(c),
+            count: estimateArtifactCount(c),
+            createdAt: action.timestamp,
+          }]
+        : [];
+
       return {
         ...state,
         templates,
+        artifacts: [...state.artifacts, ...newArtifacts],
         campaigns: state.campaigns.map((cc) =>
           cc.id === action.id
             ? {
                 ...cc,
                 status: "active",
+                phase,
                 launchedAt: cc.launchedAt ?? action.timestamp,
-                // A real budget overwrites; a 0 (e.g. weird re-dispatch) keeps
-                // the previously-stored value.
                 budget: action.budget > 0 ? action.budget : cc.budget,
                 dailyBudget: action.dailyBudget ?? cc.dailyBudget,
                 templateIds: incomingIds.length > 0 ? incomingIds : cc.templateIds,
               }
             : cc
         ),
+        notifications: makeArtifact
+          ? { ...state.notifications, signalsBadge: true }
+          : state.notifications,
         view: { kind: "campaign", campaign: { id: c.id, name: c.name } },
         activeSection: null,
       };
