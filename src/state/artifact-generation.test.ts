@@ -27,3 +27,27 @@ describe("campaign_launched artifact generation", () => {
     expect(s.campaigns[0].phase).toBe("communicating");
   });
 });
+
+describe("campaign_phase_advanced artifact generation (new)", () => {
+  it("creates the artifact when a new campaign finishes scoring", () => {
+    const launched = appReducer(
+      { ...initialState, campaigns: [{ id: "c1", name: "C", status: "draft", createdAt: "x", sourceType: "new", channels: ["sms"] }] },
+      { type: "campaign_launched", id: "c1", timestamp: "t", budget: 500 },
+    );
+    expect(launched.artifacts).toHaveLength(0);
+    const advanced = appReducer(launched, { type: "campaign_phase_advanced", id: "c1" });
+    expect(advanced.campaigns[0].phase).toBe("communicating");
+    expect(advanced.artifacts).toHaveLength(1);
+    expect(advanced.artifacts[0]).toMatchObject({ campaignId: "c1", kind: "signals_conversions" });
+    expect(advanced.notifications.signalsBadge).toBe(true);
+  });
+  it("does not double-create on a repeat advance", () => {
+    let s = appReducer(
+      { ...initialState, campaigns: [{ id: "c1", name: "C", status: "draft", createdAt: "x", sourceType: "new", channels: ["sms"] }] },
+      { type: "campaign_launched", id: "c1", timestamp: "t", budget: 500 },
+    );
+    s = appReducer(s, { type: "campaign_phase_advanced", id: "c1" });
+    s = appReducer(s, { type: "campaign_phase_advanced", id: "c1" });
+    expect(s.artifacts).toHaveLength(1);
+  });
+});

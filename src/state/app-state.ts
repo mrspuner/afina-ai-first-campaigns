@@ -1127,13 +1127,31 @@ export function appReducer(state: AppState, action: Action): AppState {
       };
     }
 
-    case "campaign_phase_advanced":
+    case "campaign_phase_advanced": {
+      const c = state.campaigns.find((cc) => cc.id === action.id);
+      if (!c) return state;
+      const alreadyHasArtifact = state.artifacts.some((a) => a.campaignId === c.id);
+      const newArtifacts: Artifact[] = alreadyHasArtifact
+        ? []
+        : [{
+            id: `art_${nanoid(8)}`,
+            campaignId: c.id,
+            kind: artifactKindForCampaign(c),
+            count: estimateArtifactCount(c),
+            createdAt: new Date().toISOString(),
+          }];
       return {
         ...state,
-        campaigns: state.campaigns.map((c) =>
-          c.id === action.id ? { ...c, phase: "communicating" } : c
+        campaigns: state.campaigns.map((cc) =>
+          cc.id === action.id ? { ...cc, phase: "communicating" } : cc
         ),
+        artifacts: [...state.artifacts, ...newArtifacts],
+        notifications:
+          newArtifacts.length > 0
+            ? { ...state.notifications, signalsBadge: true }
+            : state.notifications,
       };
+    }
 
     case "open_workflow":
       return {
