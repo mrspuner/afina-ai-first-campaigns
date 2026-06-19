@@ -186,7 +186,7 @@ export function DevPanel() {
                   isActive ? "text-[#4ade80]" : "text-[#666]"
                 )}
               >
-                {preset.signals.length} · {preset.campaigns.length}
+                {preset.artifacts.length} · {preset.campaigns.length}
                 {isActive ? " ✓" : ""}
               </span>
             </button>

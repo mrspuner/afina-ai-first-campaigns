@@ -189,8 +189,8 @@ export const PRESET_TEMPLATES: MessageTemplate[] = [
 export type Preset = {
   key: "empty" | "mid" | "full";
   label: string;
-  signals: Signal[];
   campaigns: Campaign[];
+  artifacts: Artifact[];
 };
 
 export type SectionName = "Статистика" | "Сигналы" | "Артефакты" | "Кампании" | "Настройки";
@@ -800,7 +800,10 @@ export function appReducer(state: AppState, action: Action): AppState {
           };
       return {
         ...state,
-        signals: action.preset.signals,
+        // Campaign-first presets seed campaigns + artifacts, no top-level
+        // signals — applying any preset clears the (legacy) signals list.
+        signals: [],
+        artifacts: action.preset.artifacts,
         campaigns: action.preset.campaigns,
         stats,
         survey,

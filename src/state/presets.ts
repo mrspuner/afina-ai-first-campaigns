@@ -1,23 +1,17 @@
 import { nanoid } from "nanoid";
 import type {
+  Artifact,
   Campaign,
   CampaignStatus,
   Preset,
-  Signal,
-  SignalType,
 } from "./app-state";
-import type { StepData } from "@/types/campaign";
+import type { Channel, SourceType } from "@/types/campaign";
 import { SCENARIOS } from "@/data/scenarios";
-import { makeRng, splitSegments } from "./metrics";
-
-const SIGNAL_TYPES: SignalType[] = [
-  "Регистрация",
-  "Первая сделка",
-  "Апсейл",
-  "Реактивация",
-  "Возврат",
-  "Удержание",
-];
+import { makeRng } from "./metrics";
+import {
+  artifactKindForCampaign,
+  estimateArtifactCount,
+} from "./artifact-metrics";
 
 const PRETTY_NAMES = [
   "Летний апсейл премиум",
@@ -32,8 +26,10 @@ const PRETTY_NAMES = [
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// PRNG (makeRng) и splitSegments берутся из единого движка чисел
-// (src/state/metrics.ts) — никаких локальных генераторов.
+const ALL_CHANNELS: Channel[] = ["sms", "push", "email", "ivr"];
+
+// PRNG (makeRng) берётся из единого движка чисел (src/state/metrics.ts) —
+// никаких локальных генераторов.
 
 function rndInt(rng: () => number, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
@@ -48,33 +44,6 @@ function rndPastDate(rng: () => number, spanDays: number, now: number): string {
   return new Date(now - offset).toISOString();
 }
 
-// Plausible filler for the "Настройки сигнала" table on preset (demo) signals.
-// Interests/triggers are stored as display strings (the screen joins them
-// verbatim), so readable labels are enough — no id lookup needed.
-const INTERESTS_POOL = [
-  "Ипотека и кредиты",
-  "Автокредитование",
-  "Инвестиции и вклады",
-  "Премиальные продукты",
-  "Рефинансирование",
-  "Страхование",
-  "Дебетовые карты",
-  "Новостройки",
-  "Лизинг",
-  "Кэшбэк-программы",
-];
-
-const TRIGGERS_POOL = [
-  "Посещение сайтов банков",
-  "Сравнение кредитных ставок",
-  "Заявка на ипотеку онлайн",
-  "Кредитный калькулятор",
-  "Поиск автомобиля в кредит",
-  "Просмотр тарифов вкладов",
-  "Брошенная заявка на карту",
-  "Чтение обзоров инвестпродуктов",
-];
-
 function rndSample<T>(rng: () => number, arr: readonly T[], n: number): T[] {
   const pool = [...arr];
   const out: T[] = [];
@@ -84,64 +53,27 @@ function rndSample<T>(rng: () => number, arr: readonly T[], n: number): T[] {
   return out;
 }
 
-function buildWizardData(type: SignalType, rng: () => number): StepData {
-  const scenarioId =
-    SCENARIOS.find((s) => s.isBase && s.signalType === type)?.id ?? null;
-  return {
-    scenario: scenarioId,
-    interests: rndSample(rng, INTERESTS_POOL, rndInt(rng, 2, 4)),
-    triggers: rndSample(rng, TRIGGERS_POOL, rndInt(rng, 2, 3)),
-    triggerConfig: {},
-    // campaign-first контракт: сегментный шаг визарда удалён, добавлены
-    // sourceType/channels (Task 1/Task 10).
-    sourceType: "new",
-    channels: [],
-    budget: rndInt(rng, 30, 300) * 1000,
-    file: null,
-  };
-}
-
 export type PresetKey = "empty" | "mid" | "full";
 
-type GenerateSignalsOpts = {
-  count: number;
-  seed: number;
-  countRange: [number, number];
-  dateSpanDays: number;
-  now: number;
-};
-
-export function generateSignals(opts: GenerateSignalsOpts): Signal[] {
-  const rng = makeRng(opts.seed);
-  const out: Signal[] = [];
-  for (let i = 0; i < opts.count; i++) {
-    const type = SIGNAL_TYPES[i % SIGNAL_TYPES.length];
-    const count = rndInt(rng, opts.countRange[0], opts.countRange[1]);
-    const createdAt = rndPastDate(rng, opts.dateSpanDays, opts.now);
-    const updatedAt = rndPastDate(rng, opts.dateSpanDays, opts.now);
-    out.push({
-      id: `sig_${nanoid(6)}_${i}`,
-      type,
-      count,
-      segments: splitSegments(count, rng),
-      createdAt,
-      updatedAt,
-      wizardData: buildWizardData(type, rng),
-    });
-  }
-  return out;
-}
+const LAUNCHED_STATUSES: CampaignStatus[] = ["active", "paused", "completed"];
 
 type GenerateCampaignsOpts = {
   seed: number;
-  signals: Signal[];
   distribution: Record<CampaignStatus, number>;
   dateSpanDays: number;
   now: number;
 };
 
+/**
+ * Campaign-first seed: campaigns are generated FROM scenarios (no top-level
+ * Signal). A base scenario is picked per campaign; `name`, `scenario`,
+ * `sourceType`, `channels` (drives artifact kind) and `budget` are derived.
+ * `signalId` is intentionally never set.
+ */
 export function generateCampaigns(opts: GenerateCampaignsOpts): Campaign[] {
   const rng = makeRng(opts.seed);
+  const baseScenarios = SCENARIOS.filter((s) => s.isBase);
+
   const statuses: CampaignStatus[] = [];
   (Object.keys(opts.distribution) as CampaignStatus[]).forEach((status) => {
     for (let i = 0; i < opts.distribution[status]; i++) statuses.push(status);
@@ -155,19 +87,34 @@ export function generateCampaigns(opts: GenerateCampaignsOpts): Campaign[] {
   const out: Campaign[] = [];
   let prettyUsed = 0;
   statuses.forEach((status, idx) => {
-    const signal = rndPick(rng, opts.signals);
+    const scenario = rndPick(rng, baseScenarios);
     const usePretty = rng() < 0.2 && prettyUsed < PRETTY_NAMES.length;
     const name = usePretty
       ? PRETTY_NAMES[prettyUsed++]
-      : `${signal.type} #${idx + 1}`;
+      : `${scenario.name} #${idx + 1}`;
+
+    // Source mostly "new" (cold acquisition), occasionally "own"/"stream".
+    const sourceRoll = rng();
+    const sourceType: SourceType =
+      sourceRoll < 0.7 ? "new" : sourceRoll < 0.85 ? "own" : "stream";
+
+    // ~60% get a non-empty channel subset → "signals_conversions" artifacts;
+    // the rest get [] → degenerate "signals" artifacts.
+    const channels: Channel[] =
+      rng() < 0.6 ? rndSample(rng, ALL_CHANNELS, rndInt(rng, 1, 3)) : [];
+
     const createdAt = rndPastDate(rng, opts.dateSpanDays, opts.now);
     const campaign: Campaign = {
       id: `cmp_${nanoid(6)}_${idx}`,
       name,
-      signalId: signal.id,
       status,
       createdAt,
+      scenario: { id: scenario.id, name: scenario.name },
+      sourceType,
+      channels,
+      budget: rndInt(rng, 30, 300) * 1000,
     };
+
     if (status === "active") {
       campaign.launchedAt = rndPastDate(rng, 30, opts.now);
     }
@@ -190,48 +137,89 @@ export function generateCampaigns(opts: GenerateCampaignsOpts): Campaign[] {
         launchedMs + Math.floor(rng() * (opts.now - launchedMs))
       ).toISOString();
     }
+
+    // Demo: scoring already finished on every launched campaign.
+    if (LAUNCHED_STATUSES.includes(status)) {
+      campaign.phase = "communicating";
+    }
+
     out.push(campaign);
   });
+  return out;
+}
+
+type GenerateArtifactsOpts = {
+  seed: number;
+  campaigns: Campaign[];
+};
+
+/**
+ * Exactly one ready Artifact per LAUNCHED campaign (active/paused/completed —
+ * never draft). Kind/count derive from the campaign (artifact-metrics);
+ * `createdAt` mirrors the campaign's launchedAt.
+ */
+export function generateArtifacts(opts: GenerateArtifactsOpts): Artifact[] {
+  const rng = makeRng(opts.seed);
+  const out: Artifact[] = [];
+  let idx = 0;
+  for (const campaign of opts.campaigns) {
+    if (!LAUNCHED_STATUSES.includes(campaign.status)) continue;
+    const base = estimateArtifactCount(campaign);
+    // Spread around the deterministic base for plausible variety.
+    const count = campaign.file?.rowCount
+      ? base
+      : rndInt(rng, Math.round(base * 0.5), Math.round(base * 2.5));
+    out.push({
+      id: `art_${nanoid(6)}_${idx}`,
+      campaignId: campaign.id,
+      kind: artifactKindForCampaign(campaign),
+      count,
+      createdAt: campaign.launchedAt ?? campaign.createdAt,
+    });
+    idx++;
+  }
   return out;
 }
 
 function buildPresets(): Record<PresetKey, Preset> {
   const now = Date.now();
 
-  const midSignals = generateSignals({
-    count: 5,
-    seed: 0x5eed,
-    countRange: [500, 8000],
-    dateSpanDays: 30,
-    now,
-  });
   const midCampaigns = generateCampaigns({
     seed: 0xcafe,
-    signals: midSignals,
     distribution: { active: 2, paused: 1, completed: 3, draft: 2 },
     dateSpanDays: 30,
     now,
   });
-
-  const fullSignals = generateSignals({
-    count: 30,
-    seed: 0xb16b00b5,
-    countRange: [500, 50000],
-    dateSpanDays: 90,
-    now,
+  const midArtifacts = generateArtifacts({
+    seed: 0x5eed,
+    campaigns: midCampaigns,
   });
+
   const fullCampaigns = generateCampaigns({
     seed: 0xf00d,
-    signals: fullSignals,
     distribution: { active: 8, paused: 2, completed: 10, draft: 6 },
     dateSpanDays: 90,
     now,
   });
+  const fullArtifacts = generateArtifacts({
+    seed: 0xb16b00b5,
+    campaigns: fullCampaigns,
+  });
 
   return {
-    empty: { key: "empty", label: "Empty", signals: [], campaigns: [] },
-    mid: { key: "mid", label: "Mid", signals: midSignals, campaigns: midCampaigns },
-    full: { key: "full", label: "Full", signals: fullSignals, campaigns: fullCampaigns },
+    empty: { key: "empty", label: "Empty", campaigns: [], artifacts: [] },
+    mid: {
+      key: "mid",
+      label: "Mid",
+      campaigns: midCampaigns,
+      artifacts: midArtifacts,
+    },
+    full: {
+      key: "full",
+      label: "Full",
+      campaigns: fullCampaigns,
+      artifacts: fullArtifacts,
+    },
   };
 }
 

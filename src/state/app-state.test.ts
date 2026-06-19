@@ -157,7 +157,7 @@ describe("appReducer — campaign_status_changed", () => {
 });
 
 describe("appReducer — preset_applied", () => {
-  it("replaces signals and campaigns", () => {
+  it("replaces campaigns + artifacts and clears legacy signals", () => {
     const state: AppState = {
       ...initialState,
       signals: [makeSignal({ id: "old" })],
@@ -166,16 +166,26 @@ describe("appReducer — preset_applied", () => {
     const preset = {
       key: "mid" as const,
       label: "Mid",
-      signals: [makeSignal({ id: "new-1" }), makeSignal({ id: "new-2" })],
       campaigns: [makeCampaign({ id: "new-cmp" })],
+      artifacts: [
+        {
+          id: "art_new",
+          campaignId: "new-cmp",
+          kind: "signals" as const,
+          count: 1000,
+          createdAt: "2026-04-01T00:00:00.000Z",
+        },
+      ],
     };
     const next = appReducer(state, { type: "preset_applied", preset });
-    expect(next.signals.map((s) => s.id)).toEqual(["new-1", "new-2"]);
+    // Campaign-first presets carry no signals; applying clears the legacy list.
+    expect(next.signals).toEqual([]);
     expect(next.campaigns.map((c) => c.id)).toEqual(["new-cmp"]);
+    expect(next.artifacts.map((a) => a.id)).toEqual(["art_new"]);
   });
 
   it("preserves view when current view is welcome", () => {
-    const preset = { key: "mid" as const, label: "Mid", signals: [], campaigns: [] };
+    const preset = { key: "mid" as const, label: "Mid", campaigns: [], artifacts: [] };
     const next = appReducer(initialState, { type: "preset_applied", preset });
     expect(next.view).toEqual({ kind: "welcome" });
   });
@@ -189,8 +199,8 @@ describe("appReducer — preset_applied", () => {
     const preset = {
       key: "empty" as const,
       label: "Empty",
-      signals: [],
       campaigns: [],
+      artifacts: [],
     };
     const next = appReducer(state, { type: "preset_applied", preset });
     expect(next.view).toEqual({ kind: "section", name: "Кампании" });
@@ -205,8 +215,8 @@ describe("appReducer — preset_applied", () => {
     const preset = {
       key: "mid" as const,
       label: "Mid",
-      signals: [],
       campaigns: [kept],
+      artifacts: [],
     };
     const next = appReducer(state, { type: "preset_applied", preset });
     expect(next.view.kind).toBe("workflow");
@@ -218,7 +228,7 @@ describe("appReducer — preset_applied", () => {
       workflowCommand: "some-command",
       launchFlyoutOpen: true,
     };
-    const preset = { key: "empty" as const, label: "Empty", signals: [], campaigns: [] };
+    const preset = { key: "empty" as const, label: "Empty", campaigns: [], artifacts: [] };
     const next = appReducer(state, { type: "preset_applied", preset });
     expect(next.workflowCommand).toBe("some-command");
     expect(next.launchFlyoutOpen).toBe(true);
