@@ -89,6 +89,16 @@ describe("all template nodes have matching params.kind", () => {
   });
 });
 
+describe("withScoring spacing (no overlap)", () => {
+  it("keeps every adjacent node at least STEP apart on x", () => {
+    const { nodes } = createTemplate("Регистрация", "new"); // new → has scoring
+    const xs = [...new Set(nodes.map((n) => n.position.x))].sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(210);
+    }
+  });
+});
+
 describe("source-aware generation (A3)", () => {
   it("own source has NO scoring node", () => {
     const g = createTemplate("Регистрация", "own");

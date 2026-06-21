@@ -278,15 +278,15 @@ function withScoring(t: Template): Template {
     "scoring",
     "Скоринг",
     "scoring",
-    entry.position.x + STEP / 2,
+    entry.position.x + STEP,
     entry.position.y,
     "Качество базы"
   );
-  // Shift everything to the right of the entry by STEP/2 to make room.
+  // Shift everything to the right of the entry by STEP to make room.
   const shifted = t.nodes.map((nd) =>
     nd.id === entryId
       ? nd
-      : { ...nd, position: { ...nd.position, x: nd.position.x + STEP / 2 } }
+      : { ...nd, position: { ...nd.position, x: nd.position.x + STEP } }
   );
   const edges = t.edges
     .filter((edge) => edge.id !== firstEdge.id)
