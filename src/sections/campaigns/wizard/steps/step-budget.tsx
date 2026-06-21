@@ -7,6 +7,8 @@ import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import {
   estimateCampaignBudget,
+  STREAM_DAYS,
+  FALLBACK_BASE,
   type BudgetEstimateInput,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { cn } from "@/lib/utils";
@@ -15,16 +17,21 @@ function formatRub(amount: number): string {
   return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}`;
 }
 
+const formatRubApprox = (n: number) => `~${formatRub(n)}`;
+
 export interface BudgetRow {
   key: "signals" | "communication" | "total";
   label: string;
   amount: number;
   display: string;
+  /** Optional muted segment shown between label and amount (e.g. "~N контактов"). */
+  contactLabel?: string;
 }
 
 /** Pure forecast rows for the Бюджет step (own's signals line reads «бесплатно»). */
 export function buildBudgetRows(input: BudgetEstimateInput): BudgetRow[] {
   const est = estimateCampaignBudget(input);
+  const contactCount = input.baseSize && input.baseSize > 0 ? input.baseSize : FALLBACK_BASE;
   return [
     {
       key: "signals",
@@ -33,19 +40,20 @@ export function buildBudgetRows(input: BudgetEstimateInput): BudgetRow[] {
       display:
         input.sourceType === "own" || est.signals === 0
           ? "бесплатно"
-          : formatRub(est.signals),
+          : formatRubApprox(est.signals),
+      contactLabel: `~${contactCount.toLocaleString("ru-RU")} контактов`,
     },
     {
       key: "communication",
       label: "Коммуникация",
       amount: est.communication,
-      display: formatRub(est.communication),
+      display: formatRubApprox(est.communication),
     },
     {
       key: "total",
       label: "Итого",
       amount: est.total,
-      display: formatRub(est.total),
+      display: formatRubApprox(est.total),
     },
   ];
 }
@@ -123,7 +131,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
   return (
     <StepContent
       title="Прогноз бюджета"
-      subtitle="Рассчитали стоимость по выбранному источнику и каналам."
+      subtitle={`Рассчитали стоимость по выбранному источнику, каналам${data.fileRowCount ? " и размеру базы" : ""}.`}
       maxWidth="max-w-xl"
     >
       <div className="flex flex-col gap-5">
@@ -145,14 +153,21 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               >
                 {row.label}
               </span>
-              <span className="tabular-nums">{row.display}</span>
+              <span className="flex items-center gap-3">
+                {row.contactLabel && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {row.contactLabel}
+                  </span>
+                )}
+                <span className="tabular-nums">{row.display}</span>
+              </span>
             </div>
           ))}
           {isStream && estimate.dailyBudget !== undefined && (
             <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
               <span>Дневной бюджет</span>
               <span className="tabular-nums">
-                {formatRub(estimate.dailyBudget)} · потолок {formatRub(estimate.total)}
+                ~{formatRub(estimate.dailyBudget)}/день × {STREAM_DAYS} дн · потолок ~{formatRub(estimate.total)}
               </span>
             </div>
           )}

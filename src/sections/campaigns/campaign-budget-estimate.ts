@@ -15,9 +15,9 @@ import { UNIT_COST, DYNAMIC_RATE } from "./campaign-cost";
 /** ₽ per scored contact for new/stream sources; own bases are free. */
 const SIGNAL_UNIT_COST = 0.25;
 /** Cap horizon (days) relating a stream's daily budget to its total cap. */
-const STREAM_DAYS = 30;
+export const STREAM_DAYS = 30;
 /** Fallback base size when no file/scenario size is known. */
-const FALLBACK_BASE = 10_000;
+export const FALLBACK_BASE = 10_000;
 
 export interface BudgetEstimateInput {
   sourceType: SourceType;
