@@ -82,4 +82,20 @@ describe("summarizeGraph", () => {
     const json = JSON.stringify(summary);
     expect(json).not.toContain("params");
   });
+
+  it("прокидывает label ребра (ветки YES/NO)", () => {
+    const labeledGraph = {
+      nodes,
+      edges: [
+        { id: "e1", source: "signal-1", target: "push-1", type: "default", label: "YES" } as WorkflowEdge,
+      ],
+    };
+    const summary = summarizeGraph(labeledGraph);
+    expect(summary.edges[0].label).toBe("YES");
+  });
+
+  it("не добавляет label, если его нет на ребре", () => {
+    const summary = summarizeGraph(graph); // graph fixture has unlabeled edge
+    expect("label" in summary.edges[0]).toBe(false);
+  });
 });

@@ -30,7 +30,9 @@ export function buildSystemPrompt(context: AssistContext): string {
                 `- [${n.id}] "${n.label}" (${n.nodeType}${n.sublabel ? `, ${n.sublabel}` : ""})`
             )
             .join("\n"),
-          context.graph.edges.map((e) => `${e.from} → ${e.to}`).join("; "),
+          context.graph.edges
+            .map((e) => (e.label ? `${e.from} →[${e.label}] ${e.to}` : `${e.from} → ${e.to}`))
+            .join("; "),
         ]
       : []),
     ...(context.selectedNode

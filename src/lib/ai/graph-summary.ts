@@ -15,7 +15,7 @@ export interface GraphNodeSummary {
 export function summarizeGraph(graph: {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-}): { nodes: GraphNodeSummary[]; edges: Array<{ from: string; to: string }> } {
+}): { nodes: GraphNodeSummary[]; edges: Array<{ from: string; to: string; label?: string }> } {
   return {
     nodes: graph.nodes.map((n) => ({
       id: n.id,
@@ -23,6 +23,10 @@ export function summarizeGraph(graph: {
       nodeType: n.data.nodeType,
       ...(n.data.sublabel ? { sublabel: n.data.sublabel } : {}),
     })),
-    edges: graph.edges.map((e) => ({ from: e.source, to: e.target })),
+    edges: graph.edges.map((e) => ({
+      from: e.source,
+      to: e.target,
+      ...(typeof e.label === "string" && e.label ? { label: e.label } : {}),
+    })),
   };
 }

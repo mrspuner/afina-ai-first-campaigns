@@ -26,7 +26,7 @@ export const assistContextSchema = z.object({
   /** Компактная сводка текущего графа воркфлоу (план 005). */
   graph: z.object({
     nodes: z.array(graphNodeSummarySchema),
-    edges: z.array(z.object({ from: z.string(), to: z.string() })),
+    edges: z.array(z.object({ from: z.string(), to: z.string(), label: z.string().optional() })),
   }).optional(),
   /** Выбранная нода (если пользователь кликнул на ноду). */
   selectedNode: graphNodeSummarySchema.optional(),
