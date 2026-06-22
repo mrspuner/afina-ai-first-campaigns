@@ -89,13 +89,15 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
           )
         )}
         <StatItem
-          label="Бюджет"
-          value={
-            metrics.launched
-              ? `расчётный ${formatRub(metrics.plannedBudget)} · факт ${formatRub(metrics.actualSpend)}`
-              : `расчётный ${formatRub(metrics.plannedBudget)}`
-          }
+          label="Бюджет (расчётный)"
+          value={formatRub(metrics.plannedBudget)}
         />
+        {metrics.launched && (
+          <StatItem
+            label="Бюджет (факт)"
+            value={formatRub(metrics.actualSpend)}
+          />
+        )}
       </div>
     </Card>
   );

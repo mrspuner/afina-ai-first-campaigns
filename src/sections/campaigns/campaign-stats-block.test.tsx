@@ -35,6 +35,9 @@ describe("buildCampaignStats", () => {
     );
     expect(s).not.toBeNull();
     expect(s!.sends).toBeGreaterThan(0);
+    // Two distinct budget rows: planned and actual
     expect(s!.plannedBudget).toBe(5000);
+    expect(typeof s!.actualSpend).toBe("number");
+    expect(s!.actualSpend).toBeGreaterThan(0);
   });
 });

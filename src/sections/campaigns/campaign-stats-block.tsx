@@ -79,9 +79,14 @@ export function CampaignStatsBlock({ campaign, artifact }: CampaignStatsBlockPro
       )}
 
       <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
-        <span className="text-muted-foreground">Бюджет</span>
+        <span className="text-muted-foreground">Бюджет (расчётный)</span>
         <span className="tabular-nums text-foreground">
-          расчётный {formatRub(stats.plannedBudget)} · факт{" "}
+          {formatRub(stats.plannedBudget)}
+        </span>
+      </div>
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="text-muted-foreground">Бюджет (факт)</span>
+        <span className="tabular-nums text-foreground">
           {formatRub(stats.actualSpend)}
         </span>
       </div>

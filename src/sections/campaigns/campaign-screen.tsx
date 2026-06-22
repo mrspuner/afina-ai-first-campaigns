@@ -157,9 +157,9 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Путь кампании (read-only) — источник-зависимый линейный индикатор */}
+      {/* Статус кампании (read-only) — источник-зависимый линейный индикатор */}
       {sourceType && (isActive || isCompleted) && (
-        <CardSection label="Путь кампании">
+        <CardSection label="Статус кампании">
           <CampaignPathIndicator sourceType={sourceType} campaign={campaign} />
         </CardSection>
       )}
