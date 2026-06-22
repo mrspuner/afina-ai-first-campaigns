@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ArtifactsSection } from "./artifacts-section";
 import { AppStateProvider } from "@/state/app-state-context";
+import { ChatProvider } from "@/state/chat-context";
 
 function renderSection() {
   return render(
     <AppStateProvider>
-      <ArtifactsSection />
+      <ChatProvider>
+        <ArtifactsSection />
+      </ChatProvider>
     </AppStateProvider>,
   );
 }

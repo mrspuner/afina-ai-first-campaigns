@@ -2,7 +2,8 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppDispatch, useAppState } from "@/state/app-state-context";
+import { useAppState } from "@/state/app-state-context";
+import { useChat } from "@/state/chat-context";
 import type { MessageTemplate } from "@/state/app-state";
 import { TemplateCard } from "./template-card";
 import { TemplatesEmptyState } from "./templates-empty-state";
@@ -46,19 +47,19 @@ export function TemplatesTabView({
 /** Connected Шаблоны tab — lists reusable channel-typed message templates. */
 export function TemplatesTab() {
   const { templates } = useAppState();
-  const dispatch = useAppDispatch();
+  const chat = useChat();
 
-  // Entering the wizard is sufficient for the prototype; template
-  // pre-selection inside a communication node is a Кампании-epic concern.
-  function startWizard() {
-    dispatch({ type: "start_campaign_flow" });
+  // «Создать шаблон» opens the AI template drawer (#15).
+  // «Использовать в кампании» still enters the wizard (Кампании-epic concern).
+  function openDrawer() {
+    chat.openTemplateDrawer();
   }
 
   return (
     <TemplatesTabView
       templates={templates}
-      onUseInNewCampaign={startWizard}
-      onCreateManual={startWizard}
+      onUseInNewCampaign={openDrawer}
+      onCreateManual={openDrawer}
     />
   );
 }
