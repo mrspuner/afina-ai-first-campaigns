@@ -41,7 +41,7 @@ interface CampaignCardProps {
 }
 
 export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) {
-  const scenarioLine = `Сценарий: ${campaign.scenario?.name ?? "—"}`;
+  const scenarioName = campaign.scenario?.name ?? "—";
   const sourceLabel = campaign.sourceType
     ? SOURCE_LABEL[campaign.sourceType]
     : null;
@@ -67,8 +67,10 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
         <StatusBadge status={campaign.status} />
       </div>
       <div className="flex items-baseline justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-xs text-muted-foreground">{scenarioLine}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="shrink-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            Сценарий: {scenarioName}
+          </span>
           {sourceLabel && (
             <span className="shrink-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
               {sourceLabel}
