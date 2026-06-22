@@ -445,15 +445,19 @@ export function appReducer(state: AppState, action: Action): AppState {
         file,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,
+        // new drafts collect signals pre-launch — start in the scoring phase so
+        // the campaign card shows collection progress and gates «Запустить».
+        // stream/own launch immediately, so they carry no pre-launch phase.
+        phase: sd.sourceType === "new" ? "scoring" : undefined,
         scenario: scenarioId ? { id: scenarioId, name: action.scenarioName } : undefined,
       };
       return {
         ...state,
         campaigns: [...state.campaigns, newCampaign],
+        // Wizard finish now opens the campaign CARD (not the workflow editor).
         view: {
-          kind: "workflow",
+          kind: "campaign",
           campaign: { id: newCampaign.id, name: newCampaign.name },
-          launched: false,
         },
         activeSection: null,
         campaignFilter: [],
@@ -905,13 +909,14 @@ export function appReducer(state: AppState, action: Action): AppState {
         }
       }
 
-      // Phase + artifact by source matrix (spec §3):
-      //  own    → no scoring; artifact ready immediately; phase communicating.
-      //  new    → scoring phase; artifact lands when scoring finishes (separate task).
-      //  stream → perpetual; artifact at launch; phase communicating.
-      const source = c.sourceType ?? "new";
-      const phase: Campaign["phase"] = source === "new" ? "scoring" : "communicating";
-      const makeArtifact = source !== "new";
+      // Signal collection now happens PRE-launch (new drafts run scoring on the
+      // campaign card before «Запустить» unlocks), so launch always transitions
+      // straight to communicating. Artifact is generated only if none exists yet
+      // (idempotent): own/stream get theirs here; new already produced its
+      // collected-signals artifact during pre-launch `campaign_phase_advanced`.
+      const phase: Campaign["phase"] = "communicating";
+      const alreadyHasArtifact = state.artifacts.some((a) => a.campaignId === c.id);
+      const makeArtifact = !alreadyHasArtifact;
       const newArtifacts: Artifact[] = makeArtifact
         ? [{
             id: `art_${nanoid(8)}`,

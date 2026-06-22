@@ -3,7 +3,7 @@ import { appReducer, initialState } from "./app-state";
 import { initialStepData } from "@/types/campaign";
 
 describe("campaign_created_from_wizard", () => {
-  it("creates a draft campaign from wizard StepData and opens the workflow", () => {
+  it("creates a draft campaign from wizard StepData and opens the campaign card", () => {
     const next = appReducer(initialState, {
       type: "campaign_created_from_wizard",
       stepData: { ...initialStepData, scenario: "registration", sourceType: "new", channels: ["sms"], budget: 1000 },
@@ -16,6 +16,33 @@ describe("campaign_created_from_wizard", () => {
     expect(c.channels).toEqual(["sms"]);
     expect(c.scenario).toEqual({ id: "registration", name: "Регистрация" });
     expect("signalId" in c).toBe(false);
-    expect(next.view).toMatchObject({ kind: "workflow", campaign: { id: c.id }, launched: false });
+    expect(next.view).toMatchObject({ kind: "campaign", campaign: { id: c.id } });
+  });
+
+  it("new source starts in the scoring phase (pre-launch collection)", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "registration", sourceType: "new", channels: ["sms"] },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].phase).toBe("scoring");
+  });
+
+  it("stream source carries no pre-launch phase", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "registration", sourceType: "stream", channels: ["sms"] },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].phase).toBeUndefined();
+  });
+
+  it("own source carries no pre-launch phase", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "registration", sourceType: "own", channels: ["sms"] },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].phase).toBeUndefined();
   });
 });

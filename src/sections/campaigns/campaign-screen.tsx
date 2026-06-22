@@ -14,13 +14,14 @@ import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { ProviderList } from "./provider-list";
 import { CampaignPathIndicator } from "./campaign-path-indicator";
 import { CampaignSignalProgress } from "./campaign-signal-progress";
+import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
 import { getScenario } from "@/data/scenarios";
 
-/** Prototype scoring window (ms) before a new/stream campaign auto-advances
- *  from `scoring` to `communicating`. */
+/** Prototype collection window (ms) before a `new` draft auto-advances
+ *  from `scoring` to `communicating` (pre-launch signal collection). */
 const SCORING_WINDOW_MS = 8000;
 
 function formatDate(iso: string | undefined): string {
@@ -37,23 +38,20 @@ export function CampaignScreen() {
       ? campaigns.find((c) => c.id === view.campaign.id)
       : undefined;
 
-  // D3: advance a launched new/stream campaign from scoring → communicating
-  // after the (simulated) scoring window. own campaigns have no scoring phase.
-  // FD-4: dispatches `campaign_phase_advanced` (present in the contract).
+  // Pre-launch signal collection: a `new` DRAFT collects signals on the card
+  // (phase "scoring") before «Запустить» unlocks. After the (simulated) window,
+  // advance scoring → communicating, which also generates the collected-signals
+  // artifact. stream/own carry no pre-launch phase, so they never collect here.
   const campaignId = campaign?.id;
-  const campaignStatus = campaign?.status;
-  const campaignPhase = campaign?.phase;
-  const campaignSource = campaign?.sourceType;
+  const collecting = campaign ? isCollecting(campaign) : false;
   useEffect(() => {
     if (!campaignId) return;
-    if (campaignStatus !== "active") return;
-    if (campaignSource === "own") return;
-    if (campaignPhase !== "scoring") return;
+    if (!collecting) return;
     const t = setTimeout(() => {
       dispatch({ type: "campaign_phase_advanced", id: campaignId });
     }, SCORING_WINDOW_MS);
     return () => clearTimeout(t);
-  }, [campaignId, campaignStatus, campaignPhase, campaignSource, dispatch]);
+  }, [campaignId, collecting, dispatch]);
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -66,11 +64,10 @@ export function CampaignScreen() {
   const isCompleted = status === "completed";
   const hasStats = isActive || isCompleted;
   const sourceType = campaign.sourceType;
-  // Scoring progress block shows while a new/stream campaign is still scoring.
-  const isScoring =
-    isActive &&
-    sourceType !== "own" &&
-    (campaign.phase ?? "scoring") === "scoring";
+  // Pre-launch collection: a `new` draft is still gathering signals. While
+  // collecting, the card shows progress and «Запустить» stays locked.
+  const collectingNow = isCollecting(campaign);
+  const canLaunch = canLaunchCampaign(campaign);
 
   // Artifacts produced by this campaign (newest first).
   const campaignArtifacts = artifacts
@@ -172,9 +169,11 @@ export function CampaignScreen() {
         <WorkflowMiniPreview signalType={signalType} onClick={openWorkflow} />
       </CardSection>
 
-      {/* Прогресс скоринга (new/stream, фаза scoring), иначе провайдеры */}
-      {isScoring ? (
-        <CardSection label="Прогресс">
+      {/* Сбор сигналов (new-черновик, фаза scoring) → прогресс; активная →
+          провайдеры; завершённая → статус; иначе (готовый черновик/пауза) →
+          CTA «Запустить». */}
+      {collectingNow ? (
+        <CardSection label="Сбор сигналов">
           <CampaignSignalProgress campaign={campaign} />
         </CardSection>
       ) : isActive ? (
@@ -196,7 +195,11 @@ export function CampaignScreen() {
                 ? "Кампания остановлена. Возобновите её, чтобы снова подключить провайдеров."
                 : "Запустите кампанию — провайдеры начнут подключаться после оплаты."}
             </p>
-            <Button onClick={launch} className="gap-2 self-start">
+            <Button
+              onClick={launch}
+              disabled={!canLaunch}
+              className="gap-2 self-start"
+            >
               <Play className="h-4 w-4" />
               Запустить
             </Button>
@@ -205,18 +208,18 @@ export function CampaignScreen() {
       )}
 
       {/* Статистика — сводка в карточке (дополняет переход в полный отчёт) */}
-      {hasStats && !isScoring && (
+      {hasStats && (
         <CardSection label="Статистика">
           <CampaignStatsBlock campaign={campaign} artifact={campaignArtifact} />
         </CardSection>
       )}
 
       {/* Артефакты — что произвела кампания (Сигналы / Сигналы и конверсии) */}
-      {(campaignArtifacts.length > 0 || isScoring) && (
+      {(campaignArtifacts.length > 0 || collectingNow) && (
         <CardSection label="Артефакты">
           <CampaignArtifactsBlock
             artifacts={campaignArtifacts}
-            forming={isScoring}
+            forming={collectingNow}
             onOpen={(id) => dispatch({ type: "artifact_opened", id })}
           />
         </CardSection>
