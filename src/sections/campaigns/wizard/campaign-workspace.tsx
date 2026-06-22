@@ -7,9 +7,13 @@ import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { StepSource } from "@/sections/campaigns/wizard/steps/step-source";
+import { StepInterests } from "@/sections/campaigns/wizard/steps/step-interests";
+import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
+import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
+import { stepsForSource } from "@/sections/campaigns/wizard/wizard-steps";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
 const FALLBACK_BASE = 10_000;
@@ -97,11 +101,15 @@ function WorkspaceInner({
       const scenarioChanged =
         partial.scenario !== undefined &&
         partial.scenario !== stepData.scenario;
+      const sourceChanged =
+        partial.sourceType !== undefined &&
+        partial.sourceType !== stepData.sourceType;
 
       const { step: next, resetData } = computeStepTransition({
         currentStep,
         maxStep,
         scenarioChanged,
+        sourceChanged,
       });
 
       // Changing scenario invalidates everything downstream (interests,
@@ -111,8 +119,24 @@ function WorkspaceInner({
       // scenario after scrolling back to the rendered step-1 panel lands on
       // step 2 instead of overshooting. `setMaxStep(next)` collapses any
       // phantom steps that were reached under the old scenario.
+      //
+      // Changing the source likewise reshapes the tail of the step list
+      // (interests / file / integration differ per source). When only the
+      // source changed (scenario takes priority), reset downstream data but
+      // keep scenario + the new source, then rewind to the step right after
+      // the source picker.
       if (resetData) {
-        setStepData({ ...initialStepData, ...partial });
+        if (scenarioChanged) {
+          setStepData({ ...initialStepData, ...partial });
+        } else {
+          // sourceChanged: preserve scenario, apply the new source, clear the
+          // rest (interests/file/fileRowCount/apiKey/channels/budget/…).
+          setStepData((prev) => ({
+            ...initialStepData,
+            scenario: prev.scenario,
+            ...partial,
+          }));
+        }
         setMaxStep(next);
         setAnimatingStep(next);
         setCurrentStep(next);
@@ -131,7 +155,7 @@ function WorkspaceInner({
       }
       advanceTo(next);
     },
-    [advanceTo, currentStep, maxStep, stepData.scenario]
+    [advanceTo, currentStep, maxStep, stepData.scenario, stepData.sourceType]
   );
 
   const handleStepperClick = useCallback((step: number) => {
@@ -166,19 +190,27 @@ function WorkspaceInner({
     });
   }, [handleNext, onLaunchRequested, stepData]);
 
+  // The source-gated step sequence. The numeric currentStep/maxStep are
+  // 1-based INDICES into this list; the id at step N is steps[N-1].
+  const steps = stepsForSource(stepData.sourceType);
+
   function renderStepContent(step: number) {
     const props = { data: stepData, onNext: handleNext };
     // «Назад» возвращает на предыдущий шаг (плавный скролл к нему). Шаг 1
     // автопереходит по выбору сценария и футера не имеет, поэтому начинаем
     // прокидывать onBack со 2-го.
     const onBack = () => handleGoToStep(step - 1);
-    // 4-шаговый кампейн-флоу (spec §8):
-    // 1 Сценарий · 2 Источник · 3 Каналы · 4 Бюджет → запуск
-    switch (step) {
-      case 1: return <Step1Scenario {...props} />;
-      case 2: return <StepSource {...props} onBack={onBack} />;
-      case 3: return <StepChannels {...props} onBack={onBack} />;
-      case 4:
+    // Source-gated flow (spec §C): the visible steps depend on the chosen
+    // source. Budget is always the last step and triggers the launch.
+    const id = steps[step - 1];
+    switch (id) {
+      case "scenario": return <Step1Scenario {...props} />;
+      case "source": return <StepSource {...props} onBack={onBack} />;
+      case "interests": return <StepInterests {...props} onBack={onBack} />;
+      case "file": return <StepFile {...props} onBack={onBack} />;
+      case "integration": return <StepIntegration {...props} onBack={onBack} />;
+      case "channels": return <StepChannels {...props} onBack={onBack} />;
+      case "budget":
         return (
           <StepBudget
             {...props}
@@ -207,6 +239,7 @@ function WorkspaceInner({
               себе как активный шаг во время процесса, но не блокирует остальные
               (раньше disabled={currentStep === 7} замораживал весь степпер). */}
           <CampaignStepper
+            steps={steps}
             currentStep={currentStep}
             maxStep={maxStep}
             onStepClick={handleStepperClick}

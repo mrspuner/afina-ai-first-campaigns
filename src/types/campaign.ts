@@ -33,6 +33,8 @@ export interface StepData {
   budgetMode?: "recommended" | "custom";
   /** Stream source only: per-day cap, alongside `budget` as the total ceiling. */
   dailyBudget?: number;
+  /** Stream source only: integration API key entered on the Интеграция step. */
+  apiKey?: string;
 }
 
 export const initialStepData: StepData = {

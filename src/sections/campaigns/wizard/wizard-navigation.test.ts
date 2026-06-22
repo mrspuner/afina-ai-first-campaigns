@@ -34,4 +34,26 @@ describe("computeStepTransition", () => {
       computeStepTransition({ currentStep: 5, maxStep: 5, scenarioChanged: true })
     ).toEqual({ step: 2, resetData: true });
   });
+
+  it("rewinds to step 3 (after source) and resets data when the source changes", () => {
+    expect(
+      computeStepTransition({
+        currentStep: 4,
+        maxStep: 6,
+        scenarioChanged: false,
+        sourceChanged: true,
+      })
+    ).toEqual({ step: 3, resetData: true });
+  });
+
+  it("scenario change takes priority over a simultaneous source change", () => {
+    expect(
+      computeStepTransition({
+        currentStep: 4,
+        maxStep: 6,
+        scenarioChanged: true,
+        sourceChanged: true,
+      })
+    ).toEqual({ step: 2, resetData: true });
+  });
 });

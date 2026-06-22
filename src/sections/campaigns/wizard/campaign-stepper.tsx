@@ -2,15 +2,22 @@
 
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 
-export const STEPPER_ITEMS = [
-  { label: "Сценарий", step: 1 },
-  { label: "Источник", step: 2 },
-  { label: "Каналы", step: 3 },
-  { label: "Бюджет", step: 4 },
-];
+/** Russian labels for each wizard step id, rendered in the stepper rail. */
+export const STEP_LABELS: Record<WizardStepId, string> = {
+  scenario: "Сценарий",
+  source: "Источник",
+  interests: "Интересы",
+  file: "Файл",
+  integration: "Интеграция",
+  channels: "Каналы",
+  budget: "Бюджет",
+};
 
 interface CampaignStepperProps {
+  /** The active, source-dependent step sequence (1 row per id). */
+  steps: WizardStepId[];
   currentStep: number;
   maxStep: number;
   onStepClick: (step: number) => void;
@@ -18,6 +25,7 @@ interface CampaignStepperProps {
 }
 
 export function CampaignStepper({
+  steps,
   currentStep,
   maxStep,
   onStepClick,
@@ -25,7 +33,9 @@ export function CampaignStepper({
 }: CampaignStepperProps) {
   return (
     <div className="flex flex-col gap-1">
-      {STEPPER_ITEMS.map(({ label, step }, idx) => {
+      {steps.map((id, idx) => {
+        const step = idx + 1;
+        const label = STEP_LABELS[id];
         const isActive = step === currentStep;
         const isVisited = step <= maxStep;
         const isCompleted = isVisited && !isActive;
@@ -33,7 +43,7 @@ export function CampaignStepper({
         const isClickable = isVisited && !isActive && !disabled;
 
         return (
-          <div key={step} className="flex items-center gap-2.5">
+          <div key={id} className="flex items-center gap-2.5">
             {/* Connector line above (except first item) */}
             <div className="flex flex-col items-center self-stretch">
               <div
@@ -56,13 +66,13 @@ export function CampaignStepper({
                 {isCompleted ? (
                   <Check className="h-3 w-3" />
                 ) : (
-                  <span>{idx + 1}</span>
+                  <span>{step}</span>
                 )}
               </div>
               <div
                 className={cn(
                   "w-px flex-1",
-                  idx === STEPPER_ITEMS.length - 1
+                  idx === steps.length - 1
                     ? "invisible"
                     : isVisited
                     ? "bg-primary"
