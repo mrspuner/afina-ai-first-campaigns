@@ -52,15 +52,13 @@ export function sourceTypeLabel(sourceType: SourceType): string {
   }
 }
 
-/** How many cards to show per group before «Показать ещё». */
-const COLLAPSED_PER_GROUP = 3;
+/** Подобранные сценарии, показываемые по умолчанию («Подобрали для вас»). */
+const CURATED_SCENARIOS = SCENARIOS.filter((s) => s.isCurated);
 
 export function Step1Scenario({ data, onNext }: StepProps) {
+  const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategories, setActiveCategories] = useState<Set<ScenarioCategory>>(
-    new Set()
-  );
-  const [expandedGroups, setExpandedGroups] = useState<Set<ScenarioCategory>>(
     new Set()
   );
 
@@ -96,15 +94,6 @@ export function Step1Scenario({ data, onNext }: StepProps) {
     });
   }
 
-  function toggleGroupExpanded(category: ScenarioCategory) {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-  }
-
   function handleSelect(id: string) {
     onNext({ scenario: id });
   }
@@ -115,56 +104,76 @@ export function Step1Scenario({ data, onNext }: StepProps) {
       subtitle="Готовая связка сигнала и кампании под бизнес-цель"
     >
       <div className="flex flex-col gap-4">
-        <div className="relative">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по сценариям"
-            aria-label="Поиск по сценариям"
-            className="pl-9"
-          />
-        </div>
+        {!showAll ? (
+          <section className="flex flex-col gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Подобрали для вас
+            </h2>
+            <div className="grid grid-cols-3 gap-3">
+              {CURATED_SCENARIOS.map((s) => (
+                <ScenarioCard
+                  key={s.id}
+                  scenario={s}
+                  selected={selectedId === s.id}
+                  onClick={handleSelect}
+                  sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Показать все
+            </button>
+          </section>
+        ) : (
+          <>
+            <div className="relative">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Поиск по сценариям"
+                aria-label="Поиск по сценариям"
+                className="pl-9"
+              />
+            </div>
 
-        <div className="flex flex-wrap gap-2">
-          {SCENARIO_CATEGORIES.map((category) => {
-            const active = activeCategories.has(category);
-            return (
-              <button
-                key={category}
-                type="button"
-                onClick={() => toggleCategory(category)}
-                aria-pressed={active}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs transition-colors",
-                  active
-                    ? "border-brand/50 bg-brand-muted text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                {category}
-              </button>
-            );
-          })}
-        </div>
+            <div className="flex flex-wrap gap-2">
+              {SCENARIO_CATEGORIES.map((category) => {
+                const active = activeCategories.has(category);
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => toggleCategory(category)}
+                    aria-pressed={active}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs transition-colors",
+                      active
+                        ? "border-brand/50 bg-brand-muted text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
 
-        <div>
-          {groups.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Ничего не нашлось. Измените запрос или сбросьте фильтр.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-6 pb-1">
-              {groups.map((group) => {
-                  const expanded = expandedGroups.has(group.category);
-                  const visible = expanded
-                    ? group.scenarios
-                    : group.scenarios.slice(0, COLLAPSED_PER_GROUP);
-                  const hiddenCount = group.count - visible.length;
-                  return (
+            <div>
+              {groups.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  Ничего не нашлось. Измените запрос или сбросьте фильтр.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-6 pb-1">
+                  {groups.map((group) => (
                     <section key={group.category} className="flex flex-col gap-3">
                       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         {group.category}{" "}
@@ -173,7 +182,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                         </span>
                       </h2>
                       <div className="grid grid-cols-3 gap-3">
-                        {visible.map((s) => (
+                        {group.scenarios.map((s) => (
                           <ScenarioCard
                             key={s.id}
                             scenario={s}
@@ -183,31 +192,14 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                           />
                         ))}
                       </div>
-                      {hiddenCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupExpanded(group.category)}
-                          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          Показать ещё ({hiddenCount})
-                        </button>
-                      )}
-                      {expanded && group.count > COLLAPSED_PER_GROUP && (
-                        <button
-                          type="button"
-                          onClick={() => toggleGroupExpanded(group.category)}
-                          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          Свернуть
-                        </button>
-                      )}
                     </section>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </StepContent>
   );
 }
