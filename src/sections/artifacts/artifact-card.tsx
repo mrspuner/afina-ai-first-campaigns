@@ -54,13 +54,32 @@ export function ArtifactCard({
         )}
         style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
       >
-        <div className="flex items-center justify-between gap-2">
-          <p className="flex items-baseline gap-2 text-sm font-semibold text-foreground">
-            <span>{ARTIFACT_KIND_LABEL[kind]}</span>
-            <span className="text-muted-foreground">·</span>
-            <span className="tabular-nums">{formatNumber(count)}</span>
-          </p>
-          <p className="text-xs text-muted-foreground">{formatDate(createdAt)}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="flex items-baseline gap-2 text-sm font-semibold text-foreground">
+              <span>{ARTIFACT_KIND_LABEL[kind]}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="tabular-nums">{formatNumber(count)}</span>
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{formatDate(createdAt)}</p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <Button variant="outline" size="icon" aria-label="Скачать сигналы" onClick={() => onDownload(id)}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="icon" aria-label="Действия с артефактом"><MoreHorizontal className="h-4 w-4" /></Button>}
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive focus:text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Удалить
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <p className="text-xs text-muted-foreground">
@@ -73,23 +92,6 @@ export function ArtifactCard({
             {campaignName}
           </button>
         </p>
-
-        <div className="mt-2 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button variant="outline" size="icon" aria-label="Скачать сигналы" onClick={() => onDownload(id)}>
-            <Download className="h-4 w-4" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="outline" size="icon" aria-label="Действия с артефактом"><MoreHorizontal className="h-4 w-4" /></Button>}
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive focus:text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Удалить
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </Card>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>

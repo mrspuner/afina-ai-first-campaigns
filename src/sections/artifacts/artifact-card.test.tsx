@@ -26,6 +26,8 @@ describe("ArtifactCard", () => {
     );
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
     expect(screen.getByText(/12\s?345/)).toBeInTheDocument();
+    // date renders under the title
+    expect(screen.getByText(/18\.06\.2026/)).toBeInTheDocument();
     // The campaign link is a <button> inside the card; use getAllByRole and find the one
     // that is NOT the card itself (card is role=button but contains "Лето 2026" in its subtree).
     const campaignBtn = screen
