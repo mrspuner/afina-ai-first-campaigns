@@ -7,7 +7,7 @@ import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { StepSource } from "@/sections/campaigns/wizard/steps/step-source";
-import { StepInterests } from "@/sections/campaigns/wizard/steps/step-interests";
+import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
 import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
@@ -206,7 +206,7 @@ function WorkspaceInner({
     switch (id) {
       case "scenario": return <Step1Scenario {...props} />;
       case "source": return <StepSource {...props} onBack={onBack} />;
-      case "interests": return <StepInterests {...props} onBack={onBack} />;
+      case "interests": return <Step2Interests {...props} onBack={onBack} />;
       case "file": return <StepFile {...props} onBack={onBack} />;
       case "integration": return <StepIntegration {...props} onBack={onBack} />;
       case "channels": return <StepChannels {...props} onBack={onBack} />;
