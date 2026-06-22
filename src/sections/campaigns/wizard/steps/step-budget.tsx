@@ -12,6 +12,7 @@ import {
   type BudgetEstimateInput,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
+import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { cn } from "@/lib/utils";
 
 function formatRub(amount: number): string {
@@ -180,29 +181,44 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         {/* Forecast rows: Сигналы / Коммуникация / Итого (plain text rows) */}
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
           {rows.map((row) => (
-            <div
-              key={row.key}
-              className={cn(
-                "flex items-center justify-between text-sm",
-                row.key === "total" &&
-                  "mt-1 border-t border-border pt-3 font-semibold text-foreground"
-              )}
-            >
-              <span
-                className={
-                  row.key === "total" ? "text-foreground" : "text-muted-foreground"
-                }
-              >
-                {row.label}
-              </span>
-              <span className="flex items-center gap-3">
-                {row.contactLabel && (
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {row.contactLabel}
-                  </span>
+            <div key={row.key}>
+              <div
+                className={cn(
+                  "flex items-center justify-between text-sm",
+                  row.key === "total" &&
+                    "mt-1 border-t border-border pt-3 font-semibold text-foreground"
                 )}
-                <span className="tabular-nums">{row.display}</span>
-              </span>
+              >
+                <span
+                  className={
+                    row.key === "total" ? "text-foreground" : "text-muted-foreground"
+                  }
+                >
+                  {row.label}
+                </span>
+                <span className="flex items-center gap-3">
+                  {row.contactLabel && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {row.contactLabel}
+                    </span>
+                  )}
+                  <span className="tabular-nums">{row.display}</span>
+                </span>
+              </div>
+              {row.key === "communication" && (
+                <>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {data.channels.length > 0
+                      ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
+                      : "Каналы: —"}
+                  </p>
+                  {data.channels.length > 0 && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Повторные коммуникации (+30% буфер)
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           ))}
           {isStream && estimate.dailyBudget !== undefined && (
@@ -248,7 +264,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               {recommendedValue > 0 ? formatRub(recommendedValue) : "—"}
             </span>
             <span className="mt-auto text-xs text-muted-foreground">
-              По источнику и каналам
+              Рассчитали на основе источников и каналов
             </span>
           </button>
 
