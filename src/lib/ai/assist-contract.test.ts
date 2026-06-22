@@ -198,3 +198,80 @@ describe("assist-contract plan-006", () => {
     expect(r.success).toBe(false);
   });
 });
+
+// ── Task 15: create_template kind ──────────────────────────────────────────────
+describe("assist-contract — create_template (#15)", () => {
+  const smsVariant = {
+    name: "SMS — тест",
+    content: { kind: "sms", text: "Текст", alphaName: "AFINA", scheduledAt: "immediate" },
+  };
+
+  it("create_template с валидными вариантами проходит", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "sms",
+      variants: [smsVariant, smsVariant, smsVariant],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("create_template без вариантов отклоняется", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "sms",
+      variants: [],
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("create_template с неизвестным каналом отклоняется", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "fax",
+      variants: [smsVariant],
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("create_template с email-вариантом проходит", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "email",
+      variants: [
+        {
+          name: "Email — приветствие",
+          content: { kind: "email", subject: "Привет", body: "Текст письма", sender: "info@afina.ru" },
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("create_template с push-вариантом проходит", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "push",
+      variants: [
+        {
+          name: "Push — уведомление",
+          content: { kind: "push", title: "Заголовок", body: "Тело" },
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("create_template с ivr-вариантом проходит", () => {
+    const r = assistResultSchema.safeParse({
+      kind: "create_template",
+      channel: "ivr",
+      variants: [
+        {
+          name: "Звонок — приветствие",
+          content: { kind: "ivr", scenario: "Привет, это Афина!", voiceType: "female" },
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+});

@@ -92,6 +92,21 @@ export const assistResultSchema = z.discriminatedUnion("kind", [
     clearExcluded: z.boolean().optional(),
     confirmation: z.string(),
   }),
+  /**
+   * Сгенерированные варианты шаблона сообщения (#15 template-drawer).
+   * Оркестратор вызывается драйвером drawer'а с (channel, intent) и возвращает
+   * ~3 варианта NodeParams для выбранного канала.
+   */
+  z.object({
+    kind: z.literal("create_template"),
+    channel: z.enum(["sms", "email", "push", "ivr"]),
+    variants: z.array(
+      z.object({
+        name: z.string(),
+        content: z.record(z.string(), z.unknown()),
+      })
+    ).min(1),
+  }),
 ]);
 export type AssistResult = z.infer<typeof assistResultSchema>;
 
