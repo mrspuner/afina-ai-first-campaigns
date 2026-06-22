@@ -144,6 +144,18 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
+  // Raw graph cost (same model as the payment screen) — gives the per-channel
+  // breakdown (`lines`) and the repeat-buffer amount (`repeat`). null when no
+  // scenario is selected, in which case we fall back to the simple channel list.
+  const cost = useMemo(
+    () =>
+      graphCostFor({
+        scenarioId: data.scenario,
+        sourceType: data.sourceType,
+        baseSize: data.fileRowCount && data.fileRowCount > 0 ? data.fileRowCount : FALLBACK_BASE,
+      }),
+    [data.scenario, data.sourceType, data.fileRowCount]
+  );
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
@@ -251,25 +263,46 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
                   {row.label}
                 </span>
                 <span className="flex items-center gap-3">
-                  {row.contactLabel && (
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {row.contactLabel}
-                    </span>
-                  )}
                   <span className="tabular-nums">{row.display}</span>
                 </span>
               </div>
+              {row.key === "signals" && row.contactLabel && (
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  {row.contactLabel}
+                </p>
+              )}
               {row.key === "communication" && (
                 <>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {data.channels.length > 0
-                      ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
-                      : "Каналы: —"}
-                  </p>
-                  {data.channels.length > 0 && (
+                  {cost && cost.lines.length > 0 ? (
+                    cost.lines.map((line) => (
+                      <div
+                        key={line.nodeId}
+                        className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
+                      >
+                        <span>
+                          {CHANNEL_LABEL[line.channel]} · {line.label}
+                        </span>
+                        <span className="tabular-nums">{formatRub(line.sum)}</span>
+                      </div>
+                    ))
+                  ) : (
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Повторные коммуникации (+30% буфер)
+                      {data.channels.length > 0
+                        ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
+                        : "Каналы: —"}
                     </p>
+                  )}
+                  {(cost?.hasDynamic || (cost && cost.repeat > 0)) ? (
+                    <div className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Повторные коммуникации (+30% буфер)</span>
+                      <span className="tabular-nums">{formatRub(cost.repeat)}</span>
+                    </div>
+                  ) : (
+                    data.channels.length > 0 && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Повторные коммуникации (+30% буфер)
+                      </p>
+                    )
                   )}
                 </>
               )}

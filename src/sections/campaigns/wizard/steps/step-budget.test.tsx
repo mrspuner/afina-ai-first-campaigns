@@ -136,3 +136,72 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
     cleanup();
   });
 });
+
+describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
+  const SCENARIO = "base-first-deal"; // signalType "Первая сделка"
+
+  it("renders the ~…контактов figure as a sub-line under the Сигналы row (not on the row)", () => {
+    render(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "own",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    const signalsLabel = screen.getByText("Сигналы");
+    const contacts = screen.getByText(/контактов/);
+    // The contacts figure sits in its own sub-line directly after the Сигналы
+    // row, not inside the row that holds the «Сигналы» label/amount.
+    const signalsRow = signalsLabel.closest("div");
+    expect(signalsRow).toBeTruthy();
+    expect(signalsRow?.contains(contacts)).toBe(false);
+    cleanup();
+  });
+
+  it("renders a per-channel line (channel label + rouble amount) from the graph cost", () => {
+    render(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "new",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    // Graph cost for base-first-deal/new yields an SMS line of ₽50 000.
+    const line = screen.getByText(/^SMS · /);
+    expect(line).toBeTruthy();
+    const row = line.parentElement;
+    expect(row?.textContent).toMatch(/₽\s*50[\s ]?000/);
+    // The simple "Каналы: …" fallback must NOT be shown when graph lines exist.
+    expect(screen.queryByText(/^Каналы:/)).toBeNull();
+    cleanup();
+  });
+
+  it("appends the buffer rouble amount to the repeat-communications line", () => {
+    render(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "new",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    const buffer = screen.getByText(/Повторные коммуникации \(\+30% буфер\)/);
+    const row = buffer.parentElement;
+    expect(row?.textContent).toMatch(/₽\s*1[\s ]?500/);
+    cleanup();
+  });
+});
