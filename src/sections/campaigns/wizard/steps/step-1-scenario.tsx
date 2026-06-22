@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
@@ -54,14 +54,6 @@ export function sourceTypeLabel(sourceType: SourceType): string {
 
 /** How many cards to show per group before «Показать ещё». */
 const COLLAPSED_PER_GROUP = 3;
-
-function SourceTypeChip({ sourceType }: { sourceType: SourceType }) {
-  return (
-    <span className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground">
-      Источник: {sourceTypeLabel(sourceType)}
-    </span>
-  );
-}
 
 export function Step1Scenario({ data, onNext }: StepProps) {
   const [query, setQuery] = useState("");
@@ -117,26 +109,6 @@ export function Step1Scenario({ data, onNext }: StepProps) {
     onNext({ scenario: id });
   }
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollUp, setCanScrollUp] = useState(false);
-  const [canScrollDown, setCanScrollDown] = useState(false);
-
-  function updateScrollFlags() {
-    const el = scrollRef.current;
-    if (!el) return;
-    const slack = 2;
-    setCanScrollUp(el.scrollTop > slack);
-    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - slack);
-  }
-
-  useLayoutEffect(updateScrollFlags, [groups]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.addEventListener("resize", updateScrollFlags);
-    return () => window.removeEventListener("resize", updateScrollFlags);
-  }, []);
-
   return (
     <StepContent
       title="Выберите сценарий для кампании"
@@ -179,31 +151,14 @@ export function Step1Scenario({ data, onNext }: StepProps) {
           })}
         </div>
 
-        <div className="relative">
-          <div
-            ref={scrollRef}
-            onScroll={updateScrollFlags}
-            className={cn(
-              "max-h-[420px] overflow-y-auto pr-2",
-              "[scrollbar-width:thin]",
-              "[scrollbar-color:rgb(255_255_255_/_0.18)_transparent]",
-              "[&::-webkit-scrollbar]:w-1.5",
-              "[&::-webkit-scrollbar]:bg-transparent",
-              "[&::-webkit-scrollbar-track]:bg-transparent",
-              "[&::-webkit-scrollbar-track]:border-0",
-              "[&::-webkit-scrollbar-thumb]:rounded-full",
-              "[&::-webkit-scrollbar-thumb]:bg-white/15",
-              "[&::-webkit-scrollbar-thumb]:border-0",
-              "hover:[&::-webkit-scrollbar-thumb]:bg-white/30"
-            )}
-          >
-            {groups.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                Ничего не нашлось. Измените запрос или сбросьте фильтр.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-6 pb-1">
-                {groups.map((group) => {
+        <div>
+          {groups.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Ничего не нашлось. Измените запрос или сбросьте фильтр.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-6 pb-1">
+              {groups.map((group) => {
                   const expanded = expandedGroups.has(group.category);
                   const visible = expanded
                     ? group.scenarios
@@ -219,14 +174,13 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                       </h2>
                       <div className="grid grid-cols-3 gap-3">
                         {visible.map((s) => (
-                          <div key={s.id} className="flex flex-col gap-1.5">
-                            <ScenarioCard
-                              scenario={s}
-                              selected={selectedId === s.id}
-                              onClick={handleSelect}
-                            />
-                            <SourceTypeChip sourceType={s.recommendedSourceType} />
-                          </div>
+                          <ScenarioCard
+                            key={s.id}
+                            scenario={s}
+                            selected={selectedId === s.id}
+                            onClick={handleSelect}
+                            sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
+                          />
                         ))}
                       </div>
                       {hiddenCount > 0 && (
@@ -253,22 +207,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
               </div>
             )}
           </div>
-          <div
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent transition-opacity duration-150",
-              canScrollUp ? "opacity-100" : "opacity-0"
-            )}
-          />
-          <div
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent transition-opacity duration-150",
-              canScrollDown ? "opacity-100" : "opacity-0"
-            )}
-          />
         </div>
-      </div>
     </StepContent>
   );
 }
