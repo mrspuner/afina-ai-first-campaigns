@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { isTaskDescriptionValid } from "@/state/survey-validation";
@@ -23,9 +24,8 @@ export function SurveyForm({
   const { survey } = useAppState();
   const dispatch = useAppDispatch();
 
-  const [description, setDescription] = useState(
-    survey.taskDescription || survey.companyWebsite,
-  );
+  const [description, setDescription] = useState(survey.taskDescription ?? "");
+  const [site, setSite] = useState(survey.companyWebsite ?? "");
   const [showErrors, setShowErrors] = useState(false);
 
   const descriptionOk = isTaskDescriptionValid(description);
@@ -36,12 +36,12 @@ export function SurveyForm({
       setShowErrors(true);
       return;
     }
-    const trimmed = description.trim();
+    const trimmedTask = description.trim();
+    const trimmedSite = site.trim();
     const filled: Survey = {
       companyName: survey.companyName,
-      // Alias: the frozen app-state reducer reads companyWebsite.
-      companyWebsite: trimmed,
-      taskDescription: trimmed,
+      companyWebsite: trimmedSite,
+      taskDescription: trimmedTask,
       directionId: survey.directionId,
     };
     // Persist the partial as we go so navigation away keeps draft state.
@@ -84,6 +84,21 @@ export function SurveyForm({
           aria-invalid={showErrors && !descriptionOk ? true : undefined}
         />
       </Field>
+      <div className="mt-5">
+        <Field
+          id="survey-site"
+          label="Сайт компании"
+          hint="Необязательно"
+        >
+          <Input
+            id="survey-site"
+            type="text"
+            placeholder="example.com"
+            value={site}
+            onChange={(e) => setSite(e.target.value)}
+          />
+        </Field>
+      </div>
       <div className="mt-8 flex items-center justify-between gap-3">
         <span aria-hidden />
         <Button type="submit" variant="default" size="lg">
