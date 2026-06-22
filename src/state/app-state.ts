@@ -325,7 +325,8 @@ export type Action =
   | { type: "workflow_rebuild_handled" }
   | { type: "workflow_ai_undo_request"; replyId?: string }
   | { type: "workflow_ai_undo_handled" }
-  | { type: "workflow_ai_undo_availability"; available: boolean };
+  | { type: "workflow_ai_undo_availability"; available: boolean }
+  | { type: "template_added"; template: MessageTemplate };
 // PARALLEL-WORKTREE INSERTION POINT — survey actions (B), billing/signal-status actions (E).
 // Each worktree appends its own action variants to the union above; resolve merges by
 // keeping every appended line and adding the matching reducer case at the end of appReducer.
@@ -1038,6 +1039,12 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, workflowAiUndoRequested: false };
     case "workflow_ai_undo_availability":
       return { ...state, aiUndoAvailable: action.available };
+    case "template_added": {
+      // Dedup by id — ignore if the template already exists in the library
+      if (state.templates.some((t) => t.id === action.template.id)) return state;
+      const template = { ...action.template, usedInCampaigns: 0 };
+      return { ...state, templates: [template, ...state.templates] };
+    }
     // PARALLEL-WORTREE INSERTION POINT — append survey/billing/signal-status cases
     // immediately above this comment to keep merges trivial.
   }

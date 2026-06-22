@@ -1266,3 +1266,41 @@ describe("workflowReplyId — переиспользование pending-пуз�
     expect(s.workflowReplyId).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 15: template_added reducer action
+// ---------------------------------------------------------------------------
+describe("appReducer — template_added", () => {
+  const tpl = {
+    id: "tpl_new_1",
+    channel: "sms" as const,
+    name: "SMS — тест",
+    content: { kind: "sms" as const, text: "Тест", alphaName: "AFINA", scheduledAt: "immediate" as const },
+    usedInCampaigns: 0,
+  };
+
+  it("prepends the template to the front of templates array", () => {
+    const before = initialState.templates.length;
+    const next = appReducer(initialState, { type: "template_added", template: tpl });
+    expect(next.templates).toHaveLength(before + 1);
+    expect(next.templates[0]).toEqual(tpl);
+  });
+
+  it("starts usedInCampaigns at 0", () => {
+    const next = appReducer(initialState, { type: "template_added", template: { ...tpl, usedInCampaigns: 99 } });
+    expect(next.templates[0].usedInCampaigns).toBe(0);
+  });
+
+  it("does NOT duplicate if the same id is added twice", () => {
+    const s1 = appReducer(initialState, { type: "template_added", template: tpl });
+    const s2 = appReducer(s1, { type: "template_added", template: tpl });
+    const count = s2.templates.filter((t) => t.id === tpl.id).length;
+    expect(count).toBe(1);
+  });
+
+  it("does not mutate other state slices", () => {
+    const next = appReducer(initialState, { type: "template_added", template: tpl });
+    expect(next.campaigns).toBe(initialState.campaigns);
+    expect(next.view).toStrictEqual(initialState.view);
+  });
+});
