@@ -11,6 +11,7 @@ import {
   FALLBACK_BASE,
   type BudgetEstimateInput,
 } from "@/sections/campaigns/campaign-budget-estimate";
+import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { cn } from "@/lib/utils";
 
 function formatRub(amount: number): string {
@@ -83,7 +84,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.sourceType, data.channels, data.fileRowCount]
   );
-  const rows = useMemo(
+  const recommendedRows = useMemo(
     () => buildBudgetRows(estimateInput),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.sourceType, data.channels, data.fileRowCount]
@@ -107,6 +108,47 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     mode === "recommended" ? recommendedValue : customIsValid ? customParsed : 0;
   const canContinue =
     mode === "recommended" ? recommendedValue > 0 : customIsValid;
+
+  // In «Своя сумма» mode the forecast rows rescale proportionally to the chosen
+  // budget (Итого = the custom sum); otherwise they show the recommended estimate.
+  const customTotal = mode === "custom" && customIsValid ? customParsed : null;
+  const rows = useMemo<BudgetRow[]>(() => {
+    const components = recommendedRows
+      .filter((r) => r.key !== "total")
+      .map((r) => ({
+        key: r.key,
+        amount: r.amount,
+        contactCount:
+          r.key === "signals" ? data.fileRowCount ?? FALLBACK_BASE : undefined,
+      }));
+    const { rows: scaled, total } = budgetDisplayRows({
+      components,
+      recommendedTotal: estimate.total,
+      customTotal,
+    });
+    const out: BudgetRow[] = scaled.map((c) => {
+      const base = recommendedRows.find((r) => r.key === c.key)!;
+      const isFreeSignals =
+        c.key === "signals" && (data.sourceType === "own" || c.amount === 0);
+      return {
+        key: base.key,
+        label: base.label,
+        amount: c.amount,
+        display: isFreeSignals ? "бесплатно" : formatRubApprox(c.amount),
+        contactLabel:
+          c.contactCount !== undefined
+            ? `~${c.contactCount.toLocaleString("ru-RU")} контактов`
+            : undefined,
+      };
+    });
+    out.push({
+      key: "total",
+      label: "Итого",
+      amount: total,
+      display: formatRubApprox(total),
+    });
+    return out;
+  }, [recommendedRows, estimate.total, customTotal, data.sourceType, data.fileRowCount]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
