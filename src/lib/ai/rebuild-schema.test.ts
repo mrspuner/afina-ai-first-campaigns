@@ -114,3 +114,40 @@ describe("buildGraphFromSpec", () => {
     expect(graph.edges).toHaveLength(validSpec.edges.length);
   });
 });
+
+// ── Тесты BFS-раскладки (Task 1: layout fix) ─────────────────────────────────
+
+const branchSpec = {
+  nodes: [
+    { key: "c1", nodeType: "condition" as const, label: "Открыл письмо?" },
+    { key: "s1", nodeType: "success" as const, label: "Успех" },
+    { key: "end1", nodeType: "end" as const, label: "Конец" },
+  ],
+  edges: [
+    { from: "signal", to: "c1" },
+    { from: "c1", to: "s1", label: "YES" },
+    { from: "c1", to: "end1", label: "NO" },
+  ],
+  assumptions: "Условие с двумя ветками",
+};
+
+describe("buildGraphFromSpec — BFS layout", () => {
+  const signal = { label: "Сигнал" };
+
+  it("ветки условия раскладываются в одну колонку, но на разных Y (не линейно)", () => {
+    const graph = buildGraphFromSpec(branchSpec, signal);
+    const s1 = graph.nodes.find((n) => n.id === "n_s1")!;
+    const end1 = graph.nodes.find((n) => n.id === "n_end1")!;
+    expect(s1.position.x).toBe(end1.position.x); // same BFS depth → same column
+    expect(s1.position.y).not.toBe(end1.position.y); // stacked, not flat
+  });
+
+  it("X растёт по глубине BFS, а не по индексу ноды в массиве", () => {
+    const graph = buildGraphFromSpec(branchSpec, signal);
+    const signalNode = graph.nodes.find((n) => n.id === "signal")!;
+    const c1 = graph.nodes.find((n) => n.id === "n_c1")!;
+    const s1 = graph.nodes.find((n) => n.id === "n_s1")!;
+    expect(signalNode.position.x).toBeLessThan(c1.position.x);
+    expect(c1.position.x).toBeLessThan(s1.position.x);
+  });
+});

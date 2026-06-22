@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { relayoutGraph } from "@/state/structural-commands";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 /** Типы, доступные модели при пересборке. Без legacy и без signal —
@@ -86,5 +87,5 @@ export function buildGraphFromSpec(
     type: "default",
     ...(e.label ? { label: e.label } : {}),
   }));
-  return { nodes, edges };
+  return relayoutGraph({ nodes, edges });
 }
