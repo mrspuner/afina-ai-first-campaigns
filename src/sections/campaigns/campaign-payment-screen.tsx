@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 import { splitCampaignPayments } from "./campaign-payments";
+import { STREAM_DAYS } from "./campaign-budget-estimate";
 import { scaleBreakdown } from "@/sections/campaigns/scale-breakdown";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
@@ -82,17 +83,35 @@ export function CampaignPaymentScreen() {
   }, [campaign?.id, scenarioSignalType, audienceSize, campaign?.sourceType]);
   const recommended = cost?.total ?? 0;
 
-  // Two-payment split (scoring + communication), source-aware. Free lines are
-  // shown as «бесплатно»; degenerate own bases yield zero payments.
+  // Two-payment split (scoring + communication), source-aware. The COMMUNICATION
+  // figure comes from the SAME graph cost model as the headline (`cost.total`)
+  // and the wizard Budget step, so all three converge. Scoring + the stream
+  // dailyBudget still come from the source rule (the graph doesn't price
+  // scoring). Free lines render «бесплатно»; degenerate own bases yield none.
   const paymentSplit = useMemo(() => {
     if (!campaign) return null;
-    return splitCampaignPayments({
+    const flat = splitCampaignPayments({
       sourceType: campaign.sourceType ?? "new",
       channels: campaign.channels ?? [],
       baseSize: audienceSize,
     });
+    const communication = cost ? cost.total : flat.communication;
+    // Stream dailyBudget tracks the graph communication total (total / STREAM_DAYS)
+    // so it matches the wizard, which derives it the same way.
+    const dailyBudget =
+      flat.dailyBudget !== undefined
+        ? cost
+          ? Math.round(communication / STREAM_DAYS)
+          : flat.dailyBudget
+        : undefined;
+    return {
+      ...flat,
+      communication,
+      total: flat.scoring + communication,
+      ...(dailyBudget !== undefined ? { dailyBudget } : {}),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign?.id, campaign?.sourceType, campaign?.channels, audienceSize]);
+  }, [campaign?.id, campaign?.sourceType, campaign?.channels, audienceSize, cost]);
   const streamDailyBudget = paymentSplit?.dailyBudget;
 
   const [mode, setMode] = useState<Mode>("recommended");

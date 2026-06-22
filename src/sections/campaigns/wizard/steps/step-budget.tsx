@@ -9,10 +9,11 @@ import {
   estimateCampaignBudget,
   STREAM_DAYS,
   FALLBACK_BASE,
-  type BudgetEstimateInput,
 } from "@/sections/campaigns/campaign-budget-estimate";
+import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
+import type { StepData } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 
 function formatRub(amount: number): string {
@@ -30,32 +31,84 @@ export interface BudgetRow {
   contactLabel?: string;
 }
 
+/** Inputs the Бюджет forecast needs to share the graph cost model. */
+export interface BudgetForecastInput {
+  scenarioId: string | null;
+  sourceType: StepData["sourceType"];
+  channels: StepData["channels"];
+  baseSize?: number;
+}
+
+export interface BudgetForecast {
+  /** Scoring cost (0 for own bases) — priced from the source rule, not the graph. */
+  signals: number;
+  /** Communication cost from the workflow graph (primary + repeat). */
+  communication: number;
+  /** Headline total = graph communication. Mirrors the payment screen's `recommended`. */
+  total: number;
+  /** Stream source only: per-day budget derived from the headline total. */
+  dailyBudget?: number;
+}
+
+/**
+ * The wizard Budget forecast on the SAME graph cost model as the payment screen:
+ *  - «Коммуникация» / «Итого» = graphCostFor(...).total (the scenario+source
+ *    template graph priced over baseSize). Same inputs → same figure as payment.
+ *  - «Сигналы» = the source-rule scoring portion (own → 0/«бесплатно»), priced
+ *    separately because the graph does not model scoring cost.
+ *  - stream dailyBudget = total / STREAM_DAYS.
+ * When no scenario is selected the graph cost is unavailable; we fall back to the
+ * flat communication estimate so the step never crashes / shows nothing.
+ */
+export function buildBudgetForecast(input: BudgetForecastInput): BudgetForecast {
+  const base = input.baseSize && input.baseSize > 0 ? input.baseSize : FALLBACK_BASE;
+  const flat = estimateCampaignBudget({
+    sourceType: input.sourceType,
+    channels: input.channels,
+    baseSize: base,
+  });
+  const graph = graphCostFor({
+    scenarioId: input.scenarioId,
+    sourceType: input.sourceType,
+    baseSize: base,
+  });
+  const communication = graph ? graph.total : flat.communication;
+  const signals = flat.signals;
+  // Итого mirrors the payment screen, where `recommended = cost.total` is the
+  // communication-only graph total; scoring is shown as a separate line.
+  const total = communication;
+  if (input.sourceType === "stream") {
+    return { signals, communication, total, dailyBudget: Math.round(total / STREAM_DAYS) };
+  }
+  return { signals, communication, total };
+}
+
 /** Pure forecast rows for the Бюджет step (own's signals line reads «бесплатно»). */
-export function buildBudgetRows(input: BudgetEstimateInput): BudgetRow[] {
-  const est = estimateCampaignBudget(input);
+export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
+  const f = buildBudgetForecast(input);
   const contactCount = input.baseSize && input.baseSize > 0 ? input.baseSize : FALLBACK_BASE;
   return [
     {
       key: "signals",
       label: "Сигналы",
-      amount: est.signals,
+      amount: f.signals,
       display:
-        input.sourceType === "own" || est.signals === 0
+        input.sourceType === "own" || f.signals === 0
           ? "бесплатно"
-          : formatRubApprox(est.signals),
+          : formatRubApprox(f.signals),
       contactLabel: `~${contactCount.toLocaleString("ru-RU")} контактов`,
     },
     {
       key: "communication",
       label: "Коммуникация",
-      amount: est.communication,
-      display: formatRubApprox(est.communication),
+      amount: f.communication,
+      display: formatRubApprox(f.communication),
     },
     {
       key: "total",
       label: "Итого",
-      amount: est.total,
-      display: formatRubApprox(est.total),
+      amount: f.total,
+      display: formatRubApprox(f.total),
     },
   ];
 }
@@ -75,20 +128,21 @@ function RadioDot({ active }: { active: boolean }) {
 }
 
 export function StepBudget({ data, onNext, onBack }: StepProps) {
-  const estimateInput: BudgetEstimateInput = {
+  const forecastInput: BudgetForecastInput = {
+    scenarioId: data.scenario,
     sourceType: data.sourceType,
     channels: data.channels,
     baseSize: data.fileRowCount,
   };
   const estimate = useMemo(
-    () => estimateCampaignBudget(estimateInput),
+    () => buildBudgetForecast(forecastInput),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.sourceType, data.channels, data.fileRowCount]
+    [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
   const recommendedRows = useMemo(
-    () => buildBudgetRows(estimateInput),
+    () => buildBudgetRows(forecastInput),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.sourceType, data.channels, data.fileRowCount]
+    [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
 
   const recommendedValue = estimate.total;

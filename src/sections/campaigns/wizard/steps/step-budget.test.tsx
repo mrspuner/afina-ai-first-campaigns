@@ -13,22 +13,48 @@ vi.mock("@/sections/campaigns/wizard/steps/step-content", () => ({
 }));
 
 describe("buildBudgetRows (StepBudget forecast)", () => {
+  const SCENARIO = "base-first-deal"; // signalType "Первая сделка", source "new"
   it("own source shows the signals line as free (бесплатно)", () => {
-    const rows = buildBudgetRows({ sourceType: "own", channels: ["sms"], baseSize: 10_000 });
+    const rows = buildBudgetRows({
+      scenarioId: SCENARIO,
+      sourceType: "own",
+      channels: ["sms"],
+      baseSize: 10_000,
+    });
     const signalsRow = rows.find((r) => r.key === "signals")!;
     expect(signalsRow.display).toMatch(/бесплатно/i);
   });
   it("new source charges the signals line", () => {
-    const rows = buildBudgetRows({ sourceType: "new", channels: ["sms"], baseSize: 10_000 });
+    const rows = buildBudgetRows({
+      scenarioId: SCENARIO,
+      sourceType: "new",
+      channels: ["sms"],
+      baseSize: 10_000,
+    });
     const signalsRow = rows.find((r) => r.key === "signals")!;
     expect(signalsRow.display).not.toMatch(/бесплатно/i);
   });
-  it("always has a Итого row matching the estimate total", () => {
-    const rows = buildBudgetRows({ sourceType: "new", channels: ["sms"], baseSize: 10_000 });
-    expect(rows.some((r) => r.key === "total")).toBe(true);
+  it("always has a Итого row, and it equals the graph communication total", () => {
+    const rows = buildBudgetRows({
+      scenarioId: SCENARIO,
+      sourceType: "new",
+      channels: ["sms"],
+      baseSize: 10_000,
+    });
+    const total = rows.find((r) => r.key === "total")!;
+    const comm = rows.find((r) => r.key === "communication")!;
+    expect(total).toBeTruthy();
+    // Итого mirrors the payment screen: it is the comms-only graph total.
+    expect(total.amount).toBe(comm.amount);
+    expect(total.amount).toBeGreaterThan(0);
   });
-  it("degenerate (no channels) shows communication as 0", () => {
-    const rows = buildBudgetRows({ sourceType: "new", channels: [], baseSize: 5_000 });
+  it("no scenario falls back to the flat estimate (no channels → communication 0)", () => {
+    const rows = buildBudgetRows({
+      scenarioId: null,
+      sourceType: "new",
+      channels: [],
+      baseSize: 5_000,
+    });
     const comm = rows.find((r) => r.key === "communication")!;
     expect(comm.amount).toBe(0);
   });
