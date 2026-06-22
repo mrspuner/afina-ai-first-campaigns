@@ -130,18 +130,27 @@ export function Step1Scenario({ data, onNext }: StepProps) {
           </section>
         ) : (
           <>
-            <div className="relative">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск по сценариям"
-                aria-label="Поиск по сценариям"
-                className="pl-9"
-              />
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search
+                  aria-hidden
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Поиск по сценариям"
+                  aria-label="Поиск по сценариям"
+                  className="pl-9"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Свернуть
+              </button>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -189,6 +198,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                             selected={selectedId === s.id}
                             onClick={handleSelect}
                             sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
+                            curatedLabel={s.isCurated ? "Подобрано для вас" : undefined}
                           />
                         ))}
                       </div>

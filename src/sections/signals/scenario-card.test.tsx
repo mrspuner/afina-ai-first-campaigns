@@ -87,6 +87,42 @@ describe("ScenarioCard — source label badge", () => {
   });
 });
 
+describe("ScenarioCard — curated label badge", () => {
+  it("renders the curated label badge inside the card when curatedLabel is set", () => {
+    render(
+      <ScenarioCard
+        scenario={SCENARIO}
+        onClick={() => {}}
+        curatedLabel="Подобрано для вас"
+      />
+    );
+    const card = screen.getByRole("button", { name: /Тест-сценарий/i });
+    const badge = screen.getByText("Подобрано для вас");
+    expect(card).toContainElement(badge);
+  });
+
+  it("renders both sourceLabel and curatedLabel badges when both props are set", () => {
+    render(
+      <ScenarioCard
+        scenario={SCENARIO}
+        onClick={() => {}}
+        sourceLabel="Новая база номеров"
+        curatedLabel="Подобрано для вас"
+      />
+    );
+    const card = screen.getByRole("button", { name: /Тест-сценарий/i });
+    const sourceBadge = screen.getByText("Новая база номеров");
+    const curatedBadge = screen.getByText("Подобрано для вас");
+    expect(card).toContainElement(sourceBadge);
+    expect(card).toContainElement(curatedBadge);
+  });
+
+  it("renders no curated badge when curatedLabel is omitted", () => {
+    render(<ScenarioCard scenario={SCENARIO} onClick={() => {}} />);
+    expect(screen.queryByText("Подобрано для вас")).toBeNull();
+  });
+});
+
 describe("ScenarioCard — aria-pressed", () => {
   it("sets aria-pressed=true when selected", () => {
     render(<ScenarioCard scenario={SCENARIO} onClick={() => {}} selected />);

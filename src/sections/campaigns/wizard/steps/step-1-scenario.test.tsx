@@ -78,9 +78,9 @@ describe("Step1Scenario — curated default + «Показать все» catalo
       ).toBeInTheDocument();
     }
 
-    // No collapse/expand affordances remain.
+    // No «Показать ещё» affordance remains (Свернуть is present, Показать все is gone).
     expect(screen.queryByText(/Показать ещё/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Свернуть")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Показать все" })).not.toBeInTheDocument();
 
     // Every non-base scenario renders as a card across the category sections.
     const nonBase = SCENARIOS.filter((s) => !s.isBase);
@@ -101,6 +101,50 @@ describe("Step1Scenario — curated default + «Показать все» catalo
       expect(
         within(heading as HTMLElement).getByText(`(${g.count})`)
       ).toBeInTheDocument();
+    }
+  });
+
+  it("expanded view shows a «Свернуть» button", () => {
+    renderStep();
+    fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeInTheDocument();
+  });
+
+  it("clicking «Свернуть» returns to the default view showing «Показать все»", () => {
+    renderStep();
+    fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
+    fireEvent.click(screen.getByRole("button", { name: "Свернуть" }));
+    // Back to default: curated header visible, «Показать все» back, search gone.
+    expect(screen.getByText("Подобрали для вас")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Показать все" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Поиск по сценариям")).not.toBeInTheDocument();
+  });
+
+  it("curated cards in expanded view show «Подобрано для вас» chip", () => {
+    renderStep();
+    fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
+    // Every curated scenario should have the chip visible.
+    const curatedScenarios = SCENARIOS.filter((s) => s.isCurated);
+    for (const s of curatedScenarios) {
+      const card = screen.getByRole("button", { name: s.name });
+      // The chip text appears in the DOM — find it within or near the card.
+      const chips = screen.getAllByText("Подобрано для вас");
+      expect(chips.length).toBeGreaterThanOrEqual(1);
+      // At least one chip is inside this card.
+      const chipInCard = chips.find((chip) => card.contains(chip));
+      expect(chipInCard).toBeDefined();
+    }
+  });
+
+  it("non-curated cards in expanded view do NOT show «Подобрано для вас» chip", () => {
+    renderStep();
+    fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
+    const nonCuratedScenarios = SCENARIOS.filter((s) => !s.isBase && !s.isCurated);
+    for (const s of nonCuratedScenarios) {
+      const card = screen.getByRole("button", { name: s.name });
+      const chips = screen.queryAllByText("Подобрано для вас");
+      const chipInCard = chips.find((chip) => card.contains(chip));
+      expect(chipInCard).toBeUndefined();
     }
   });
 

@@ -20,6 +20,11 @@ interface ScenarioCardProps {
    * subtle-бейдж внутри карточки. Без префикса «Источник:».
    */
   sourceLabel?: string;
+  /**
+   * Нейтральная метка курации (напр. «Подобрано для вас»), рендерится как
+   * второй subtle-бейдж рядом с sourceLabel.
+   */
+  curatedLabel?: string;
 }
 
 export function ScenarioCard({
@@ -28,6 +33,7 @@ export function ScenarioCard({
   onClick,
   variant = "compact",
   sourceLabel,
+  curatedLabel,
 }: ScenarioCardProps) {
   function handleCardClick() {
     onClick(scenario.id);
@@ -75,13 +81,25 @@ export function ScenarioCard({
           {scenario.description}
         </span>
       </div>
-      {sourceLabel ? (
-        <Badge
-          variant="secondary"
-          className="mt-3 text-[11px] font-normal text-muted-foreground"
-        >
-          {sourceLabel}
-        </Badge>
+      {(sourceLabel || curatedLabel) ? (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {sourceLabel ? (
+            <Badge
+              variant="secondary"
+              className="text-[11px] font-normal text-muted-foreground"
+            >
+              {sourceLabel}
+            </Badge>
+          ) : null}
+          {curatedLabel ? (
+            <Badge
+              variant="secondary"
+              className="text-[11px] font-normal text-muted-foreground"
+            >
+              {curatedLabel}
+            </Badge>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
