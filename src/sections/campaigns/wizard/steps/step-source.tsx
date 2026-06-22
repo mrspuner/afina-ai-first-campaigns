@@ -5,6 +5,8 @@ import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps, type SourceType } from "@/types/campaign";
 import { cn } from "@/lib/utils";
+import { getScenario } from "@/data/scenarios";
+import { Badge } from "@/components/ui/badge";
 
 interface SourceOption {
   value: SourceType;
@@ -48,7 +50,12 @@ function RadioDot({ active }: { active: boolean }) {
 }
 
 export function StepSource({ data, onNext, onBack }: StepProps) {
-  const [sourceType, setSourceType] = useState<SourceType>(data.sourceType);
+  const recommended = data.scenario
+    ? getScenario(data.scenario)?.recommendedSourceType
+    : undefined;
+  const [sourceType, setSourceType] = useState<SourceType>(
+    () => recommended ?? data.sourceType
+  );
 
   const canContinue = canContinueFromSource(sourceType);
 
@@ -88,6 +95,11 @@ export function StepSource({ data, onNext, onBack }: StepProps) {
                 <span className="text-xs text-muted-foreground">
                   {opt.description}
                 </span>
+                {opt.value === recommended && (
+                  <Badge variant="secondary" className="mt-auto text-[10px]">
+                    Рекомендуется
+                  </Badge>
+                )}
               </button>
             );
           })}
