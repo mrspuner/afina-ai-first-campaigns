@@ -15,7 +15,7 @@ interface SourceOption {
 const SOURCE_OPTIONS: SourceOption[] = [
   {
     value: "new",
-    label: "Новая база",
+    label: "Новая база номеров",
     description: "Соберём горячую аудиторию по интент-сигналам.",
   },
   {
@@ -25,7 +25,7 @@ const SOURCE_OPTIONS: SourceOption[] = [
   },
   {
     value: "own",
-    label: "Своя база",
+    label: "Свои сигналы",
     description: "Загрузите свой файл — мы оценим качество базы.",
   },
 ];

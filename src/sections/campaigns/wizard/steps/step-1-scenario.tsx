@@ -44,11 +44,11 @@ export function groupScenariosByCategory(
 export function sourceTypeLabel(sourceType: SourceType): string {
   switch (sourceType) {
     case "new":
-      return "Новая база";
+      return "Новая база номеров";
     case "stream":
       return "Поток";
     case "own":
-      return "Своя база";
+      return "Свои сигналы";
   }
 }
 

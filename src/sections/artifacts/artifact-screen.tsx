@@ -11,7 +11,7 @@ import type { Channel } from "@/types/campaign";
 import { ARTIFACT_KIND_LABEL } from "./artifact-labels";
 
 const SOURCE_LABEL: Record<NonNullable<Campaign["sourceType"]>, string> = {
-  new: "Новая база", stream: "Поток", own: "Своя база",
+  new: "Новая база номеров", stream: "Поток", own: "Свои сигналы",
 };
 const CHANNEL_LABEL: Record<Channel, string> = {
   sms: "SMS", push: "Push", email: "Email", ivr: "IVR",

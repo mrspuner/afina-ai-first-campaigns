@@ -57,12 +57,12 @@ describe("ScenarioCard — source label badge", () => {
       <ScenarioCard
         scenario={SCENARIO}
         onClick={() => {}}
-        sourceLabel="Новая база"
+        sourceLabel="Новая база номеров"
       />
     );
     // Badge lives inside the card's clickable button, not as a sibling under it.
     const card = screen.getByRole("button", { name: /Тест-сценарий/i });
-    const badge = screen.getByText("Новая база");
+    const badge = screen.getByText("Новая база номеров");
     expect(card).toContainElement(badge);
     // No "Источник:" prefix anymore — just the bare label.
     expect(screen.queryByText(/Источник:/i)).toBeNull();
@@ -70,7 +70,7 @@ describe("ScenarioCard — source label badge", () => {
 
   it("renders no source badge when sourceLabel is omitted", () => {
     render(<ScenarioCard scenario={SCENARIO} onClick={() => {}} />);
-    expect(screen.queryByText("Новая база")).toBeNull();
+    expect(screen.queryByText("Новая база номеров")).toBeNull();
   });
 
   it("clicking the card still selects even with a source badge present", () => {
@@ -79,7 +79,7 @@ describe("ScenarioCard — source label badge", () => {
       <ScenarioCard
         scenario={SCENARIO}
         onClick={onClick}
-        sourceLabel="Новая база"
+        sourceLabel="Новая база номеров"
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /Тест-сценарий/i }));

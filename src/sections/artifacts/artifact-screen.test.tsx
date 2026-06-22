@@ -68,7 +68,7 @@ describe("ArtifactScreenView", () => {
     renderScreen({ campaign, campaignName: campaign.name });
     expect(screen.getByText(/Настройки кампании-источника/)).toBeInTheDocument();
     expect(screen.getByText("Ипотека")).toBeInTheDocument();
-    expect(screen.getByText("Новая база")).toBeInTheDocument();
+    expect(screen.getByText("Новая база номеров")).toBeInTheDocument();
     expect(screen.getByText(/Недвижимость.*Ипотека/)).toBeInTheDocument();
     expect(screen.getByText(/SMS.*Email/i)).toBeInTheDocument();
     expect(screen.getByText(/150\s?000/)).toBeInTheDocument();

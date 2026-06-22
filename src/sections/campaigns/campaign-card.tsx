@@ -7,9 +7,9 @@ import { StatusBadge } from "./status-badge";
 import { getCampaignCardMetrics } from "./campaign-metrics";
 
 const SOURCE_LABEL: Record<SourceType, string> = {
-  new: "Новая база",
+  new: "Новая база номеров",
   stream: "Поток",
-  own: "Своя база",
+  own: "Свои сигналы",
 };
 
 function formatDate(iso: string): string {
