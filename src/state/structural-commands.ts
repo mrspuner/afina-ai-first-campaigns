@@ -25,6 +25,12 @@ export type StructuralOp =
       ref: string;
       newType: WorkflowNodeType;
       inlineParams?: string;
+    }
+  | {
+      kind: "addCondition";
+      ref: string;
+      yesLabel?: string;
+      noLabel?: string;
     };
 
 export type AppliedOp = { op: StructuralOp; description: string };
@@ -688,6 +694,59 @@ function applyReplace(
   };
 }
 
+function applyAddCondition(
+  graph: GraphState,
+  op: Extract<StructuralOp, { kind: "addCondition" }>
+): { graph: GraphState; description: string } | { error: string } {
+  const ref = findNodeByRef(graph.nodes, op.ref);
+  if (!ref) return { error: `«${op.ref}» — нет такой ноды` };
+  const outgoing = graph.edges.filter((e) => e.source === ref.id);
+  if (outgoing.length !== 1) {
+    return { error: `«${op.ref}» — для условия нужна нода с одним выходом` };
+  }
+  const succEdge = outgoing[0];
+  const yesLabel = op.yesLabel ?? "YES";
+  const noLabel = op.noLabel ?? "NO";
+
+  const condId = `n_${nanoId()}`;
+  const leafId = `n_${nanoId()}`;
+  const condNode: WorkflowNode = {
+    id: condId,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: {
+      label: uniqueLabel(graph.nodes, "condition"),
+      nodeType: "condition",
+      ...(defaultParamsFor("condition") ? { params: defaultParamsFor("condition") } : {}),
+      needsAttention: true,
+      attentionReason: "Настройте условие ветвления",
+    } as WorkflowNode["data"],
+  };
+  const leafNode: WorkflowNode = {
+    id: leafId,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: {
+      label: uniqueLabel([...graph.nodes, condNode], "end"),
+      nodeType: "end",
+      ...(defaultParamsFor("end") ? { params: defaultParamsFor("end") } : {}),
+    } as WorkflowNode["data"],
+  };
+
+  const nodes = [...graph.nodes, condNode, leafNode];
+  const edges: WorkflowEdge[] = [
+    ...graph.edges.filter((e) => e.id !== succEdge.id),
+    { id: `e_${nanoId()}`, source: ref.id, target: condId, type: "default" },
+    { id: `e_${nanoId()}`, source: condId, target: succEdge.target, type: "default", label: yesLabel },
+    { id: `e_${nanoId()}`, source: condId, target: leafId, type: "default", label: noLabel },
+  ];
+
+  return {
+    graph: { nodes, edges },
+    description: `Добавил ${TYPE_LABEL.condition} после ${op.ref} (${yesLabel}/${noLabel})`,
+  };
+}
+
 /**
  * BFS-layout: расставить ноды столбцами по глубине от Сигнала.
  * Узлы той же глубины — вертикально по центру.
@@ -775,6 +834,9 @@ export function applyOps(
         break;
       case "replace":
         result = applyReplace(g, op);
+        break;
+      case "addCondition":
+        result = applyAddCondition(g, op);
         break;
     }
     if ("error" in result) {

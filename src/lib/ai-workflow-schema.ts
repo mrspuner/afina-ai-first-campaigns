@@ -76,6 +76,13 @@ export const structuralOpSchema = z.discriminatedUnion("kind", [
     newType: nodeTypeSchema,
     inlineParams: z.string().optional(),
   }),
+  // Добавить условие с двумя помеченными ветками
+  z.object({
+    kind: z.literal("addCondition"),
+    ref: z.string(),
+    yesLabel: z.string().optional(),
+    noLabel: z.string().optional(),
+  }),
 ]);
 
 // ── Верхний уровень — ответ LLM / эндпоинта ──────────────────────────────────

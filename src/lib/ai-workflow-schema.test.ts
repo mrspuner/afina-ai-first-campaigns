@@ -195,3 +195,29 @@ describe("type compatibility", () => {
     }
   });
 });
+
+// ── addCondition (Task 3) ─────────────────────────────────────────────────────
+
+import { structuralOpSchema } from "./ai-workflow-schema";
+
+describe("structuralOpSchema — addCondition", () => {
+  it("принимает addCondition с ref и метками", () => {
+    const r = structuralOpSchema.safeParse({
+      kind: "addCondition",
+      ref: "n2",
+      yesLabel: "Да",
+      noLabel: "Нет",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("принимает addCondition только с ref (метки необязательны)", () => {
+    const r = structuralOpSchema.safeParse({ kind: "addCondition", ref: "n2" });
+    expect(r.success).toBe(true);
+  });
+
+  it("addCondition без ref отклоняется", () => {
+    const r = structuralOpSchema.safeParse({ kind: "addCondition" });
+    expect(r.success).toBe(false);
+  });
+});

@@ -473,3 +473,86 @@ describe("applyOps — резолв ноды по id (AI-путь)", () => {
     expect(r.skipped).toHaveLength(1);
   });
 });
+
+// ── Task 3: addCondition op ───────────────────────────────────────────────────
+
+import { validateAiGraph } from "./ai-graph-validation";
+
+function node(id: string, nodeType: string, label = id): WorkflowNode {
+  return {
+    id,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: { label, nodeType: nodeType as WorkflowNode["data"]["nodeType"] },
+  };
+}
+function edge(source: string, target: string, label?: string): WorkflowEdge {
+  return {
+    id: `${source}-${target}`,
+    source,
+    target,
+    type: "default",
+    ...(label ? { label } : {}),
+  };
+}
+// Linear graph: signal → sms → success, plus end leaf.
+function linear(): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
+  return {
+    nodes: [
+      node("signal", "signal", "Сигнал"),
+      node("sms", "sms", "СМС"),
+      node("ok", "success", "Успех"),
+      node("end", "end", "Конец"),
+    ],
+    edges: [edge("signal", "sms"), edge("sms", "ok")],
+  };
+}
+
+describe("applyOps — addCondition", () => {
+  it("вставляет condition после ref с двумя ветками YES/NO", () => {
+    const g = linear();
+    const res = applyOps(g, [
+      { kind: "addCondition", ref: "sms", yesLabel: "Открыл", noLabel: "Не открыл" },
+    ]);
+    expect(res.skipped).toHaveLength(0);
+    const cond = res.graph.nodes.find((n) => n.data.nodeType === "condition")!;
+    expect(cond).toBeDefined();
+    const outgoing = res.graph.edges.filter((e) => e.source === cond.id);
+    expect(outgoing).toHaveLength(2);
+    const labels = outgoing.map((e) => e.label).sort();
+    expect(labels).toEqual(["Не открыл", "Открыл"]);
+    // ref now points at the condition
+    expect(res.graph.edges.some((e) => e.source === "sms" && e.target === cond.id)).toBe(true);
+    // YES branch keeps the old successor (success); NO branch is a fresh end leaf
+    const yes = outgoing.find((e) => e.label === "Открыл")!;
+    expect(yes.target).toBe("ok");
+  });
+
+  it("результирующий граф проходит validateAiGraph (condition-degree==2)", () => {
+    const g = linear();
+    const res = applyOps(g, [{ kind: "addCondition", ref: "sms" }]);
+    expect(validateAiGraph(res.graph).ok).toBe(true);
+  });
+
+  it("дефолтные метки YES/NO когда не заданы", () => {
+    const res = applyOps(linear(), [{ kind: "addCondition", ref: "sms" }]);
+    const cond = res.graph.nodes.find((n) => n.data.nodeType === "condition")!;
+    const labels = res.graph.edges
+      .filter((e) => e.source === cond.id)
+      .map((e) => e.label)
+      .sort();
+    expect(labels).toEqual(["NO", "YES"]);
+  });
+
+  it("ошибка, если ref не имеет ровно одного выхода", () => {
+    // success has 0 outgoing
+    const res = applyOps(linear(), [{ kind: "addCondition", ref: "ok" }]);
+    expect(res.skipped).toHaveLength(1);
+    expect(res.applied).toHaveLength(0);
+  });
+
+  it("ошибка, если ref не найден", () => {
+    const res = applyOps(linear(), [{ kind: "addCondition", ref: "нетакой" }]);
+    expect(res.skipped).toHaveLength(1);
+  });
+});
