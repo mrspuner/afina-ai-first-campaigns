@@ -101,6 +101,18 @@ describe("ScenarioCard — curated label badge", () => {
     expect(card).toContainElement(badge);
   });
 
+  it("curated badge has brand-accent classes (bg-brand-muted)", () => {
+    render(
+      <ScenarioCard
+        scenario={SCENARIO}
+        onClick={() => {}}
+        curatedLabel="Подобрано для вас"
+      />
+    );
+    const curatedBadge = screen.getByText("Подобрано для вас");
+    expect(curatedBadge).toHaveClass("bg-brand-muted");
+  });
+
   it("renders both sourceLabel and curatedLabel badges when both props are set", () => {
     render(
       <ScenarioCard
@@ -115,6 +127,9 @@ describe("ScenarioCard — curated label badge", () => {
     const curatedBadge = screen.getByText("Подобрано для вас");
     expect(card).toContainElement(sourceBadge);
     expect(card).toContainElement(curatedBadge);
+    // curated badge is brand-accented; source badge stays neutral (no bg-brand-muted)
+    expect(curatedBadge).toHaveClass("bg-brand-muted");
+    expect(sourceBadge).not.toHaveClass("bg-brand-muted");
   });
 
   it("renders no curated badge when curatedLabel is omitted", () => {

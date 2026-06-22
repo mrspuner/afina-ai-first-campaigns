@@ -93,8 +93,7 @@ export function ScenarioCard({
           ) : null}
           {curatedLabel ? (
             <Badge
-              variant="secondary"
-              className="text-[11px] font-normal text-muted-foreground"
+              className="border-brand/50 bg-brand-muted text-foreground text-[11px] font-normal"
             >
               {curatedLabel}
             </Badge>
