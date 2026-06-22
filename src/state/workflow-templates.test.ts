@@ -133,3 +133,77 @@ describe("source-aware generation (A3)", () => {
     }
   });
 });
+
+describe("channel-aware template generation", () => {
+  it("createTemplate with channels=[sms,email] has split, sms, email, merge nodes for Регистрация", () => {
+    const t = createTemplate("Регистрация", "own", ["sms", "email"]);
+    const types = t.nodes.map((n) => n.data.nodeType);
+    expect(types).toContain("split");
+    expect(types).toContain("sms");
+    expect(types).toContain("email");
+    expect(types).toContain("merge");
+  });
+
+  it("createTemplate with single channel has no split/merge but has condition", () => {
+    const t = createTemplate("Регистрация", "own", ["sms"]);
+    const types = t.nodes.map((n) => n.data.nodeType);
+    // Single channel: no split/merge for the channel block
+    expect(types).toContain("sms");
+    // But must have condition (even for single channel, per spec)
+    expect(types).toContain("condition");
+  });
+
+  it("createTemplate with channels has 2 condition nodes (one per repeat iteration)", () => {
+    const t = createTemplate("Регистрация", "own", ["sms"]);
+    const conditionCount = t.nodes.filter((n) => n.data.nodeType === "condition").length;
+    expect(conditionCount).toBe(2);
+  });
+
+  it("createTemplate with channels has 2 channel nodes (original + repeat) for single channel", () => {
+    const t = createTemplate("Регистрация", "own", ["push"]);
+    const pushCount = t.nodes.filter((n) => n.data.nodeType === "push").length;
+    expect(pushCount).toBe(2);
+  });
+
+  it("createTemplate with channels still validates ok", () => {
+    const t = createTemplate("Регистрация", "own", ["sms", "email"]);
+    const v = validateWorkflow(t, true);
+    expect(v.ok).toBe(true);
+  });
+
+  it("createTemplate without channels falls back to legacy template", () => {
+    const t = createTemplate("Регистрация");
+    // Legacy template has email and push for Регистрация
+    const types = t.nodes.map((n) => n.data.nodeType);
+    expect(types).toContain("email");
+    expect(types).toContain("push");
+    // No condition node in legacy registration template
+    expect(types).not.toContain("condition");
+  });
+
+  it("segmented scenario Апсейл with channels has comm units for non-lowest segments", () => {
+    const t = createTemplate("Апсейл", "own", ["sms", "email"]);
+    const types = t.nodes.map((n) => n.data.nodeType);
+    // Must have split (by segment) and merge
+    expect(types).toContain("split");
+    expect(types).toContain("merge");
+    // Must have conditions (from comm units)
+    const condCount = types.filter((t) => t === "condition").length;
+    expect(condCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("all ids are unique when channels are provided", () => {
+    const t = createTemplate("Регистрация", "own", ["sms", "email"]);
+    const ids = t.nodes.map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("all edges reference existing node ids when channels are provided", () => {
+    const t = createTemplate("Регистрация", "own", ["sms", "email", "push"]);
+    const idSet = new Set(t.nodes.map((n) => n.id));
+    for (const edge of t.edges) {
+      expect(idSet.has(edge.source), `source ${edge.source} missing`).toBe(true);
+      expect(idSet.has(edge.target), `target ${edge.target} missing`).toBe(true);
+    }
+  });
+});

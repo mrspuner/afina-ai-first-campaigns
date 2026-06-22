@@ -8,6 +8,9 @@ import type {
   WorkflowNodeData,
 } from "@/types/workflow";
 
+import type { Channel } from "@/types/campaign";
+import { buildCommUnit } from "./channel-nodes";
+
 export interface Template {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
@@ -294,10 +297,236 @@ function withScoring(t: Template): Template {
   return { nodes: [...shifted, scoringNode], edges };
 }
 
+// ── Channel-aware template builders ──────────────────────────────────────────
+
+/**
+ * Rough estimate of the x-width a comm unit occupies, to help position
+ * success/end nodes. For 1 channel: STEP * 5 (entry→cond→wait→repeat→cond2).
+ * For N channels: add STEP for split + STEP for merge.
+ */
+function estimateUnitWidth(channels: Channel[]): number {
+  const channelBlockWidth = channels.length > 1 ? STEP * 2 : STEP;
+  // Unit: [block] → cond → wait → [block] → cond2
+  return channelBlockWidth + STEP + STEP + channelBlockWidth + STEP;
+}
+
+/**
+ * Builds a linear (non-segmented) channel-aware template.
+ * Structure: source → [scoring] → commUnit(channels) → success/end
+ *
+ * The comm unit provides:
+ *   channels → condition → YES: success
+ *                         NO: wait → repeat channels → condition → YES: success / NO: end
+ */
+function buildLinearChannelTemplate(
+  signalType: SignalType,
+  channels: Channel[]
+): Template {
+  const successId = "success";
+  const endId = "end";
+  const prefix = "comm";
+
+  // Use the legacy template as the skeleton to pick up signal params and success/end labels
+  const legacy = TEMPLATE_BY_TYPE[signalType]();
+  const signalNode = legacy.nodes[0]; // always the source node
+
+  // Build the comm unit with pre-filled template params (validates ok immediately)
+  const unit = buildCommUnit(channels, {
+    prefix,
+    onEngaged: successId,
+    onExhausted: endId,
+    useTemplateParams: true,
+  });
+
+  // Build success and end nodes — extract from legacy or use defaults
+  const legacySuccess = legacy.nodes.find((nd) => nd.data.isSuccess) ?? legacy.nodes[legacy.nodes.length - 1];
+  const legacyEnd = legacy.nodes.find((nd) => nd.data.nodeType === "end");
+
+  // Position: source at x=0, unit starts at x=STEP, success/end at end of unit
+  const unitWidth = estimateUnitWidth(channels);
+  const successX = STEP + unitWidth + STEP;
+  const endX = successX;
+
+  const successNode = n(
+    successId,
+    legacySuccess.data.label,
+    "success",
+    successX,
+    -80,
+    legacySuccess.data.sublabel,
+    { isSuccess: true },
+    legacySuccess.data.params
+  );
+  const endNode = n(
+    endId,
+    legacyEnd?.data.label ?? "Конец",
+    "end",
+    endX,
+    80,
+    legacyEnd?.data.sublabel,
+    undefined,
+    legacyEnd?.data.params
+  );
+
+  // Offset unit nodes to start at x=STEP
+  const offsetNodes = unit.nodes.map((nd) => ({
+    ...nd,
+    position: { x: nd.position.x + STEP, y: nd.position.y },
+  }));
+
+  const nodes = [
+    { ...signalNode, position: { x: 0, y: 0 } },
+    ...offsetNodes,
+    successNode,
+    endNode,
+  ];
+
+  const edges = [
+    // source → comm unit entry
+    e(signalNode.id, unit.entryId),
+    // all comm unit internal edges (includes connections to successId and endId)
+    ...unit.edges,
+  ];
+
+  return { nodes, edges };
+}
+
+/**
+ * Builds a segmented channel-aware template (Апсейл, Удержание).
+ * Structure: source → split(by segment) → [comm unit per active segment] → merge → success
+ * Lowest segment (low) → end (no comm unit).
+ */
+function buildSegmentedChannelTemplate(
+  signalType: SignalType,
+  channels: Channel[]
+): Template {
+  const legacy = TEMPLATE_BY_TYPE[signalType]();
+  const signalNode = legacy.nodes[0];
+
+  // For segmented scenarios: 3 active segments (high, mid, max-like) + 1 lowest (low → end)
+  const SEGMENTS = ["max", "high", "mid"] as const;
+  const SEGMENT_LABELS: Record<string, string> = {
+    max: "Макс",
+    high: "Выс",
+    mid: "Ср",
+    low: "Низ",
+  };
+
+  const splitId = "seg_split";
+  const mergeId = "seg_merge";
+  const successId = "success";
+  const endId = "end";
+
+  const splitNode = n(
+    splitId,
+    "Сплиттер",
+    "split",
+    STEP,
+    0,
+    "По сегменту",
+    undefined,
+    { kind: "split", by: "segment", branches: 4 }
+  );
+
+  // Build a comm unit per active segment
+  const unitWidth = estimateUnitWidth(channels);
+  const unitStartX = STEP * 2;
+  const segYPositions = [-120, -40, 40];
+
+  const allUnitNodes: WorkflowNode[] = [];
+  const allUnitEdges: WorkflowEdge[] = [];
+  const splitEdges: WorkflowEdge[] = [];
+
+  SEGMENTS.forEach((seg, idx) => {
+    const prefix = `${seg}_comm`;
+    const yOffset = segYPositions[idx];
+
+    // Each unit's YES path → merge, NO path → end
+    const unit = buildCommUnit(channels, {
+      prefix,
+      onEngaged: mergeId,      // YES → merge
+      onExhausted: endId,      // NO → end (exhausted)
+      xOffset: unitStartX,
+      yOffset,
+      useTemplateParams: true,
+    });
+
+    allUnitNodes.push(...unit.nodes);
+    allUnitEdges.push(...unit.edges);
+    splitEdges.push(e(splitId, unit.entryId, SEGMENT_LABELS[seg]));
+  });
+
+  // Lowest segment → end directly
+  splitEdges.push(e(splitId, endId, SEGMENT_LABELS["low"]));
+
+  // Position merge + success after units
+  const mergeX = unitStartX + unitWidth + STEP * 2;
+  const mergeNode = n(mergeId, "Слияние", "merge", mergeX, -40, undefined, undefined, { kind: "merge" });
+
+  const legacySuccess = legacy.nodes.find((nd) => nd.data.isSuccess) ?? legacy.nodes[legacy.nodes.length - 1];
+  const legacyEnd = legacy.nodes.find((nd) => nd.data.nodeType === "end");
+
+  const successNode = n(
+    successId,
+    legacySuccess.data.label,
+    "success",
+    mergeX + STEP,
+    -40,
+    legacySuccess.data.sublabel,
+    { isSuccess: true },
+    legacySuccess.data.params
+  );
+  const endNode = n(
+    endId,
+    legacyEnd?.data.label ?? "Конец",
+    "end",
+    unitStartX + unitWidth + STEP,
+    120,
+    legacyEnd?.data.sublabel,
+    undefined,
+    legacyEnd?.data.params
+  );
+
+  const nodes = [
+    { ...signalNode, position: { x: 0, y: 0 } },
+    splitNode,
+    ...allUnitNodes,
+    mergeNode,
+    successNode,
+    endNode,
+  ];
+
+  const edges = [
+    e(signalNode.id, splitId),
+    ...splitEdges,
+    ...allUnitEdges,
+    e(mergeId, successId),
+  ];
+
+  return { nodes, edges };
+}
+
+/** Segmented signal types */
+const SEGMENTED_TYPES = new Set<SignalType>(["Апсейл", "Удержание"]);
+
 export function createTemplate(
   signalType: SignalType,
-  sourceType: SourceType = "new"
+  sourceType: SourceType = "new",
+  channels?: Channel[]
 ): Template {
-  const base = TEMPLATE_BY_TYPE[signalType]();
+  let base: Template;
+
+  if (channels && channels.length > 0) {
+    // Channel-aware path
+    if (SEGMENTED_TYPES.has(signalType)) {
+      base = buildSegmentedChannelTemplate(signalType, channels);
+    } else {
+      base = buildLinearChannelTemplate(signalType, channels);
+    }
+  } else {
+    // Legacy path (no channels) — existing hardcoded templates
+    base = TEMPLATE_BY_TYPE[signalType]();
+  }
+
   return sourceType === "own" ? base : withScoring(base);
 }

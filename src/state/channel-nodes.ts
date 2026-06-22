@@ -43,6 +43,10 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
  * Returns default NodeParams for a channel.
  * These are the "filled preset" variants used in templates.
  */
+/**
+ * Returns default NodeParams for a channel (for structural commands — empty fields
+ * trigger needsAttention, prompting the user to fill them in).
+ */
 export function channelDefaultParams(channel: Channel): NodeParams {
   switch (channel) {
     case "sms":
@@ -63,6 +67,34 @@ export function channelDefaultParams(channel: Channel): NodeParams {
       return { kind: "push", title: "", body: "" };
     case "ivr":
       return { kind: "ivr", scenario: "", voiceType: "neutral" };
+  }
+}
+
+/**
+ * Returns pre-filled template NodeParams for a channel. Used in template
+ * generation so the graph passes validation (no needsAttention flags).
+ * These are placeholder texts the user can overwrite via the prompt bar.
+ */
+export function channelTemplateParams(channel: Channel): NodeParams {
+  switch (channel) {
+    case "sms":
+      return {
+        kind: "sms",
+        text: "Специальное предложение только для вас.",
+        alphaName: "BRAND",
+        scheduledAt: "immediate",
+      };
+    case "email":
+      return {
+        kind: "email",
+        subject: "Специальное предложение",
+        body: "Мы подготовили для вас персональное предложение.",
+        sender: "noreply@brand.com",
+      };
+    case "push":
+      return { kind: "push", title: "Новость от нас", body: "Есть что-то интересное для вас" };
+    case "ivr":
+      return { kind: "ivr", scenario: "Персональное предложение", voiceType: "neutral" };
   }
 }
 
@@ -155,7 +187,7 @@ export interface ChannelBlock {
  *
  * All node IDs are prefixed with `idPrefix` (default: "comm").
  */
-export function buildChannelBlock(channels: Channel[], idPrefix?: string): ChannelBlock {
+export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTemplateParams?: boolean): ChannelBlock {
   const prefix = idPrefix ?? "comm";
 
   if (channels.length === 0) {
@@ -166,7 +198,8 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string): Chann
     const ch = channels[0];
     const entry = CHANNEL_NODE_MAP[ch];
     const nodeId = `${prefix}_${ch}`;
-    const node = makeNode(nodeId, entry.label, ch, 0, 0, undefined, entry.defaultParams);
+    const params = useTemplateParams ? channelTemplateParams(ch) : entry.defaultParams;
+    const node = makeNode(nodeId, entry.label, ch, 0, 0, undefined, params);
     return { nodes: [node], edges: [], entryId: nodeId, exitId: nodeId };
   }
 
@@ -190,7 +223,8 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string): Chann
   const channelNodes: WorkflowNode[] = channels.map((ch, i) => {
     const entry = CHANNEL_NODE_MAP[ch];
     const nodeId = `${prefix}_${ch}`;
-    return makeNode(nodeId, entry.label, ch, STEP, startY + i * CHANNEL_Y_SPACING, undefined, entry.defaultParams);
+    const params = useTemplateParams ? channelTemplateParams(ch) : entry.defaultParams;
+    return makeNode(nodeId, entry.label, ch, STEP, startY + i * CHANNEL_Y_SPACING, undefined, params);
   });
 
   const mergeNode = makeNode(mergeId, "Слияние", "merge", STEP * 2, 0, undefined, { kind: "merge" });
@@ -221,6 +255,8 @@ export interface CommUnitOptions {
   xOffset?: number;
   /** Y offset for this unit (default: 0). */
   yOffset?: number;
+  /** When true, uses pre-filled template params instead of empty defaults. */
+  useTemplateParams?: boolean;
 }
 
 export interface CommUnit {
@@ -245,13 +281,13 @@ export interface CommUnit {
  * Repeat count = 1 (not configurable per spec decision).
  */
 export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommUnit {
-  const { prefix, onEngaged, onExhausted, xOffset = 0, yOffset = 0 } = opts;
+  const { prefix, onEngaged, onExhausted, xOffset = 0, yOffset = 0, useTemplateParams } = opts;
 
   const ox = xOffset;
   const oy = yOffset;
 
   // 1. First channel block
-  const firstBlock = buildChannelBlock(channels, `${prefix}`);
+  const firstBlock = buildChannelBlock(channels, `${prefix}`, useTemplateParams);
 
   // Offset first block's nodes
   const firstNodes = firstBlock.nodes.map((n) => ({
@@ -288,7 +324,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
 
   // 4. Repeat channel block
   const repeatPrefix = `${prefix}_repeat`;
-  const repeatBlock = buildChannelBlock(channels, repeatPrefix);
+  const repeatBlock = buildChannelBlock(channels, repeatPrefix, useTemplateParams);
   const repeatStartX = waitX + STEP;
   const repeatNodes = repeatBlock.nodes.map((n) => ({
     ...n,
