@@ -276,6 +276,7 @@ export function WorkflowView({
   campaignId,
   signalType,
   sourceType,
+  channels,
   onGraphChange,
   onNodeClick,
   onPaneClick,
