@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 import { splitCampaignPayments } from "./campaign-payments";
+import { scaleBreakdown } from "@/sections/campaigns/scale-breakdown";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -104,6 +105,43 @@ export function CampaignPaymentScreen() {
   const customIsValid = !isNaN(customParsed) && customParsed > 0;
   const activeBudget =
     mode === "recommended" ? recommended : customIsValid ? customParsed : 0;
+
+  // In custom mode the breakdown blocks rescale proportionally to the chosen
+  // sum so the displayed numbers reflect what the user actually pays; in
+  // recommended mode they show the original computed values.
+  const { displayLines, displayRepeat } = useMemo(() => {
+    if (!cost) return { displayLines: [], displayRepeat: 0 };
+    const scaling = mode === "custom" && recommended > 0;
+    const factor = scaling ? customParsed / recommended : 0;
+    if (!scaling) {
+      return { displayLines: cost.lines, displayRepeat: cost.repeat };
+    }
+    const lines = cost.lines.map((line) => {
+      const scaledReach = Math.round(line.reach * factor);
+      // Recompute sum from unit × scaledReach so the equation stays honest.
+      return { ...line, reach: scaledReach, sum: Math.round(line.unit * scaledReach) };
+    });
+    return { displayLines: lines, displayRepeat: Math.round(cost.repeat * factor) };
+  }, [cost, mode, customParsed, recommended]);
+
+  const displaySplit = useMemo(() => {
+    if (!paymentSplit) return null;
+    if (mode !== "custom" || recommended <= 0) return paymentSplit;
+    const [scoring, communication] = scaleBreakdown(
+      [
+        { key: "scoring", amount: paymentSplit.scoring },
+        { key: "communication", amount: paymentSplit.communication },
+      ],
+      customParsed,
+      recommended,
+    );
+    return {
+      ...paymentSplit,
+      scoring: scoring.amount,
+      communication: communication.amount,
+      total: scoring.amount + communication.amount,
+    };
+  }, [paymentSplit, mode, customParsed, recommended]);
 
   const touches = estimateTouches(activeBudget, audienceSize);
   const shortfall = computeShortfall(balance, activeBudget);
@@ -220,13 +258,13 @@ export function CampaignPaymentScreen() {
         </div>
 
         {/* Cost breakdown — из чего складывается рекомендуемая сумма */}
-        {cost && cost.lines.length > 0 && (
+        {cost && displayLines.length > 0 && (
           <div className="rounded-lg border border-border bg-card px-4 py-3.5">
             <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Из чего складывается стоимость
             </h2>
             <ul className="mt-2.5 flex flex-col gap-1.5">
-              {cost.lines.map((line) => (
+              {displayLines.map((line) => (
                 <li
                   key={line.nodeId}
                   className="flex items-baseline justify-between gap-3 text-sm"
@@ -251,7 +289,7 @@ export function CampaignPaymentScreen() {
                     Повторные коммуникации (+30% буфер)
                   </span>
                   <span className="shrink-0 font-medium tabular-nums text-foreground">
-                    {formatRubPlain(cost.repeat)}
+                    {formatRubPlain(displayRepeat)}
                   </span>
                 </li>
               )}
@@ -260,7 +298,7 @@ export function CampaignPaymentScreen() {
         )}
 
         {/* Two-payment split — scoring + communication (source-aware, §5) */}
-        {paymentSplit && (
+        {displaySplit && (
           <div className="rounded-lg border border-border bg-card px-4 py-3.5">
             <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Платежи
@@ -269,16 +307,16 @@ export function CampaignPaymentScreen() {
               <li className="flex items-baseline justify-between gap-3">
                 <span className="text-muted-foreground">Скоринг (сигналы)</span>
                 <span className="shrink-0 font-medium tabular-nums text-foreground">
-                  {paymentSplit.scoring > 0
-                    ? formatRubPlain(paymentSplit.scoring)
+                  {displaySplit.scoring > 0
+                    ? formatRubPlain(displaySplit.scoring)
                     : "бесплатно"}
                 </span>
               </li>
               <li className="flex items-baseline justify-between gap-3">
                 <span className="text-muted-foreground">Коммуникация</span>
                 <span className="shrink-0 font-medium tabular-nums text-foreground">
-                  {paymentSplit.communication > 0
-                    ? formatRubPlain(paymentSplit.communication)
+                  {displaySplit.communication > 0
+                    ? formatRubPlain(displaySplit.communication)
                     : "—"}
                 </span>
               </li>
@@ -287,7 +325,7 @@ export function CampaignPaymentScreen() {
                   <span className="text-muted-foreground">Дневной бюджет · потолок</span>
                   <span className="shrink-0 tabular-nums text-foreground">
                     {formatRubPlain(streamDailyBudget)} ·{" "}
-                    {formatRubPlain(paymentSplit.total)}
+                    {formatRubPlain(displaySplit.total)}
                   </span>
                 </li>
               )}
@@ -398,34 +436,12 @@ export function CampaignPaymentScreen() {
           </span>
         </p>
 
-        {/* Cost / Balance — mirror of step-6-summary.tsx */}
-        <div
-          className={cn(
-            "rounded-lg border bg-card px-4 py-3.5",
-            enoughBalance
-              ? "border-border"
-              : "border-amber-500/30 bg-amber-50/40 dark:bg-amber-500/5"
-          )}
-        >
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Стоимость</span>
-            <span className="font-semibold tabular-nums">
-              {formatRub(activeBudget)}
-            </span>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Баланс</span>
-            <span className="font-medium tabular-nums">{formatRub(balance)}</span>
-          </div>
-          {!enoughBalance && (
-            <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-sm">
-              <span className="text-foreground">Не хватает</span>
-              <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                {formatRub(shortfall)}
-              </span>
-            </div>
-          )}
-        </div>
+        {/* Inline shortfall hint — only when balance falls short */}
+        {!enoughBalance && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Не хватает ₽{formatNumber(shortfall)}
+          </p>
+        )}
 
         <Separator />
 
