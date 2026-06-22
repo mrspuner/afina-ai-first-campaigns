@@ -329,6 +329,7 @@ export function WorkflowSection() {
           campaignId={currentCampaign.id}
           signalType={scenarioSignalType}
           sourceType={currentCampaign.sourceType}
+          channels={currentCampaign.channels ?? []}
           onGraphChange={handleGraphChange}
           // Launched campaigns are read-only: nodes still open/expand so the
           // user can inspect the сценарий, but their fields can't be edited
