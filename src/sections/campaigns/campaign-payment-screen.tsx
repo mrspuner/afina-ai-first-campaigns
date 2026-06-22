@@ -276,47 +276,8 @@ export function CampaignPaymentScreen() {
           </div>
         </div>
 
-        {/* Cost breakdown — из чего складывается рекомендуемая сумма */}
-        {cost && displayLines.length > 0 && (
-          <div className="rounded-lg border border-border bg-card px-4 py-3.5">
-            <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              Из чего складывается стоимость
-            </h2>
-            <ul className="mt-2.5 flex flex-col gap-1.5">
-              {displayLines.map((line) => (
-                <li
-                  key={line.nodeId}
-                  className="flex items-baseline justify-between gap-3 text-sm"
-                >
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    <span className="text-foreground">
-                      {CHANNEL_LABEL[line.channel]}
-                    </span>
-                    {line.label ? ` · ${line.label}` : ""}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {formatRubPlain(line.unit)} × ~{formatNumber(line.reach)} ={" "}
-                    <span className="font-medium text-foreground">
-                      {formatRubPlain(line.sum)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-              {cost.hasDynamic && (
-                <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5 text-sm">
-                  <span className="text-muted-foreground">
-                    Повторные коммуникации (+30% буфер)
-                  </span>
-                  <span className="shrink-0 font-medium tabular-nums text-foreground">
-                    {formatRubPlain(displayRepeat)}
-                  </span>
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-
         {/* Two-payment split — scoring + communication (source-aware, §5) */}
+        {/* Breakdown detail («Из чего складывается») is merged inline after «Коммуникация». */}
         {displaySplit && (
           <div className="rounded-lg border border-border bg-card px-4 py-3.5">
             <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
@@ -325,10 +286,10 @@ export function CampaignPaymentScreen() {
             <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
               <li className="flex items-baseline justify-between gap-3">
                 <span className="text-muted-foreground">Скоринг (сигналы)</span>
-                <span className="shrink-0 font-medium tabular-nums text-foreground">
-                  {displaySplit.scoring > 0
-                    ? formatRubPlain(displaySplit.scoring)
-                    : "бесплатно"}
+                <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
+                  {campaign.sourceType === "own"
+                    ? "бесплатно"
+                    : "уже оплачено"}
                 </span>
               </li>
               <li className="flex items-baseline justify-between gap-3">
@@ -339,6 +300,41 @@ export function CampaignPaymentScreen() {
                     : "—"}
                 </span>
               </li>
+              {cost && displayLines.length > 0 && (
+                <li className="mt-0.5">
+                  <ul className="flex flex-col gap-1 border-l-2 border-border pl-3">
+                    {displayLines.map((line) => (
+                      <li
+                        key={line.nodeId}
+                        className="flex items-baseline justify-between gap-3 text-xs"
+                      >
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          <span className="text-foreground/80">
+                            {CHANNEL_LABEL[line.channel]}
+                          </span>
+                          {line.label ? ` · ${line.label}` : ""}
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {formatRubPlain(line.unit)} × ~{formatNumber(line.reach)} ={" "}
+                          <span className="font-medium text-foreground/80">
+                            {formatRubPlain(line.sum)}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                    {cost.hasDynamic && (
+                      <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1 text-xs">
+                        <span className="text-muted-foreground">
+                          Повторные коммуникации (+30% буфер)
+                        </span>
+                        <span className="shrink-0 font-medium tabular-nums text-foreground/80">
+                          {formatRubPlain(displayRepeat)}
+                        </span>
+                      </li>
+                    )}
+                  </ul>
+                </li>
+              )}
               {streamDailyBudget !== undefined && (
                 <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
                   <span className="text-muted-foreground">Дневной бюджет · потолок</span>
