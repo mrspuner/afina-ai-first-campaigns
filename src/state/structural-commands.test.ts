@@ -4,6 +4,7 @@ import {
   applyOps,
   normalizeNodeRef,
   diffChangedNodeIds,
+  relayoutGraph,
 } from "./structural-commands";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
@@ -554,5 +555,239 @@ describe("applyOps — addCondition", () => {
   it("ошибка, если ref не найден", () => {
     const res = applyOps(linear(), [{ kind: "addCondition", ref: "нетакой" }]);
     expect(res.skipped).toHaveLength(1);
+  });
+});
+
+// ── Block 7: replace на разветвляющий тип создаёт N веток ──────────────────────
+describe("applyOps — replace на split разветвляет (block7, дефект 2)", () => {
+  it("replace wait→split с 2 ветками: split имеет 2 исходящих ребра, не одно", () => {
+    // graph: signal → wait → success
+    const g = {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("w", "wait", "Задержка"),
+        node("ok", "success", "Успех"),
+      ],
+      edges: [edge("signal", "w"), edge("w", "ok")],
+    };
+    const res = applyOps(g, [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    expect(res.skipped).toHaveLength(0);
+    const split = res.graph.nodes.find((n) => n.data.nodeType === "split")!;
+    expect(split).toBeDefined();
+    const out = res.graph.edges.filter((e) => e.source === split.id);
+    // ДЕФЕКТ 2: до фикса out.length === 1 (наследует одно ребро) → тест падает.
+    expect(out).toHaveLength(2);
+  });
+
+  it("каждая ветка получает ноду своего канала (Высокий→СМС, Средний→Звонок)", () => {
+    const g = {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("w", "wait", "Задержка"),
+        node("ok", "success", "Успех"),
+      ],
+      edges: [edge("signal", "w"), edge("w", "ok")],
+    };
+    const res = applyOps(g, [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    const split = res.graph.nodes.find((n) => n.data.nodeType === "split")!;
+    const out = res.graph.edges.filter((e) => e.source === split.id);
+    // Метки веток — на рёбрах
+    expect(out.map((e) => e.label).sort()).toEqual(["Высокий", "Средний"]);
+    // Цели рёбер — ноды-каналы нужного типа
+    const targetTypes = out
+      .map((e) => res.graph.nodes.find((n) => n.id === e.target)!.data.nodeType)
+      .sort();
+    expect(targetTypes).toEqual(["ivr", "sms"]);
+  });
+
+  it("ни один end не имеет исходящих рёбер (терминал не в середине, дефект 1)", () => {
+    const g = {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("w", "wait", "Задержка"),
+        node("ok", "success", "Успех"),
+      ],
+      edges: [edge("signal", "w"), edge("w", "ok")],
+    };
+    const res = applyOps(g, [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    const endIds = new Set(
+      res.graph.nodes.filter((n) => n.data.nodeType === "end").map((n) => n.id)
+    );
+    for (const e of res.graph.edges) {
+      expect(endIds.has(e.source), `end ${e.source} имеет исходящее ребро`).toBe(false);
+    }
+  });
+
+  it("результирующий граф валиден (validateAiGraph.ok)", () => {
+    const g = {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("w", "wait", "Задержка"),
+        node("ok", "success", "Успех"),
+      ],
+      edges: [edge("signal", "w"), edge("w", "ok")],
+    };
+    const res = applyOps(g, [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    expect(validateAiGraph(res.graph).ok).toBe(true);
+  });
+});
+
+// ── Block 7: инвариант размещения терминалов в relayoutGraph (дефект 1) ────────
+describe("relayoutGraph — терминалы (block7, дефект 1)", () => {
+  it("end-нода в конце ветки лежит правее своего предка, не в первых колонках", () => {
+    // signal → split →[A] sms → end ; split →[B] end2
+    const g = {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("sp", "split", "Сплиттер"),
+        node("ch", "sms", "СМС"),
+        node("e1", "end", "Конец"),
+        node("e2", "end", "Конец 2"),
+      ],
+      edges: [
+        edge("signal", "sp"),
+        edge("sp", "ch", "A"),
+        edge("ch", "e1"),
+        edge("sp", "e2", "B"),
+      ],
+    };
+    const out = relayoutGraph(g);
+    const x = (id: string) => out.nodes.find((n) => n.id === id)!.position.x;
+    // Терминал e1 правее своего предка ch; ни один end не в колонке signal(0).
+    expect(x("e1")).toBeGreaterThan(x("ch"));
+    expect(x("e1")).toBeGreaterThan(x("signal"));
+    expect(x("e2")).toBeGreaterThan(x("signal"));
+  });
+});
+
+// ── Block 7: e2e сценарий пользователя «замени задержку на сплиттер» ───────────
+describe("applyOps — сценарий пользователя «замени задержку на сплиттер» (block7 e2e)", () => {
+  function flowWithLandingWait() {
+    return {
+      nodes: [
+        node("signal", "signal", "Сигнал"),
+        node("land", "landing", "Лендинг"),
+        node("w", "wait", "Задержка"),
+        node("ok", "success", "Успех"),
+      ],
+      edges: [edge("signal", "land"), edge("land", "w"), edge("w", "ok")],
+    };
+  }
+
+  it("(a) split имеет 2 различные исходящие ветки", () => {
+    const res = applyOps(flowWithLandingWait(), [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    const sp = res.graph.nodes.find((n) => n.data.nodeType === "split")!;
+    const out = res.graph.edges.filter((e) => e.source === sp.id);
+    expect(out).toHaveLength(2);
+    expect(new Set(out.map((e) => e.target)).size).toBe(2); // различные цели
+  });
+
+  it("(b) каждая ветка — нода своего канала", () => {
+    const res = applyOps(flowWithLandingWait(), [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    const sp = res.graph.nodes.find((n) => n.data.nodeType === "split")!;
+    const targets = res.graph.edges
+      .filter((e) => e.source === sp.id)
+      .map((e) => res.graph.nodes.find((n) => n.id === e.target)!.data.nodeType)
+      .sort();
+    expect(targets).toEqual(["ivr", "sms"]);
+  });
+
+  it("(c) ни один терминал не в середине (у end нет исходящих)", () => {
+    const res = applyOps(flowWithLandingWait(), [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    const ends = new Set(
+      res.graph.nodes.filter((n) => n.data.nodeType === "end").map((n) => n.id)
+    );
+    expect(res.graph.edges.every((e) => !ends.has(e.source))).toBe(true);
+    // Лендинг по-прежнему ведёт в split, не в Успех/Конец напрямую
+    const sp = res.graph.nodes.find((n) => n.data.nodeType === "split")!;
+    expect(res.graph.edges.some((e) => e.source === "land" && e.target === sp.id)).toBe(true);
+  });
+
+  it("(d) граф валиден и Успех не осиротел (keepTarget)", () => {
+    const res = applyOps(flowWithLandingWait(), [
+      {
+        kind: "replace",
+        ref: "w",
+        newType: "split",
+        branches: [
+          { label: "Высокий", channel: "sms" },
+          { label: "Средний", channel: "ivr" },
+        ],
+      },
+    ]);
+    expect(validateAiGraph(res.graph).ok).toBe(true);
+    // success достижим (первая ветка подключена к нему через keepTarget)
+    const reachableTargets = new Set(res.graph.edges.map((e) => e.target));
+    expect(reachableTargets.has("ok")).toBe(true);
   });
 });

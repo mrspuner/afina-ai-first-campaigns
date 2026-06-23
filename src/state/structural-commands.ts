@@ -4,14 +4,23 @@ import type {
   WorkflowEdge,
   NodeParams,
 } from "@/types/workflow";
+import type { Channel } from "@/types/campaign";
 import { NODE_ACTIONS } from "./node-actions";
-import { CHANNEL_NODE_MAP } from "./channel-nodes";
+import { CHANNEL_NODE_MAP, CHANNEL_LABEL } from "./channel-nodes";
 
 export type Placement =
   | { mode: "after"; ref: string }
   | { mode: "before"; ref: string }
   | { mode: "between"; refA: string; refB: string }
   | { mode: "auto" };
+
+/** Описание одной исходящей ветки fan-out-ноды (split/condition). */
+export type BranchSpec = {
+  /** Подпись ребра (RU), напр. «Высокий». */
+  label: string;
+  /** Канал на конце ветки — создаётся нода-канал (sms/email/push/ivr). */
+  channel?: Channel;
+};
 
 export type StructuralOp =
   | {
@@ -26,6 +35,13 @@ export type StructuralOp =
       ref: string;
       newType: WorkflowNodeType;
       inlineParams?: string;
+      /**
+       * Block 7: для замены на разветвляющий тип (split/condition) — описание
+       * исходящих веток. Каждая ветка: подпись ребра (label) + опциональный
+       * канал (создаётся нода-канал в конце ветки). Если не задано — поведение
+       * деградирует к дефолтному ветвлению (см. applyReplace).
+       */
+      branches?: BranchSpec[];
     }
   | {
       kind: "addCondition";
@@ -636,6 +652,99 @@ function applyRemove(
   };
 }
 
+const FAN_OUT_TYPES: ReadonlySet<WorkflowNodeType> = new Set(["split", "condition"]);
+
+/**
+ * Block 7: строит исходящие ветки разветвляющей ноды (split/condition).
+ * Образец — applyAddCondition (фан-аут с метками) + buildChannelBlock
+ * (нода-канал на ветку). Возвращает добавочные ноды и рёбра ОТ fanOutId.
+ *
+ * Для каждой ветки:
+ *   - если задан channel → создаём ноду-канал, ребро fanOut →[label] channel,
+ *     и ребро channel → terminal(end) (терминал в КОНЦЕ ветки, не в середине).
+ *   - если channel не задан → ребро fanOut →[label] terminal(end).
+ *
+ * keepTarget (опционально): id ноды-наследника старого выхода. Первая ветка
+ * подключается к нему вместо нового терминала (сохраняем «happy path»).
+ */
+function buildFanOut(
+  existingNodes: WorkflowNode[],
+  fanOutId: string,
+  branches: BranchSpec[],
+  keepTarget: string | null
+): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
+  const newNodes: WorkflowNode[] = [];
+  const newEdges: WorkflowEdge[] = [];
+  let pool = existingNodes; // для uniqueLabel — растёт по мере добавления
+
+  branches.forEach((br, i) => {
+    let branchTailId: string;
+
+    if (br.channel) {
+      // Нода-канал (sms/email/push/ivr) с дефолтными params, needsAttention.
+      const chId = `n_${nanoId()}`;
+      const chEntry = CHANNEL_NODE_MAP[br.channel];
+      const chNode: WorkflowNode = {
+        id: chId,
+        type: "workflowNode",
+        position: { x: 0, y: 0 },
+        data: {
+          label: uniqueLabel(pool, br.channel),
+          nodeType: br.channel,
+          ...(chEntry.defaultParams ? { params: chEntry.defaultParams } : {}),
+          needsAttention: true,
+          attentionReason: `Заполните ${CHANNEL_LABEL[br.channel]} для ветки «${br.label}»`,
+        } as WorkflowNode["data"],
+      };
+      newNodes.push(chNode);
+      pool = [...pool, chNode];
+      newEdges.push({
+        id: `e_${nanoId()}`,
+        source: fanOutId,
+        target: chId,
+        type: "default",
+        label: br.label,
+      });
+      branchTailId = chId;
+    } else {
+      // Ветка без канала ведёт прямо в терминал.
+      branchTailId = fanOutId; // ребро рисуем ниже на терминал
+    }
+
+    // Конец ветки — терминал. Первую ветку можно подключить к keepTarget.
+    if (i === 0 && keepTarget) {
+      if (br.channel) {
+        newEdges.push({ id: `e_${nanoId()}`, source: branchTailId, target: keepTarget, type: "default" });
+      } else {
+        newEdges.push({ id: `e_${nanoId()}`, source: fanOutId, target: keepTarget, type: "default", label: br.label });
+      }
+      return;
+    }
+
+    const endId = `n_${nanoId()}`;
+    const endNode: WorkflowNode = {
+      id: endId,
+      type: "workflowNode",
+      position: { x: 0, y: 0 },
+      data: {
+        label: uniqueLabel(pool, "end"),
+        nodeType: "end",
+        ...(defaultParamsFor("end") ? { params: defaultParamsFor("end") } : {}),
+      } as WorkflowNode["data"],
+    };
+    newNodes.push(endNode);
+    pool = [...pool, endNode];
+
+    if (br.channel) {
+      newEdges.push({ id: `e_${nanoId()}`, source: branchTailId, target: endId, type: "default" });
+    } else {
+      newEdges.push({ id: `e_${nanoId()}`, source: fanOutId, target: endId, type: "default", label: br.label });
+    }
+  });
+
+  return { nodes: newNodes, edges: newEdges };
+}
+
 function applyReplace(
   graph: GraphState,
   op: Extract<StructuralOp, { kind: "replace" }>
@@ -673,6 +782,59 @@ function applyReplace(
       ...(attentionReason ? { attentionReason } : {}),
     } as WorkflowNode["data"],
   };
+
+  // Block 7: при замене на разветвляющий тип старая топология (один вход/
+  // один выход) не годится — нужно создать N исходящих веток. Образец —
+  // applyAddCondition (удаляем единственное исходящее ребро, рисуем ветки).
+  if (FAN_OUT_TYPES.has(op.newType)) {
+    const outgoing = graph.edges.filter((e) => e.source === node.id);
+    // keepTarget — наследник старого единственного выхода (сохраняем happy path).
+    const keepTarget = outgoing.length === 1 ? outgoing[0].target : null;
+
+    // branches: из op.branches, иначе дефолт по числу split-веток (A6: 2).
+    const branchCount =
+      op.branches?.length ??
+      (params && params.kind === "split" ? params.branches : 2);
+    const branches: BranchSpec[] =
+      op.branches && op.branches.length > 0
+        ? op.branches
+        : Array.from({ length: Math.max(2, branchCount) }, (_, i) => ({
+            label: `Ветка ${i + 1}`,
+          }));
+
+    // Если задано op.branches — синхронизируем split.branches с их числом.
+    let fanParams = params;
+    if (fanParams && fanParams.kind === "split") {
+      fanParams = { ...fanParams, branches: branches.length } as NodeParams;
+    }
+    const fanNode: WorkflowNode = {
+      ...newNode,
+      data: {
+        ...newNode.data,
+        ...(fanParams ? { params: fanParams } : {}),
+      } as WorkflowNode["data"],
+    };
+
+    // Удаляем старые исходящие рёбра заменяемой ноды (как succEdge в addCondition).
+    const baseEdges = graph.edges.filter((e) => e.source !== node.id);
+    const fan = buildFanOut(
+      graph.nodes.filter((n) => n.id !== node.id),
+      node.id,
+      branches,
+      keepTarget
+    );
+
+    return {
+      graph: {
+        nodes: [
+          ...graph.nodes.map((n) => (n.id === node.id ? fanNode : n)),
+          ...fan.nodes,
+        ],
+        edges: [...baseEdges, ...fan.edges],
+      },
+      description: `Заменил ${op.ref} на ${TYPE_LABEL[op.newType]} (${branches.length} ${branches.length === 2 ? "ветки" : "веток"})`,
+    };
+  }
 
   return {
     graph: {

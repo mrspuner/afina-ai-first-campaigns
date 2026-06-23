@@ -202,3 +202,41 @@ describe("toStructuralOp — addCondition", () => {
     expect(toStructuralOps([{ kind: "addCondition" }])).toHaveLength(0);
   });
 });
+
+describe("toStructuralOp — replace с branches (block7)", () => {
+  it("replace c branches → StructuralOp.replace.branches", () => {
+    const op = toStructuralOp({
+      kind: "replace",
+      ref: "n_wait",
+      nodeType: "split",
+      branches: [
+        { label: "Высокий", channel: "sms" },
+        { label: "Средний", channel: "ivr" },
+      ],
+    });
+    expect(op).toEqual({
+      kind: "replace",
+      ref: "n_wait",
+      newType: "split",
+      branches: [
+        { label: "Высокий", channel: "sms" },
+        { label: "Средний", channel: "ivr" },
+      ],
+    });
+  });
+
+  it("replace без branches → branches не присутствует (как раньше)", () => {
+    const op = toStructuralOp({ kind: "replace", ref: "n1", nodeType: "email" });
+    expect(op).toEqual({ kind: "replace", ref: "n1", newType: "email" });
+  });
+
+  it("wireOpSchema принимает branches в replace", () => {
+    const r = wireOpSchema.safeParse({
+      kind: "replace",
+      ref: "n1",
+      nodeType: "split",
+      branches: [{ label: "A", channel: "push" }],
+    });
+    expect(r.success).toBe(true);
+  });
+});
