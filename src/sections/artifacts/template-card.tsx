@@ -1,7 +1,5 @@
 "use client";
 
-import { Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
@@ -66,7 +64,6 @@ function FieldList({ content }: { content: MessageTemplate["content"] }) {
 
 interface TemplateCardProps {
   template: MessageTemplate;
-  onUseInNewCampaign: (templateId: string) => void;
   /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
@@ -74,11 +71,7 @@ interface TemplateCardProps {
   index?: number;
 }
 
-export function TemplateCard({
-  template,
-  onUseInNewCampaign,
-  index = 0,
-}: TemplateCardProps) {
+export function TemplateCard({ template, index = 0 }: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
 
   const nodeStyle =
@@ -120,13 +113,6 @@ export function TemplateCard({
       <p className="text-xs text-muted-foreground/80">
         Использован в кампаниях: {usedInCampaigns}
       </p>
-
-      <div className="mt-2 flex items-center justify-end gap-2">
-        <Button variant="outline" onClick={() => onUseInNewCampaign(id)}>
-          <Send className="h-4 w-4" />
-          Использовать в новой кампании
-        </Button>
-      </div>
     </Card>
   );
 }

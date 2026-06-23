@@ -32,7 +32,7 @@ const email: MessageTemplate = {
 
 describe("TemplateCard", () => {
   it("shows channel label, name and usage count", () => {
-    render(<TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={sms} />);
     expect(screen.getByText("SMS")).toBeInTheDocument();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
     expect(
@@ -42,7 +42,7 @@ describe("TemplateCard", () => {
 
   it("channel chip is on its own line (separate element from the title)", () => {
     const { container } = render(
-      <TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />,
+      <TemplateCard template={sms} />,
     );
     const chip = container.querySelector("[data-channel='sms']");
     expect(chip).not.toBeNull();
@@ -52,7 +52,7 @@ describe("TemplateCard", () => {
 
   it("channel chip has inline style derived from NODE_STYLES for the channel", () => {
     const { container } = render(
-      <TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />,
+      <TemplateCard template={sms} />,
     );
     const chip = container.querySelector("[data-channel='sms']") as HTMLElement;
     expect(chip).not.toBeNull();
@@ -71,17 +71,17 @@ describe("TemplateCard", () => {
     expect(style.color).toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
-  it("fires onUseInNewCampaign with the template id", () => {
-    const onUse = vi.fn();
-    render(<TemplateCard template={sms} onUseInNewCampaign={onUse} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Использовать в новой кампании/i }),
-    );
-    expect(onUse).toHaveBeenCalledWith("tpl_sms");
+  it("does not render a «Использовать в новой кампании» action button", () => {
+    render(<TemplateCard template={sms} />);
+    expect(
+      screen.queryByRole("button", {
+        name: /Использовать в новой кампании/i,
+      }),
+    ).toBeNull();
   });
 
   it("renders per-channel fields for sms: text and alpha-name", () => {
-    render(<TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={sms} />);
     expect(screen.getByText("Текст:")).toBeInTheDocument();
     expect(
       screen.getByText(/Ваше предложение ждёт/),
@@ -91,7 +91,7 @@ describe("TemplateCard", () => {
   });
 
   it("renders per-channel fields for email: subject, body, sender", () => {
-    render(<TemplateCard template={email} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={email} />);
     expect(screen.getByText("Тема:")).toBeInTheDocument();
     expect(screen.getByText("Добро пожаловать в Afina")).toBeInTheDocument();
     expect(screen.getByText("Отправитель:")).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe("TemplateCard", () => {
       content: { kind: "push", title: "Заголовок", body: "Текст пуша" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={push} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={push} />);
     expect(screen.getByText("Заголовок:")).toBeInTheDocument();
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Текст:")).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("TemplateCard", () => {
       content: { kind: "ivr", scenario: "auto_call_v2", voiceType: "female" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={ivr} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={ivr} />);
     expect(screen.getByText("Сценарий:")).toBeInTheDocument();
     expect(screen.getByText("auto_call_v2")).toBeInTheDocument();
     expect(screen.getByText("Голос:")).toBeInTheDocument();
