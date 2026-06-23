@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useState } from "react";
+import { Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
@@ -65,6 +67,8 @@ function FieldList({ content }: { content: MessageTemplate["content"] }) {
 
 interface TemplateCardProps {
   template: MessageTemplate;
+  /** Commit a renamed template name. Empty/whitespace input is dropped. */
+  onRename: (id: string, name: string) => void;
   /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
@@ -72,8 +76,38 @@ interface TemplateCardProps {
   index?: number;
 }
 
-export function TemplateCard({ template, index = 0 }: TemplateCardProps) {
+export function TemplateCard({
+  template,
+  onRename,
+  index = 0,
+}: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  // Set when Escape cancels editing, so the resulting blur skips committing.
+  const cancelledRef = useRef(false);
+
+  function startEditing() {
+    setDraft(name);
+    cancelledRef.current = false;
+    setEditing(true);
+  }
+
+  function commit() {
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
+    const value = draft.trim();
+    if (value) onRename(id, value);
+    setEditing(false);
+  }
+
+  function cancel() {
+    cancelledRef.current = true;
+    setEditing(false);
+  }
 
   const nodeStyle =
     NODE_STYLES[channel as WorkflowNodeType] ?? NODE_STYLES.default;
@@ -113,8 +147,33 @@ export function TemplateCard({ template, index = 0 }: TemplateCardProps) {
         </span>
       </div>
 
-      {/* Row 2: template name */}
-      <p className="text-sm font-semibold text-foreground">{name}</p>
+      {/* Row 2: template name with inline rename */}
+      {editing ? (
+        <input
+          aria-label="Название шаблона"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") cancel();
+          }}
+          className="w-full rounded-md border border-border bg-input/30 px-2 py-1 text-sm font-semibold text-foreground outline-none focus-visible:border-ring"
+        />
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-foreground">{name}</p>
+          <button
+            type="button"
+            aria-label="Переименовать"
+            onClick={startEditing}
+            className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Per-channel component fields */}
       <FieldList content={content} />

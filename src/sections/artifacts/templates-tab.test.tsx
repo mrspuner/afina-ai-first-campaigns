@@ -32,6 +32,7 @@ describe("TemplatesTabView", () => {
       <TemplatesTabView
         templates={[]}
         onCreateManual={onCreateManual}
+        onRename={vi.fn()}
       />,
     );
     expect(screen.getByText(/Пока нет шаблонов/i)).toBeInTheDocument();
@@ -46,6 +47,7 @@ describe("TemplatesTabView", () => {
       <TemplatesTabView
         templates={templates}
         onCreateManual={vi.fn()}
+        onRename={vi.fn()}
       />,
     );
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();

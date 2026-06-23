@@ -32,14 +32,14 @@ const email: MessageTemplate = {
 
 describe("TemplateCard", () => {
   it("shows channel label, name and a grey usage chip «Использовано N раз»", () => {
-    render(<TemplateCard template={sms} />);
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
     expect(screen.getByText("SMS")).toBeInTheDocument();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
     expect(screen.getByText("Использовано 3 раза")).toBeInTheDocument();
   });
 
   it("usage chip is neutral/grey, not the accent or channel color", () => {
-    const { container } = render(<TemplateCard template={sms} />);
+    const { container } = render(<TemplateCard template={sms} onRename={vi.fn()} />);
     const usageChip = container.querySelector(
       "[data-usage-chip]",
     ) as HTMLElement;
@@ -57,7 +57,7 @@ describe("TemplateCard", () => {
 
   it("channel chip is on its own line (separate element from the title)", () => {
     const { container } = render(
-      <TemplateCard template={sms} />,
+      <TemplateCard template={sms} onRename={vi.fn()} />,
     );
     const chip = container.querySelector("[data-channel='sms']");
     expect(chip).not.toBeNull();
@@ -67,7 +67,7 @@ describe("TemplateCard", () => {
 
   it("channel chip has inline style derived from NODE_STYLES for the channel", () => {
     const { container } = render(
-      <TemplateCard template={sms} />,
+      <TemplateCard template={sms} onRename={vi.fn()} />,
     );
     const chip = container.querySelector("[data-channel='sms']") as HTMLElement;
     expect(chip).not.toBeNull();
@@ -87,7 +87,7 @@ describe("TemplateCard", () => {
   });
 
   it("does not render a «Использовать в новой кампании» action button", () => {
-    render(<TemplateCard template={sms} />);
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
     expect(
       screen.queryByRole("button", {
         name: /Использовать в новой кампании/i,
@@ -95,8 +95,36 @@ describe("TemplateCard", () => {
     ).toBeNull();
   });
 
+  it("enters rename mode via the pencil control and shows an input with the current name", () => {
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    expect(input).toHaveValue("SMS — напоминание");
+  });
+
+  it("calls onRename with id and trimmed new name on Enter", () => {
+    const onRename = vi.fn();
+    render(<TemplateCard template={sms} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    fireEvent.change(input, { target: { value: "  Новое  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("tpl_sms", "Новое");
+  });
+
+  it("cancels rename on Escape without calling onRename", () => {
+    const onRename = vi.fn();
+    render(<TemplateCard template={sms} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    fireEvent.change(input, { target: { value: "X" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
+  });
+
   it("renders per-channel fields for sms: text and alpha-name", () => {
-    render(<TemplateCard template={sms} />);
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
     expect(screen.getByText("Текст:")).toBeInTheDocument();
     expect(
       screen.getByText(/Ваше предложение ждёт/),
@@ -106,7 +134,7 @@ describe("TemplateCard", () => {
   });
 
   it("renders per-channel fields for email: subject, body, sender", () => {
-    render(<TemplateCard template={email} />);
+    render(<TemplateCard template={email} onRename={vi.fn()} />);
     expect(screen.getByText("Тема:")).toBeInTheDocument();
     expect(screen.getByText("Добро пожаловать в Afina")).toBeInTheDocument();
     expect(screen.getByText("Отправитель:")).toBeInTheDocument();
@@ -121,7 +149,7 @@ describe("TemplateCard", () => {
       content: { kind: "push", title: "Заголовок", body: "Текст пуша" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={push} />);
+    render(<TemplateCard template={push} onRename={vi.fn()} />);
     expect(screen.getByText("Заголовок:")).toBeInTheDocument();
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Текст:")).toBeInTheDocument();
@@ -136,7 +164,7 @@ describe("TemplateCard", () => {
       content: { kind: "ivr", scenario: "auto_call_v2", voiceType: "female" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={ivr} />);
+    render(<TemplateCard template={ivr} onRename={vi.fn()} />);
     expect(screen.getByText("Сценарий:")).toBeInTheDocument();
     expect(screen.getByText("auto_call_v2")).toBeInTheDocument();
     expect(screen.getByText("Голос:")).toBeInTheDocument();

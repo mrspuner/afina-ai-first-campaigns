@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppState } from "@/state/app-state-context";
+import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import type { MessageTemplate } from "@/state/app-state";
 import { TemplateCard } from "./template-card";
@@ -11,12 +11,14 @@ import { TemplatesEmptyState } from "./templates-empty-state";
 interface TemplatesTabViewProps {
   templates: MessageTemplate[];
   onCreateManual: () => void;
+  onRename: (id: string, name: string) => void;
 }
 
 /** Presentational list — pure, no state access (testable in isolation). */
 export function TemplatesTabView({
   templates,
   onCreateManual,
+  onRename,
 }: TemplatesTabViewProps) {
   if (templates.length === 0) {
     return <TemplatesEmptyState onCreateManual={onCreateManual} />;
@@ -31,7 +33,12 @@ export function TemplatesTabView({
         </Button>
       </div>
       {templates.map((template, i) => (
-        <TemplateCard key={template.id} template={template} index={i} />
+        <TemplateCard
+          key={template.id}
+          template={template}
+          index={i}
+          onRename={onRename}
+        />
       ))}
     </div>
   );
@@ -40,6 +47,7 @@ export function TemplatesTabView({
 /** Connected Шаблоны tab — lists reusable channel-typed message templates. */
 export function TemplatesTab() {
   const { templates } = useAppState();
+  const dispatch = useAppDispatch();
   const chat = useChat();
 
   // «Создать шаблон» opens the AI template drawer (#15).
@@ -47,5 +55,11 @@ export function TemplatesTab() {
     chat.openTemplateDrawer();
   }
 
-  return <TemplatesTabView templates={templates} onCreateManual={openDrawer} />;
+  return (
+    <TemplatesTabView
+      templates={templates}
+      onCreateManual={openDrawer}
+      onRename={(id, name) => dispatch({ type: "template_renamed", id, name })}
+    />
+  );
 }
