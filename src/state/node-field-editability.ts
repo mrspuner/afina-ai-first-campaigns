@@ -7,9 +7,10 @@ export type FieldEditability = "manual" | "ai" | "readonly";
  * Контрол поля (спека A7/A5):
  *  - combo — справочник + ручной ввод + ИИ (бывшие manual);
  *  - email — спец-контрол письма (дропдаун писем + «Создать новое» + «Открыть»);
+ *  - template — селект именованных шаблонов канала ноды (правки 9/10);
  * для `ai` и `readonly` контрол не задаётся (поведение по `editability`).
  */
-export type FieldControl = "combo" | "email" | "select";
+export type FieldControl = "combo" | "email" | "select" | "template";
 
 export interface NodeFieldMeta {
   /** Способ редактирования поля. */
@@ -35,20 +36,22 @@ export const NODE_FIELD_EDITABILITY: Record<
   Record<string, NodeFieldMeta>
 > = {
   sms: {
-    "Текст": { editability: "manual", paramKey: "text", control: "combo", optionsKey: "smsText" },
+    // Правка 10: свободный «Текст» убран — текст приходит из именованного шаблона.
+    "Шаблон": { editability: "manual", paramKey: "text", control: "template" },
     "Alpha-name": { editability: "ai", paramKey: "alphaName" },
     "Время": { editability: "ai", paramKey: "scheduledAt" },
     "Ссылка": { editability: "ai", paramKey: "link" },
   },
   email: {
     "Тема": { editability: "manual", paramKey: "subject", control: "combo", optionsKey: "emailSubject" },
-    "Текст": { editability: "manual", paramKey: "body", control: "email" },
+    // Правка 10: свободное тело письма убрано — заменено селектом шаблонов канала email.
+    "Шаблон": { editability: "manual", paramKey: "body", control: "template" },
     "Отправитель": { editability: "ai", paramKey: "sender" },
     "Ссылка": { editability: "ai", paramKey: "link" },
   },
   push: {
-    "Заголовок": { editability: "manual", paramKey: "title", control: "combo", optionsKey: "pushTitle" },
-    "Текст": { editability: "manual", paramKey: "body", control: "combo", optionsKey: "pushText" },
+    // Правка 10: свободные «Заголовок»/«Текст» убраны — заменены селектом шаблонов.
+    "Шаблон": { editability: "manual", paramKey: "body", control: "template" },
     "Deeplink": { editability: "ai", paramKey: "deeplink" },
   },
   ivr: {

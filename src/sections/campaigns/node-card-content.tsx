@@ -21,7 +21,7 @@ const PARAM_RENDERERS: {
   [K in NodeParams["kind"]]: (p: Extract<NodeParams, { kind: K }>) => ParamRow[];
 } = {
   sms: (p) => [
-    { label: "Текст", value: p.text || "—" },
+    { label: "Шаблон", value: p.text || "—" },
     { label: "Alpha-name", value: p.alphaName || "—" },
     { label: "Время", value: p.scheduledAt === "immediate" ? "Сразу" : p.scheduledAt },
     ...(p.link ? [{ label: "Ссылка", value: p.link }] : []),
@@ -29,14 +29,13 @@ const PARAM_RENDERERS: {
   ],
   email: (p) => [
     { label: "Тема", value: p.subject || "—" },
-    { label: "Текст", value: p.body || "—" },
+    { label: "Шаблон", value: p.body || "—" },
     { label: "Отправитель", value: p.sender || "—" },
     ...(p.link ? [{ label: "Ссылка", value: p.link }] : []),
     costRow("email"),
   ],
   push: (p) => [
-    { label: "Заголовок", value: p.title || "—" },
-    { label: "Текст", value: p.body || "—" },
+    { label: "Шаблон", value: p.body || p.title || "—" },
     ...(p.deeplink ? [{ label: "Deeplink", value: p.deeplink }] : []),
     costRow("push"),
   ],
