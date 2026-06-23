@@ -4,14 +4,23 @@ import type {
   WorkflowEdge,
   NodeParams,
 } from "@/types/workflow";
+import type { Channel } from "@/types/campaign";
 import { NODE_ACTIONS } from "./node-actions";
-import { CHANNEL_NODE_MAP } from "./channel-nodes";
+import { CHANNEL_NODE_MAP, CHANNEL_LABEL } from "./channel-nodes";
 
 export type Placement =
   | { mode: "after"; ref: string }
   | { mode: "before"; ref: string }
   | { mode: "between"; refA: string; refB: string }
   | { mode: "auto" };
+
+/** Описание одной исходящей ветки fan-out-ноды (split/condition). */
+export type BranchSpec = {
+  /** Подпись ребра (RU), напр. «Высокий». */
+  label: string;
+  /** Канал на конце ветки — создаётся нода-канал (sms/email/push/ivr). */
+  channel?: Channel;
+};
 
 export type StructuralOp =
   | {
@@ -26,6 +35,13 @@ export type StructuralOp =
       ref: string;
       newType: WorkflowNodeType;
       inlineParams?: string;
+      /**
+       * Block 7: для замены на разветвляющий тип (split/condition) — описание
+       * исходящих веток. Каждая ветка: подпись ребра (label) + опциональный
+       * канал (создаётся нода-канал в конце ветки). Если не задано — поведение
+       * деградирует к дефолтному ветвлению (см. applyReplace).
+       */
+      branches?: BranchSpec[];
     }
   | {
       kind: "addCondition";
