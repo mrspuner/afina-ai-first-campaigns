@@ -43,6 +43,20 @@ export const wireOpSchema = z.object({
     .string()
     .optional()
     .describe("Для addCondition: метка ветки НЕТ (default NO)"),
+  branches: z
+    .array(
+      z.object({
+        label: z.string().describe("Подпись ветки (RU), напр. «Высокий»"),
+        channel: rebuildNodeTypeSchema
+          .extract(["sms", "email", "push", "ivr"])
+          .optional()
+          .describe("Канал на конце ветки: sms/email/push/ivr"),
+      })
+    )
+    .optional()
+    .describe(
+      "Для replace на split/condition: исходящие ветки. По ветке — подпись и опциональный канал (создаётся нода-канал). Так модель задаёт разные каналы разным сегментам."
+    ),
 });
 export type WireOp = z.infer<typeof wireOpSchema>;
 
@@ -58,6 +72,7 @@ export function toStructuralOp(w: WireOp): StructuralOp | null {
           ref: w.ref,
           newType: w.nodeType,
           ...(w.inlineParams ? { inlineParams: w.inlineParams } : {}),
+          ...(w.branches && w.branches.length > 0 ? { branches: w.branches } : {}),
         }
       : null;
   }
