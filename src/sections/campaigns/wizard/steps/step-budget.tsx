@@ -11,6 +11,8 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
+import { useAppState } from "@/state/app-state-context";
+import { computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import type { StepData } from "@/types/campaign";
@@ -116,6 +118,21 @@ export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
 
 type Mode = "recommended" | "custom";
 
+/**
+ * Launch button label for the budget step: when the balance does not cover
+ * the chosen budget we surface the top-up path, matching the payment screen
+ * (campaign-payment-screen.tsx). Uses the same computeShortfall as the
+ * payment screen so the threshold is identical.
+ */
+export function launchButtonLabel(args: {
+  balance: number;
+  required: number;
+}): string {
+  return computeShortfall(args.balance, args.required) <= 0
+    ? "Запустить"
+    : "Пополнить и запустить";
+}
+
 function RadioDot({ active }: { active: boolean }) {
   return (
     <span
@@ -161,6 +178,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
+  const { balance } = useAppState();
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -410,7 +428,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         <StepFooter
           onBack={onBack}
           onContinue={handleContinue}
-          continueLabel="Запустить"
+          continueLabel={launchButtonLabel({ balance, required: activeValue })}
           continueDisabled={!canContinue}
         />
       </div>

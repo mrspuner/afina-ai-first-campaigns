@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildBudgetForecast } from "./step-budget";
+import { buildBudgetForecast, launchButtonLabel } from "./step-budget";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
 import type { Channel } from "@/types/campaign";
 
@@ -39,5 +39,22 @@ describe("buildBudgetForecast channel-awareness (aim #2 mismatch fix)", () => {
     });
     // ivr (8 ₽/send) > sms (5 ₽/send): if channels were dropped these would be equal.
     expect(ivrOnly.total).toBeGreaterThan(smsOnly.total);
+  });
+});
+
+describe("launchButtonLabel (aim #19 insufficient-budget wizard label)", () => {
+  it("balance ≥ required → «Запустить»", () => {
+    expect(launchButtonLabel({ balance: 10_000, required: 5_000 })).toBe("Запустить");
+  });
+  it("balance < required → «Пополнить и запустить»", () => {
+    expect(launchButtonLabel({ balance: 1_000, required: 5_000 })).toBe(
+      "Пополнить и запустить",
+    );
+  });
+  it("balance exactly equal to required → «Запустить» (shortfall 0)", () => {
+    expect(launchButtonLabel({ balance: 5_000, required: 5_000 })).toBe("Запустить");
+  });
+  it("zero required (degenerate) → «Запустить»", () => {
+    expect(launchButtonLabel({ balance: 0, required: 0 })).toBe("Запустить");
   });
 });
