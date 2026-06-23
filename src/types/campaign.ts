@@ -1,3 +1,5 @@
+import type { SignalType } from "@/state/app-state";
+
 export type SourceType = "new" | "stream" | "own";
 
 export type Channel = "sms" | "push" | "email" | "ivr";
@@ -39,14 +41,13 @@ export interface StepData {
    *  does NOT feed the cost model. Empty/undefined = not set. */
   maxDailyBudget?: number;
   /**
-   * Own-source only: scenario id chosen on the upload step to label the
-   * uploaded signal list with a "signal type by scenario". Distinct from
-   * `scenario` (the wizard's primary scenario) on purpose — `handleNext`'s
-   * `scenarioChanged` reset watches `scenario`, so writing this dedicated
-   * field never wipes the upload or rewinds the wizard. The chosen scenario's
-   * `signalType` is what this surfaces. Undefined = not picked.
+   * Own-source only: signal type chosen on the upload step to label the
+   * uploaded signal list — one of the 6 `SIGNAL_TYPES`. A dedicated field,
+   * distinct from `scenario` (the wizard's primary scenario) on purpose:
+   * `handleNext`'s `scenarioChanged` reset watches `scenario`, so writing this
+   * field never wipes the upload or rewinds the wizard. Undefined = not picked.
    */
-  ownSignalScenario?: string;
+  ownSignalType?: SignalType;
 }
 
 export const initialStepData: StepData = {

@@ -26,13 +26,16 @@ import {
   type SortState,
 } from "@/sections/statistics/statistics-state";
 
-export type SignalType =
-  | "Регистрация"
-  | "Первая сделка"
-  | "Апсейл"
-  | "Реактивация"
-  | "Возврат"
-  | "Удержание";
+export const SIGNAL_TYPES = [
+  "Регистрация",
+  "Первая сделка",
+  "Апсейл",
+  "Реактивация",
+  "Возврат",
+  "Удержание",
+] as const;
+
+export type SignalType = (typeof SIGNAL_TYPES)[number];
 
 export type CampaignStatus =
   | "draft"

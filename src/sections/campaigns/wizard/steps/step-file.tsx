@@ -1,24 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { DropZone } from "@/components/ui/drop-zone";
 import { HashingLoader } from "@/components/ui/hashing-loader";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import {
-  groupScenariosByCategory,
-  sourceTypeLabel,
-} from "@/sections/campaigns/wizard/steps/step-1-scenario";
-import { ScenarioCard } from "@/sections/signals/scenario-card";
-import { cn } from "@/lib/utils";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StepData, StepProps } from "@/types/campaign";
+import { SIGNAL_TYPES, type SignalType } from "@/state/app-state";
 import { rngFor, seededInt } from "@/state/metrics";
-import {
-  SCENARIOS,
-  SCENARIO_CATEGORIES,
-  getScenario,
-  type ScenarioCategory,
-} from "@/data/scenarios";
 
 /** Deterministic stand-in for parsing the uploaded file's row count. */
 export function simulateRowCount(f: File): number {
@@ -48,114 +44,38 @@ function fileCopy(sourceType: StepProps["data"]["sourceType"]): {
 }
 
 /**
- * Own-source signal-type selector. Reuses step-1's grouping
- * (`groupScenariosByCategory`) + `ScenarioCard` so the user can label their
- * uploaded list with a scenario; the scenario's `signalType` is surfaced.
- *
- * The selection is HELD LOCALLY by the parent step and reflected back via
- * `selectedId`. Picking a card only calls `onSelect` (a local state update) —
- * it does NOT advance the wizard. The chosen scenario is flushed into the
- * wizard's dedicated `ownSignalScenario` field only when the user clicks the
+ * Own-source signal-type dropdown — a simple select over the 6 signal types
+ * (`SIGNAL_TYPES`). The selection is HELD LOCALLY by the parent step and
+ * reflected back via `value`. Choosing only calls `onChange` (a local state
+ * update) — it does NOT advance the wizard. The chosen type is flushed into the
+ * wizard's dedicated `ownSignalType` field only when the user clicks the
  * existing «Далее» button, so neither the upload nor the step progress is ever
  * reset (handleNext's scenarioChanged reset watches `scenario`, not this field).
  */
 function OwnSignalTypeSelector({
-  selectedId,
-  onSelect,
+  value,
+  onChange,
 }: {
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  value: SignalType | null;
+  onChange: (value: SignalType) => void;
 }) {
-  const [activeCategories, setActiveCategories] = useState<Set<ScenarioCategory>>(
-    new Set()
-  );
-
-  const filtered = useMemo(
-    () =>
-      SCENARIOS.filter((s) => {
-        if (s.isBase) return false;
-        if (activeCategories.size > 0 && !activeCategories.has(s.category))
-          return false;
-        return true;
-      }),
-    [activeCategories]
-  );
-
-  const groups = useMemo(
-    () => groupScenariosByCategory(filtered).filter((g) => g.count > 0),
-    [filtered]
-  );
-
-  const selectedSignalType = selectedId
-    ? getScenario(selectedId)?.signalType
-    : undefined;
-
-  function toggleCategory(category: ScenarioCategory) {
-    setActiveCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-  }
-
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Тип сигнала по сценарию
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {selectedSignalType
-            ? `Тип сигнала: ${selectedSignalType}`
-            : "Выберите сценарий, чтобы задать тип сигнала для списка."}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {SCENARIO_CATEGORIES.map((category) => {
-          const active = activeCategories.has(category);
-          return (
-            <button
-              key={category}
-              type="button"
-              onClick={() => toggleCategory(category)}
-              aria-pressed={active}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors",
-                active
-                  ? "border-brand/50 bg-brand-muted text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              {category}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col gap-6 pb-1">
-        {groups.map((group) => (
-          <section key={group.category} className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {group.category}{" "}
-              <span className="text-muted-foreground/60">({group.count})</span>
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              {group.scenarios.map((s) => (
-                <ScenarioCard
-                  key={s.id}
-                  scenario={s}
-                  selected={selectedId === s.id}
-                  onClick={onSelect}
-                  sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
-                  curatedLabel={s.isCurated ? "Подобрано для вас" : undefined}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+    <div className="flex flex-col gap-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Тип сигнала
+      </h2>
+      <Select value={value ?? null} onValueChange={(v) => onChange(v as SignalType)}>
+        <SelectTrigger className="w-full" aria-label="Тип сигнала">
+          <SelectValue placeholder="Выберите тип сигнала" />
+        </SelectTrigger>
+        <SelectContent>
+          {SIGNAL_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -168,9 +88,9 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
   // Own-source signal-type choice held LOCALLY (seeded from the wizard's
   // dedicated field). Selecting only updates this state — it never calls
   // onNext, so the wizard does not advance and the upload is not reset. The
-  // value is flushed into `ownSignalScenario` on «Далее» (see emit()).
-  const [ownSignalScenario, setOwnSignalScenario] = useState<string | null>(
-    data.ownSignalScenario ?? null
+  // value is flushed into `ownSignalType` on «Далее» (see emit()).
+  const [ownSignalType, setOwnSignalType] = useState<SignalType | null>(
+    data.ownSignalType ?? null
   );
 
   const { title, subtitle } = fileCopy(data.sourceType);
@@ -179,8 +99,8 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
     const partial: Partial<StepData> = { file, fileRowCount: rowCount };
     // Carry the own-source signal-type choice on the DEDICATED field — never on
     // `scenario` — so handleNext's scenarioChanged reset never fires.
-    if (isOwn && ownSignalScenario) {
-      partial.ownSignalScenario = ownSignalScenario;
+    if (isOwn && ownSignalType) {
+      partial.ownSignalType = ownSignalType;
     }
     onNext(partial);
   }
@@ -225,8 +145,8 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
 
         {isOwn ? (
           <OwnSignalTypeSelector
-            selectedId={ownSignalScenario}
-            onSelect={setOwnSignalScenario}
+            value={ownSignalType}
+            onChange={setOwnSignalType}
           />
         ) : null}
 
