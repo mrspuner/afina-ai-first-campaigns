@@ -78,6 +78,29 @@ describe("buildSystemPrompt", () => {
     const p = buildSystemPrompt({ screen: "workflow", dataSummary: "" });
     expect(p).not.toContain("Активный триггер");
   });
+
+  it("рендерит метки рёбер (ветки) в контексте графа", () => {
+    const p = buildSystemPrompt({
+      screen: "workflow",
+      dataSummary: "",
+      graph: {
+        nodes: [
+          { id: "signal", label: "Сигнал", nodeType: "signal" },
+          { id: "c1", label: "Открыл?", nodeType: "condition" },
+          { id: "ok", label: "Успех", nodeType: "success" },
+          { id: "no", label: "Конец", nodeType: "end" },
+        ],
+        edges: [
+          { from: "signal", to: "c1" },
+          { from: "c1", to: "ok", label: "YES" },
+          { from: "c1", to: "no", label: "NO" },
+        ],
+      },
+    });
+    expect(p).toContain("c1 →[YES] ok");
+    expect(p).toContain("c1 →[NO] no");
+    expect(p).toContain("signal → c1"); // unlabeled edge stays clean
+  });
 });
 
 describe("buildMessages", () => {

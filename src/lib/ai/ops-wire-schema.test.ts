@@ -185,3 +185,20 @@ describe("toStructuralOps", () => {
     expect(toStructuralOps(wires)).toHaveLength(2);
   });
 });
+
+describe("toStructuralOp — addCondition", () => {
+  it("маппит wire addCondition с ref и метками", () => {
+    const op = toStructuralOp({ kind: "addCondition", ref: "n2", yesLabel: "Открыл", noLabel: "Нет" });
+    expect(op).toEqual({ kind: "addCondition", ref: "n2", yesLabel: "Открыл", noLabel: "Нет" });
+  });
+  it("addCondition без ref → null (невалидно)", () => {
+    expect(toStructuralOp({ kind: "addCondition" })).toBeNull();
+  });
+  it("addCondition без меток → только ref", () => {
+    const op = toStructuralOp({ kind: "addCondition", ref: "n2" });
+    expect(op).toEqual({ kind: "addCondition", ref: "n2" });
+  });
+  it("toStructuralOps отбрасывает невалидный addCondition", () => {
+    expect(toStructuralOps([{ kind: "addCondition" }])).toHaveLength(0);
+  });
+});

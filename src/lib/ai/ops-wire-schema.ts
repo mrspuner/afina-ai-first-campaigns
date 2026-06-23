@@ -9,7 +9,7 @@ import { rebuildNodeTypeSchema } from "./rebuild-schema";
  * опциональными полями, а строгий StructuralOp собирает сервер (toStructuralOp).
  */
 export const wireOpSchema = z.object({
-  kind: z.enum(["add", "remove", "replace"]),
+  kind: z.enum(["add", "remove", "replace", "addCondition"]),
   nodeType: rebuildNodeTypeSchema
     .optional()
     .describe("Для add/replace: тип ноды"),
@@ -35,6 +35,14 @@ export const wireOpSchema = z.object({
     .string()
     .optional()
     .describe("Краткие параметры ноды свободным текстом, например «через 2 дня»"),
+  yesLabel: z
+    .string()
+    .optional()
+    .describe("Для addCondition: метка ветки ДА (default YES)"),
+  noLabel: z
+    .string()
+    .optional()
+    .describe("Для addCondition: метка ветки НЕТ (default NO)"),
 });
 export type WireOp = z.infer<typeof wireOpSchema>;
 
@@ -50,6 +58,16 @@ export function toStructuralOp(w: WireOp): StructuralOp | null {
           ref: w.ref,
           newType: w.nodeType,
           ...(w.inlineParams ? { inlineParams: w.inlineParams } : {}),
+        }
+      : null;
+  }
+  if (w.kind === "addCondition") {
+    return w.ref
+      ? {
+          kind: "addCondition",
+          ref: w.ref,
+          ...(w.yesLabel ? { yesLabel: w.yesLabel } : {}),
+          ...(w.noLabel ? { noLabel: w.noLabel } : {}),
         }
       : null;
   }
