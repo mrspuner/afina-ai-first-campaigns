@@ -7,20 +7,48 @@ import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { NODE_STYLES } from "@/sections/campaigns/node-visuals";
-import type { WorkflowNodeType } from "@/types/workflow";
+import { EmailRenderer } from "@/sections/campaigns/email-renderer";
+import type { EmailDraft } from "@/state/email-directory";
+import type { EmailParams, WorkflowNodeType } from "@/types/workflow";
+
+/**
+ * Read-only styled preview of an email template — reuses the same letter card
+ * (`EmailRenderer`) as the email editor, in read-only mode. The user picked a
+ * styled letter-card preview (not a builder): subject as a header, body split
+ * on "\n\n" into paragraphs, a CTA button when `link` is present, sender shown.
+ */
+function EmailPreview({ content }: { content: EmailParams }) {
+  // EmailRenderer wants an EmailDraft; templates store the plain EmailParams
+  // (subject/body/sender/link, no name/cta). Map them onto a draft and only
+  // show the CTA block when a link exists.
+  const hasLink = Boolean(content.link);
+  const draft: EmailDraft = {
+    id: content.emailId ?? "preview",
+    name: content.subject || "Письмо",
+    subject: content.subject,
+    body: content.body,
+    sender: content.sender,
+    link: content.link ?? "",
+    cta: "Перейти",
+    showCta: hasLink,
+    showImage: false,
+  };
+
+  return (
+    <EmailRenderer draft={draft} readOnly onChange={() => {}} />
+  );
+}
 
 /** Per-channel field rows rendered below the preview. */
 function FieldList({ content }: { content: MessageTemplate["content"] }) {
+  // Email gets a dedicated styled letter-card preview instead of label rows.
+  if (content.kind === "email") {
+    return <EmailPreview content={content} />;
+  }
+
   let rows: Array<{ label: string; value: string | undefined }>;
 
   switch (content.kind) {
-    case "email":
-      rows = [
-        { label: "Тема", value: content.subject },
-        { label: "Текст", value: content.body },
-        { label: "Отправитель", value: content.sender },
-      ];
-      break;
     case "sms":
       rows = [
         { label: "Текст", value: content.text },
@@ -55,7 +83,7 @@ function FieldList({ content }: { content: MessageTemplate["content"] }) {
           </dt>
           <dd
             key={`val-${label}`}
-            className="text-xs text-muted-foreground line-clamp-1"
+            className="text-xs text-muted-foreground break-words"
           >
             {value ?? "—"}
           </dd>
