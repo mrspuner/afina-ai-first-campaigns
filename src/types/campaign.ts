@@ -35,6 +35,9 @@ export interface StepData {
   dailyBudget?: number;
   /** Stream source only: integration API key entered on the Интеграция step. */
   apiKey?: string;
+  /** Optional user-set ceiling shown in the budget summary. Display only —
+   *  does NOT feed the cost model. Empty/undefined = not set. */
+  maxDailyBudget?: number;
 }
 
 export const initialStepData: StepData = {
