@@ -6,12 +6,15 @@ import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { getFieldMeta } from "@/state/node-field-editability";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
-import { useAppDispatch } from "@/state/app-state-context";
+import { useAppDispatch, useAppState } from "@/state/app-state-context";
+import { useChat } from "@/state/chat-context";
+import { channelForNodeKind, templateOptionsForKind } from "@/state/node-template-options";
 import { cn } from "@/lib/utils";
 import { getNodeColor } from "./node-visuals";
 import { UNIT_COST } from "./campaign-cost";
 import { useWorkflowReadOnly } from "./workflow-readonly-context";
 import { NodeFieldCombobox } from "./node-field-combobox";
+import { NodeTemplateSelect } from "./node-template-select";
 import { EmailField } from "./email-field";
 import { SplitFields } from "./split-fields";
 
@@ -158,6 +161,10 @@ interface NodeCardBodyProps {
 export function NodeCardBody({ id, data }: NodeCardBodyProps) {
   const { pushChip } = usePromptChips();
   const dispatch = useAppDispatch();
+  // Единый источник шаблонов (правка 9) — тот же массив, что карточки Артефактов.
+  const { templates } = useAppState();
+  // Реальный шов блока 6: создание/предпросмотр шаблонов через чат-дровер.
+  const { openTemplateCreate, openTemplatePreview } = useChat();
   // Launched/paused/completed campaigns: the card opens for inspection only —
   // every field stays read-only regardless of its manual/ai editability.
   const readOnly = useWorkflowReadOnly();
@@ -253,6 +260,45 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   params={data.params}
                   isDirty={isDirty}
                   readOnly={readOnly}
+                />
+              );
+            }
+
+            // Правки 9/10 — селект шаблонов канала: свободного текста нет.
+            if (control === "template" && data.params && meta?.paramKey) {
+              const paramKey = meta.paramKey;
+              const channel = channelForNodeKind(data.params.kind);
+              const opts = templateOptionsForKind(templates, data.params.kind);
+              // Текущий выбор: ищем шаблон, чей соответствующий компонент совпал
+              // с params ноды (path-2 модели — без явного templateId в NodeParams).
+              const current = data.params
+                ? (data.params as Record<string, unknown>)[paramKey]
+                : undefined;
+              const selected = opts.find(
+                (t) =>
+                  (t.content as Record<string, unknown>)[paramKey] === current
+              );
+              return (
+                <NodeTemplateSelect
+                  key={row.label}
+                  label={row.label}
+                  templates={opts}
+                  selectedName={selected?.name ?? ""}
+                  isDirty={isDirty}
+                  readOnly={readOnly}
+                  onSelect={(t) => {
+                    // Применяем компонент шаблона в params ноды (path-1 модели):
+                    // нода реально несёт текст шаблона через существующий reducer.
+                    const next = (t.content as Record<string, unknown>)[paramKey];
+                    applyFieldValue(
+                      paramKey,
+                      typeof next === "string" ? next : t.name
+                    );
+                  }}
+                  onPreview={(templateId) => openTemplatePreview(templateId)}
+                  onCreate={() => {
+                    if (channel) openTemplateCreate(channel);
+                  }}
                 />
               );
             }
