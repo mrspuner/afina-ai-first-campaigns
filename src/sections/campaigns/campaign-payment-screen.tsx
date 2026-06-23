@@ -12,7 +12,7 @@ import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 import { splitCampaignPayments } from "./campaign-payments";
 import { STREAM_DAYS } from "./campaign-budget-estimate";
-import { scaleBreakdown } from "@/sections/campaigns/scale-breakdown";
+import { paymentSplitDisplay } from "@/sections/campaigns/payment-split-display";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
@@ -162,23 +162,17 @@ export function CampaignPaymentScreen() {
     [displayLines]
   );
 
+  // Scoring is already paid, so it is LOCKED — recalc / «своя сумма» rescales
+  // only the communication portion; all new payment goes to communications
+  // (aim #24). Recommended mode leaves the split untouched.
   const displaySplit = useMemo(() => {
     if (!paymentSplit) return null;
-    if (mode !== "custom" || recommended <= 0) return paymentSplit;
-    const [scoring, communication] = scaleBreakdown(
-      [
-        { key: "scoring", amount: paymentSplit.scoring },
-        { key: "communication", amount: paymentSplit.communication },
-      ],
-      customParsed,
-      recommended,
-    );
-    return {
-      ...paymentSplit,
-      scoring: scoring.amount,
-      communication: communication.amount,
-      total: scoring.amount + communication.amount,
-    };
+    return paymentSplitDisplay({
+      split: paymentSplit,
+      mode,
+      customTotal: customParsed,
+      recommendedTotal: recommended,
+    });
   }, [paymentSplit, mode, customParsed, recommended]);
 
   const touches = estimateTouches(activeBudget, audienceSize);
@@ -304,7 +298,15 @@ export function CampaignPaymentScreen() {
             </h2>
             <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
               <li className="flex items-baseline justify-between gap-3">
-                <span className="text-muted-foreground">Сигналы</span>
+                <span className="flex items-baseline gap-2 text-muted-foreground">
+                  Сигналы
+                  {(campaign.sourceType ?? "new") !== "own" &&
+                    displaySplit.scoring > 0 && (
+                      <span className="text-xs text-muted-foreground/70">
+                        уже оплачено
+                      </span>
+                    )}
+                </span>
                 <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
                   {scoringLineDisplay({
                     sourceType: campaign.sourceType ?? "new",
