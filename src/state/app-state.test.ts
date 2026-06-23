@@ -1304,3 +1304,60 @@ describe("appReducer — template_added", () => {
     expect(next.view).toStrictEqual(initialState.view);
   });
 });
+
+// ---------------------------------------------------------------------------
+// template_renamed reducer action (aim rename)
+// ---------------------------------------------------------------------------
+describe("appReducer — template_renamed", () => {
+  const base = {
+    id: "tpl_x",
+    channel: "sms" as const,
+    name: "Старое имя",
+    content: { kind: "sms" as const, text: "t", alphaName: "AFINA", scheduledAt: "immediate" as const },
+    usedInCampaigns: 2,
+  };
+
+  it("renames the matching template by id, preserving other fields", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, {
+      type: "template_renamed",
+      id: "tpl_x",
+      name: "Новое имя",
+    });
+    const t = next.templates.find((x) => x.id === "tpl_x")!;
+    expect(t.name).toBe("Новое имя");
+    expect(t.channel).toBe("sms");
+    expect(t.usedInCampaigns).toBe(2);
+    expect(t.content).toBe(base.content);
+  });
+
+  it("trims surrounding whitespace", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, {
+      type: "template_renamed",
+      id: "tpl_x",
+      name: "  Имя  ",
+    });
+    expect(next.templates[0].name).toBe("Имя");
+  });
+
+  it("ignores empty/whitespace-only names (name contract for Block 5)", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, {
+      type: "template_renamed",
+      id: "tpl_x",
+      name: "   ",
+    });
+    expect(next).toBe(state); // unchanged — never blanks the name
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, {
+      type: "template_renamed",
+      id: "nope",
+      name: "X",
+    });
+    expect(next.templates).toEqual([base]);
+  });
+});
