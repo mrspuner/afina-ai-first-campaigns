@@ -305,8 +305,8 @@ describe("repeat = non-first-time communications (aim #3)", () => {
     const nodes = [
       signalNode(1000),
       node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }),
-      node("cond", "condition", { kind: "condition", field: "", op: "exists", value: "" }),
-      node("push", "push", { kind: "push", title: "", text: "", scheduledAt: "immediate" }),
+      node("cond", "condition", { kind: "condition", trigger: "delivered" }),
+      node("push", "push", { kind: "push", title: "", body: "" }),
     ];
     const edges = [edge("signal", "sms"), edge("sms", "cond"), edge("cond", "push")];
 
