@@ -166,7 +166,13 @@ export function CampaignScreen() {
 
       {/* Workflow */}
       <CardSection label="Workflow">
-        <WorkflowMiniPreview signalType={signalType} onClick={openWorkflow} />
+        <WorkflowMiniPreview
+          campaignId={campaign.id}
+          signalType={signalType}
+          sourceType={campaign.sourceType}
+          channels={campaign.channels}
+          onClick={openWorkflow}
+        />
       </CardSection>
 
       {/* Сбор сигналов (new-черновик, фаза scoring) → прогресс; активная →

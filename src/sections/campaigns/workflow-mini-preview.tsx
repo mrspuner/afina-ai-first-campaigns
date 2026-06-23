@@ -4,11 +4,16 @@ import { useMemo } from "react";
 import { WorkflowGraph } from "@/sections/campaigns/workflow-graph";
 import { createTemplate } from "@/state/workflow-templates";
 import { createBaseNodes, createBaseEdges } from "@/types/workflow";
+import { getCachedGraph } from "./workflow-graph-cache";
 import type { SignalType } from "@/state/app-state";
-import type { Channel } from "@/types/campaign";
+import type { Channel, SourceType } from "@/types/campaign";
 
 interface WorkflowMiniPreviewProps {
+  /** Кампания, чей живой граф показываем; читаем по нему кэш редактора. */
+  campaignId?: string;
   signalType?: SignalType;
+  /** Тип источника — нужен для fallback-шаблона (как в полном графе). */
+  sourceType?: SourceType;
   /** Selected communication channels — passed to createTemplate for accurate preview. */
   channels?: Channel[];
   /**
@@ -29,17 +34,25 @@ interface WorkflowMiniPreviewProps {
  * reaches the (still pointer-events-none) graph.
  */
 export function WorkflowMiniPreview({
+  campaignId,
   signalType,
+  sourceType,
   channels,
   onClick,
 }: WorkflowMiniPreviewProps) {
   const graph = useMemo(() => {
+    // Живой граф из кэша редактора — то же, что читает WorkflowView
+    // (getCachedGraph). Так миниатюра совпадает с полным графом (aim #8).
+    const cached = getCachedGraph(campaignId);
+    if (cached) return { nodes: cached.nodes, edges: cached.edges };
+    // Fallback: граф ни разу не открывали — строим шаблон с РЕАЛЬНЫМ
+    // sourceType (раньше передавали undefined → расхождение, aim #8).
     if (signalType) {
-      const t = createTemplate(signalType, undefined, channels);
+      const t = createTemplate(signalType, sourceType, channels);
       return { nodes: t.nodes, edges: t.edges };
     }
     return { nodes: createBaseNodes(), edges: createBaseEdges() };
-  }, [signalType, channels]);
+  }, [campaignId, signalType, sourceType, channels]);
 
   const innerGraph = (
     <div

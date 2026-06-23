@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -206,6 +207,9 @@ function SelectRow({
         <span className="truncate text-foreground">{value}</span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
           {isDirty && <DirtyDot />}
+          {/* Индикатор «поле редактируемо» — клик по нему открывает тот же
+              попап, что и вся строка-триггер (как в NodeFieldCombobox). */}
+          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent

@@ -5,6 +5,7 @@ import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import { CanvasHeader, type CanvasHeaderToast } from "./canvas-header";
 import { WorkflowView } from "./workflow-view";
+import { useSaveTimeout } from "./use-save-timeout";
 import { computeCampaignCost } from "./campaign-cost";
 import { validateWorkflow } from "@/state/workflow-validation";
 import { normalizeNodeRef } from "@/state/structural-commands";
@@ -73,6 +74,15 @@ export function WorkflowSection() {
   const currentCampaignIdRef = useRef<string | null>(null);
   const graphOwnerRef = useRef<string | null>(null);
 
+  // aim #12: рефы-зеркала для таймаута лейбла «Сохранение…». Сами
+  // saveState/currentSig/handleSave вычисляются ниже ранних return'ов, а хук
+  // обязан вызываться безусловно — поэтому питаем его из рефов (см. ниже).
+  const saveTimeoutStateRef = useRef<{ active: boolean; sig: string | null }>({
+    active: false,
+    sig: null,
+  });
+  const handleSaveRef = useRef<() => void>(() => {});
+
   const handleCommandHandled = useCallback(
     () => dispatch({ type: "workflow_command_handled" }),
     [dispatch]
@@ -98,6 +108,15 @@ export function WorkflowSection() {
     graphOwnerRef.current = currentCampaignIdRef.current;
     setGraphTick((v) => v + 1);
   }, []);
+
+  // aim #12: таймаут лейбла «Сохранение…». Вызывается безусловно (до ранних
+  // return'ов), питается из рефов, которые синхронизируются в теле рендера
+  // ниже. Каждое изменение графа → ре-рендер → хук видит новый `sig`.
+  useSaveTimeout(
+    saveTimeoutStateRef.current.active,
+    saveTimeoutStateRef.current.sig,
+    () => handleSaveRef.current(),
+  );
 
   const handleNodeClick = useCallback(
     (id: string, label: string, nodeType?: string) => {
@@ -284,6 +303,15 @@ export function WorkflowSection() {
     dispatch({ type: "campaign_saved_draft", id: currentCampaign.id });
     setSaveTick((t) => t + 1);
   }
+
+  // aim #12: синхронизируем рефы-зеркала для useSaveTimeout. На следующем
+  // ре-рендере (любая правка графа → setGraphTick) хук перечитает их и
+  // перезапустит/снимет 10-секундный таймер.
+  saveTimeoutStateRef.current = {
+    active: saveState === "unsaved",
+    sig: currentSig,
+  };
+  handleSaveRef.current = handleSave;
 
   return (
     <div className="relative flex flex-1 flex-col">
