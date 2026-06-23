@@ -103,6 +103,27 @@ describe("buildSystemPrompt", () => {
   });
 });
 
+describe("buildSystemPrompt — правила ветвления (block7)", () => {
+  it("при наличии graph содержит инструкцию о branches для split", () => {
+    const p = buildSystemPrompt({
+      screen: "workflow",
+      dataSummary: "",
+      graph: {
+        nodes: [{ id: "w", label: "Задержка", nodeType: "wait" }],
+        edges: [],
+      },
+    });
+    // Ключевые сигналы: split ветвится, на ветку канал.
+    expect(p).toContain("branches");
+    expect(p.toLowerCase()).toContain("сегмент");
+  });
+
+  it("без graph не содержит правил ветвления (не засоряем не-граф контекст)", () => {
+    const p = buildSystemPrompt({ screen: "campaigns", dataSummary: "" });
+    expect(p).not.toContain("branches");
+  });
+});
+
 describe("buildMessages", () => {
   it("история идёт перед текущим вопросом", () => {
     const m = buildMessages(

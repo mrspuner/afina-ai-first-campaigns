@@ -11,6 +11,19 @@ const ROLE_AND_VOICE = `Ты — Афина, AI-ассистент внутри 
 Запрещено: молча делать не то; выдумывать возможности, которых нет в базе знаний; ссылаться на другие продукты.
 Явное пожелание пользователя всегда побеждает любые твои соображения о «правильном».`;
 
+// ─── BLOCK 7 SEAM START — fan-out branching rules (не трогать блоку 5) ─────────
+/**
+ * Block 7: правила ветвления графа. Подмешивается ТОЛЬКО когда есть context.graph.
+ * SEAM: блок 5 владеет node-params частью этого файла — здесь только про fan-out.
+ */
+const BRANCHING_RULES = `# Правила правок графа
+Когда заменяешь ноду на «Сплиттер» (split) или «Условие» (condition) — это РАЗВЕТВЛЕНИЕ.
+- Передавай поле branches: массив веток. У каждой ветки label (подпись, по-русски) и channel (sms/email/push/ivr), если на ветку нужен свой канал.
+- «Дели по сегментам, разные каналы каждому» → branches с разными channel: напр. [{label:"Высокий",channel:"sms"},{label:"Средний",channel:"ivr"}].
+- Терминальные ноды («Конец») ставятся ТОЛЬКО в конец ветки, никогда в середину потока.
+- Альтернатива replace — последовательность: убери задержку → добавь split → по ноде-каналу на каждую ветку.`;
+// ─── BLOCK 7 SEAM END ─────────────────────────────────────────────────────────
+
 /** Полный system prompt: роль → знания → контекст момента. */
 export function buildSystemPrompt(context: AssistContext): string {
   return [
@@ -23,6 +36,7 @@ export function buildSystemPrompt(context: AssistContext): string {
     context.dataSummary,
     ...(context.graph
       ? [
+          BRANCHING_RULES, // BLOCK 7 SEAM: один элемент, до строки графа
           "Текущий граф воркфлоу (ноды и связи):",
           context.graph.nodes
             .map(
