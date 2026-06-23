@@ -31,13 +31,28 @@ const email: MessageTemplate = {
 };
 
 describe("TemplateCard", () => {
-  it("shows channel label, name and usage count", () => {
+  it("shows channel label, name and a grey usage chip «Использовано N раз»", () => {
     render(<TemplateCard template={sms} />);
     expect(screen.getByText("SMS")).toBeInTheDocument();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Использован в кампаниях: 3/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Использовано 3 раза")).toBeInTheDocument();
+  });
+
+  it("usage chip is neutral/grey, not the accent or channel color", () => {
+    const { container } = render(<TemplateCard template={sms} />);
+    const usageChip = container.querySelector(
+      "[data-usage-chip]",
+    ) as HTMLElement;
+    expect(usageChip).not.toBeNull();
+    expect(usageChip.textContent).toContain("Использовано 3 раза");
+    // grey chip must NOT reuse the channel node color (sms accent)
+    const hexToRgb = (hex: string) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    expect(usageChip.style.color).not.toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
   it("channel chip is on its own line (separate element from the title)", () => {

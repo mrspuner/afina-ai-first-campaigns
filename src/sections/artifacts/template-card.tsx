@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { NODE_STYLES } from "@/sections/campaigns/node-visuals";
@@ -97,10 +98,18 @@ export function TemplateCard({ template, index = 0 }: TemplateCardProps) {
       className="animate-in fade-in-0 slide-in-from-bottom-2 gap-2 px-5 py-4 [--tw-animation-duration:220ms] [--tw-ease:var(--ease-out)]"
       style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
     >
-      {/* Row 1: channel chip on its own line */}
-      <div>
+      {/* Row 1: channel chip + grey usage chip on one line */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <span style={chipStyle} data-channel={channel}>
           {CHANNEL_LABEL[channel]}
+        </span>
+        {/* grey usage chip — same pill geometry as the channel chip, neutral
+            tokens. Never the yellow accent (PRODUCT.md): muted/border tokens. */}
+        <span
+          data-usage-chip
+          className="inline-block rounded-full border border-border bg-muted px-2 py-px text-[0.65rem] font-medium leading-[1.4] tracking-[0.02em] text-muted-foreground"
+        >
+          Использовано {pluralizeRaz(usedInCampaigns)}
         </span>
       </div>
 
@@ -109,10 +118,6 @@ export function TemplateCard({ template, index = 0 }: TemplateCardProps) {
 
       {/* Per-channel component fields */}
       <FieldList content={content} />
-
-      <p className="text-xs text-muted-foreground/80">
-        Использован в кампаниях: {usedInCampaigns}
-      </p>
     </Card>
   );
 }
