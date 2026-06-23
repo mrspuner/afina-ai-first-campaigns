@@ -27,7 +27,8 @@ describe("ArtifactsSection", () => {
     renderSection();
     fireEvent.click(screen.getByRole("tab", { name: "Шаблоны" }));
     // The Шаблоны tab lists seeded preset templates (channel badges).
-    expect(screen.getAllByText(/Использован в кампаниях/).length).toBeGreaterThan(
+    // Each card carries the grey «Использовано N раз» usage chip.
+    expect(screen.getAllByText(/Использовано \d+ раз/).length).toBeGreaterThan(
       0,
     );
   });

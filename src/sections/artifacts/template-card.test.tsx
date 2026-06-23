@@ -31,18 +31,33 @@ const email: MessageTemplate = {
 };
 
 describe("TemplateCard", () => {
-  it("shows channel label, name and usage count", () => {
-    render(<TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />);
+  it("shows channel label, name and a grey usage chip «Использовано N раз»", () => {
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
     expect(screen.getByText("SMS")).toBeInTheDocument();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Использован в кампаниях: 3/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Использовано 3 раза")).toBeInTheDocument();
+  });
+
+  it("usage chip is neutral/grey, not the accent or channel color", () => {
+    const { container } = render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    const usageChip = container.querySelector(
+      "[data-usage-chip]",
+    ) as HTMLElement;
+    expect(usageChip).not.toBeNull();
+    expect(usageChip.textContent).toContain("Использовано 3 раза");
+    // grey chip must NOT reuse the channel node color (sms accent)
+    const hexToRgb = (hex: string) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    expect(usageChip.style.color).not.toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
   it("channel chip is on its own line (separate element from the title)", () => {
     const { container } = render(
-      <TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />,
+      <TemplateCard template={sms} onRename={vi.fn()} />,
     );
     const chip = container.querySelector("[data-channel='sms']");
     expect(chip).not.toBeNull();
@@ -52,7 +67,7 @@ describe("TemplateCard", () => {
 
   it("channel chip has inline style derived from NODE_STYLES for the channel", () => {
     const { container } = render(
-      <TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />,
+      <TemplateCard template={sms} onRename={vi.fn()} />,
     );
     const chip = container.querySelector("[data-channel='sms']") as HTMLElement;
     expect(chip).not.toBeNull();
@@ -71,17 +86,45 @@ describe("TemplateCard", () => {
     expect(style.color).toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
-  it("fires onUseInNewCampaign with the template id", () => {
-    const onUse = vi.fn();
-    render(<TemplateCard template={sms} onUseInNewCampaign={onUse} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Использовать в новой кампании/i }),
-    );
-    expect(onUse).toHaveBeenCalledWith("tpl_sms");
+  it("does not render a «Использовать в новой кампании» action button", () => {
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    expect(
+      screen.queryByRole("button", {
+        name: /Использовать в новой кампании/i,
+      }),
+    ).toBeNull();
+  });
+
+  it("enters rename mode via the pencil control and shows an input with the current name", () => {
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    expect(input).toHaveValue("SMS — напоминание");
+  });
+
+  it("calls onRename with id and trimmed new name on Enter", () => {
+    const onRename = vi.fn();
+    render(<TemplateCard template={sms} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    fireEvent.change(input, { target: { value: "  Новое  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("tpl_sms", "Новое");
+  });
+
+  it("cancels rename on Escape without calling onRename", () => {
+    const onRename = vi.fn();
+    render(<TemplateCard template={sms} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
+    const input = screen.getByRole("textbox", { name: /Название шаблона/i });
+    fireEvent.change(input, { target: { value: "X" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
   });
 
   it("renders per-channel fields for sms: text and alpha-name", () => {
-    render(<TemplateCard template={sms} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={sms} onRename={vi.fn()} />);
     expect(screen.getByText("Текст:")).toBeInTheDocument();
     expect(
       screen.getByText(/Ваше предложение ждёт/),
@@ -91,7 +134,7 @@ describe("TemplateCard", () => {
   });
 
   it("renders per-channel fields for email: subject, body, sender", () => {
-    render(<TemplateCard template={email} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={email} onRename={vi.fn()} />);
     expect(screen.getByText("Тема:")).toBeInTheDocument();
     expect(screen.getByText("Добро пожаловать в Afina")).toBeInTheDocument();
     expect(screen.getByText("Отправитель:")).toBeInTheDocument();
@@ -106,7 +149,7 @@ describe("TemplateCard", () => {
       content: { kind: "push", title: "Заголовок", body: "Текст пуша" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={push} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={push} onRename={vi.fn()} />);
     expect(screen.getByText("Заголовок:")).toBeInTheDocument();
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Текст:")).toBeInTheDocument();
@@ -121,7 +164,7 @@ describe("TemplateCard", () => {
       content: { kind: "ivr", scenario: "auto_call_v2", voiceType: "female" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={ivr} onUseInNewCampaign={vi.fn()} />);
+    render(<TemplateCard template={ivr} onRename={vi.fn()} />);
     expect(screen.getByText("Сценарий:")).toBeInTheDocument();
     expect(screen.getByText("auto_call_v2")).toBeInTheDocument();
     expect(screen.getByText("Голос:")).toBeInTheDocument();

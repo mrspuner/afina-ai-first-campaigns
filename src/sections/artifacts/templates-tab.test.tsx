@@ -31,8 +31,8 @@ describe("TemplatesTabView", () => {
     render(
       <TemplatesTabView
         templates={[]}
-        onUseInNewCampaign={vi.fn()}
         onCreateManual={onCreateManual}
+        onRename={vi.fn()}
       />,
     );
     expect(screen.getByText(/Пока нет шаблонов/i)).toBeInTheDocument();
@@ -46,8 +46,8 @@ describe("TemplatesTabView", () => {
     render(
       <TemplatesTabView
         templates={templates}
-        onUseInNewCampaign={vi.fn()}
         onCreateManual={vi.fn()}
+        onRename={vi.fn()}
       />,
     );
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();

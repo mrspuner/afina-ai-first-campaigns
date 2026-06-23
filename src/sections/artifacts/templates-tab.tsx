@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppState } from "@/state/app-state-context";
+import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { useTemplateFlow } from "@/sections/shell/use-template-flow";
 import type { MessageTemplate } from "@/state/app-state";
 import { TemplateCard } from "./template-card";
@@ -10,15 +10,15 @@ import { TemplatesEmptyState } from "./templates-empty-state";
 
 interface TemplatesTabViewProps {
   templates: MessageTemplate[];
-  onUseInNewCampaign: (templateId: string) => void;
   onCreateManual: () => void;
+  onRename: (id: string, name: string) => void;
 }
 
 /** Presentational list — pure, no state access (testable in isolation). */
 export function TemplatesTabView({
   templates,
-  onUseInNewCampaign,
   onCreateManual,
+  onRename,
 }: TemplatesTabViewProps) {
   if (templates.length === 0) {
     return <TemplatesEmptyState onCreateManual={onCreateManual} />;
@@ -37,7 +37,7 @@ export function TemplatesTabView({
           key={template.id}
           template={template}
           index={i}
-          onUseInNewCampaign={onUseInNewCampaign}
+          onRename={onRename}
         />
       ))}
     </div>
@@ -47,6 +47,7 @@ export function TemplatesTabView({
 /** Connected Шаблоны tab — lists reusable channel-typed message templates. */
 export function TemplatesTab() {
   const { templates } = useAppState();
+  const dispatch = useAppDispatch();
   const templateFlow = useTemplateFlow();
 
   // «Создать шаблон» запускает поток создания в чат-дровере (#14): ассистент
@@ -58,8 +59,8 @@ export function TemplatesTab() {
   return (
     <TemplatesTabView
       templates={templates}
-      onUseInNewCampaign={startCreate}
       onCreateManual={startCreate}
+      onRename={(id, name) => dispatch({ type: "template_renamed", id, name })}
     />
   );
 }

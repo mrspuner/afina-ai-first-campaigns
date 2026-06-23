@@ -1,8 +1,9 @@
 "use client";
 
-import { Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useRef, useState } from "react";
+import { Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { NODE_STYLES } from "@/sections/campaigns/node-visuals";
@@ -66,7 +67,8 @@ function FieldList({ content }: { content: MessageTemplate["content"] }) {
 
 interface TemplateCardProps {
   template: MessageTemplate;
-  onUseInNewCampaign: (templateId: string) => void;
+  /** Commit a renamed template name. Empty/whitespace input is dropped. */
+  onRename: (id: string, name: string) => void;
   /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
@@ -76,10 +78,36 @@ interface TemplateCardProps {
 
 export function TemplateCard({
   template,
-  onUseInNewCampaign,
+  onRename,
   index = 0,
 }: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  // Set when Escape cancels editing, so the resulting blur skips committing.
+  const cancelledRef = useRef(false);
+
+  function startEditing() {
+    setDraft(name);
+    cancelledRef.current = false;
+    setEditing(true);
+  }
+
+  function commit() {
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
+    const value = draft.trim();
+    if (value) onRename(id, value);
+    setEditing(false);
+  }
+
+  function cancel() {
+    cancelledRef.current = true;
+    setEditing(false);
+  }
 
   const nodeStyle =
     NODE_STYLES[channel as WorkflowNodeType] ?? NODE_STYLES.default;
@@ -104,29 +132,51 @@ export function TemplateCard({
       className="animate-in fade-in-0 slide-in-from-bottom-2 gap-2 px-5 py-4 [--tw-animation-duration:220ms] [--tw-ease:var(--ease-out)]"
       style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
     >
-      {/* Row 1: channel chip on its own line */}
-      <div>
+      {/* Row 1: channel chip + grey usage chip on one line */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <span style={chipStyle} data-channel={channel}>
           {CHANNEL_LABEL[channel]}
         </span>
+        {/* grey usage chip — same pill geometry as the channel chip, neutral
+            tokens. Never the yellow accent (PRODUCT.md): muted/border tokens. */}
+        <span
+          data-usage-chip
+          className="inline-block rounded-full border border-border bg-muted px-2 py-px text-[0.65rem] font-medium leading-[1.4] tracking-[0.02em] text-muted-foreground"
+        >
+          Использовано {pluralizeRaz(usedInCampaigns)}
+        </span>
       </div>
 
-      {/* Row 2: template name */}
-      <p className="text-sm font-semibold text-foreground">{name}</p>
+      {/* Row 2: template name with inline rename */}
+      {editing ? (
+        <input
+          aria-label="Название шаблона"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") cancel();
+          }}
+          className="w-full rounded-md border border-border bg-input/30 px-2 py-1 text-sm font-semibold text-foreground outline-none focus-visible:border-ring"
+        />
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-foreground">{name}</p>
+          <button
+            type="button"
+            aria-label="Переименовать"
+            onClick={startEditing}
+            className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Per-channel component fields */}
       <FieldList content={content} />
-
-      <p className="text-xs text-muted-foreground/80">
-        Использован в кампаниях: {usedInCampaigns}
-      </p>
-
-      <div className="mt-2 flex items-center justify-end gap-2">
-        <Button variant="outline" onClick={() => onUseInNewCampaign(id)}>
-          <Send className="h-4 w-4" />
-          Использовать в новой кампании
-        </Button>
-      </div>
     </Card>
   );
 }
