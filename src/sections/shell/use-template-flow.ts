@@ -52,13 +52,16 @@ export function useTemplateFlow() {
     chat.setTemplateQuestion(channelQuestion());
   }, [chat]);
 
-  /** Старт сразу с шага намерения для уже выбранного канала (шов блока 5). */
+  /**
+   * Старт сразу с шага намерения для уже выбранного канала (шов блока 5).
+   * Намеренческое сообщение публикует реактивный эффект в PromptComposer —
+   * единая точка как для этого хелпера, так и для прямого
+   * chat.openTemplateCreate(channel) из блока 5.
+   */
   const startForChannel = useCallback(
     (channel: Channel) => {
       chat.openSidebar();
       chat.openTemplateCreate(channel);
-      chat.append({ role: "assistant", text: INTENT_PROMPT });
-      chat.setTemplateQuestion(null);
     },
     [chat]
   );

@@ -30,6 +30,7 @@ import {
 } from "@/state/prompt-chips-context";
 import { useDraftQueue, type Draft } from "@/state/draft-queue-context";
 import { useChat } from "@/state/chat-context";
+import type { Channel } from "@/types/campaign";
 import { useWelcomeChat } from "@/sections/welcome/welcome-chat-context";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { isOnWelcome } from "@/state/app-state";
@@ -42,6 +43,8 @@ import { useScopeReset } from "@/state/use-scope-reset";
 import { cn } from "@/lib/utils";
 import { SuggestionBar } from "./suggestion-bar";
 import { useChatSubmit } from "./use-chat-submit";
+import { VariantPicker } from "./variant-picker";
+import { useTemplateFlow } from "./use-template-flow";
 
 export interface PromptComposerHandle {
   /** Загружает черновик из очереди обратно в инпут (клик по карточке). */
@@ -97,7 +100,17 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
     const chipsApi = usePromptChips();
     const { drafts, parkDraft, removeDraft, clearQueue } = useDraftQueue();
     const { submit: chatSubmit } = useChatSubmit();
+    const templateFlow = useTemplateFlow();
     const { textInput } = usePromptInputController();
+
+    // Активный вопрос пикера шаблона (#14): рендерим только когда дровер открыт
+    // в режиме create и есть непустой вопрос (на шаге свободного намерения
+    // question === null, ввод идёт текстом).
+    const tplDrawer = chat.templateDrawer;
+    const tplQuestion =
+      tplDrawer.open && tplDrawer.mode === "create" ? tplDrawer.question : null;
+    const tplIntentStep =
+      tplDrawer.open && tplDrawer.mode === "create" && tplDrawer.step === "intent";
 
     const editorRef = useRef<ChipEditableInputHandle>(null);
     // Parked suggestion action — runs on confirm only if the inserted text is
@@ -124,6 +137,38 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       setHasTypedText(seg ? seg.text.trim().length > 0 : false);
       if (seg) prevActiveRef.current = seg;
     }, [chipsApi.chips, textInput.value]);
+
+    // Шов блока 5 (#14): блок 5 вызывает chat.openTemplateCreate(channel) напрямую
+    // из chat-context (без useTemplateFlow — он живёт в shell). Реактивно
+    // публикуем намеренческое сообщение ассистента ОДИН раз при таком открытии
+    // (mode=create, step=intent, channel задан, вопроса/намерения ещё нет).
+    const tplCreateAnnouncedRef = useRef(false);
+    const tplOpen = chat.templateDrawer.open;
+    const tplMode = chat.templateDrawer.mode;
+    const tplStep = chat.templateDrawer.step;
+    const tplHasChannel = chat.templateDrawer.channel !== null;
+    const tplHasQuestion = chat.templateDrawer.question !== null;
+    const tplHasIntent = chat.templateDrawer.intent.trim().length > 0;
+    useEffect(() => {
+      if (!tplOpen) {
+        tplCreateAnnouncedRef.current = false;
+        return;
+      }
+      if (
+        tplMode === "create" &&
+        tplStep === "intent" &&
+        tplHasChannel &&
+        !tplHasQuestion &&
+        !tplHasIntent &&
+        !tplCreateAnnouncedRef.current
+      ) {
+        tplCreateAnnouncedRef.current = true;
+        chat.append({
+          role: "assistant",
+          text: "Опишите, что нужно донести клиенту — тему, оффер или тон.",
+        });
+      }
+    }, [tplOpen, tplMode, tplStep, tplHasChannel, tplHasQuestion, tplHasIntent, chat]);
 
     function resetEditor() {
       editorRef.current?.clear();
@@ -204,6 +249,14 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       const rawText = message.text ?? "";
       const segments = editorRef.current?.getSegments() ?? [];
       const active = editorRef.current?.getActiveSegment() ?? null;
+
+      // 0. Создание шаблона в дровере (#14): на шаге свободного намерения текст
+      // композера — это ответ ассистенту, а не команда оболочки.
+      if (tplIntentStep && rawText.trim()) {
+        void templateFlow.submitIntent(rawText);
+        resetEditor();
+        return;
+      }
 
       // 1. Parked suggestion action — fires only if sent unchanged.
       const pending = pendingActionRef.current;
@@ -373,16 +426,33 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       welcomeChips: welcomeChat?.chips ?? [],
     });
 
+    function handleTemplateAnswer(optionId: string) {
+      // Различаем по шагу: channel (закрытый вопрос) vs variants (выбор шаблона).
+      if (tplDrawer.step === "channel") {
+        templateFlow.answerChannel(optionId as Channel);
+      } else {
+        templateFlow.selectVariant(optionId);
+      }
+    }
+
     return (
       <>
         <SelectedNodeChipEffect
           selected={view.kind === "workflow" ? selectedWorkflowNode : null}
         />
+        {tplQuestion && (
+          <VariantPicker
+            question={tplQuestion}
+            onSelect={handleTemplateAnswer}
+            onClose={chat.closeTemplateDrawer}
+            onSkip={chat.closeTemplateDrawer}
+          />
+        )}
         <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
           <ChipEditableInput
             ref={editorRef}
             className="px-3 py-2"
-            placeholder={placeholder}
+            placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
             onTagSwap={parkPreviousIfNeeded}
             captureGlobalTyping={captureGlobalTyping}
           />
