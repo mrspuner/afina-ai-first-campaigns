@@ -16,7 +16,7 @@ import type {
   WorkflowEdge,
 } from "@/types/workflow";
 import type { SignalType } from "@/state/app-state";
-import type { SourceType } from "@/types/campaign";
+import type { SourceType, Channel } from "@/types/campaign";
 import { createTemplate } from "@/state/workflow-templates";
 import { computeNeedsAttention } from "@/state/workflow-validation";
 import { matchActions } from "@/state/node-actions";
@@ -50,6 +50,8 @@ interface WorkflowViewProps {
   signalType?: SignalType;
   /** A3: источник аудитории кампании — определяет вставку ноды «Скоринг». */
   sourceType?: SourceType;
+  /** Selected communication channels — determines which channel nodes appear in the graph. */
+  channels?: Channel[];
   onGraphChange?: (graph: GraphState) => void;
   onNodeClick?: (id: string, label: string, nodeType?: string) => void;
   onPaneClick?: () => void;
@@ -57,10 +59,11 @@ interface WorkflowViewProps {
 
 function initialGraph(
   signalType?: SignalType,
-  sourceType?: SourceType
+  sourceType?: SourceType,
+  channels?: Channel[]
 ): GraphState {
   const base = signalType
-    ? createTemplate(signalType, sourceType)
+    ? createTemplate(signalType, sourceType, channels)
     : { nodes: createBaseNodes(), edges: createBaseEdges() };
   // A1: template graphs must start with correct needs-attention flags so the
   // launch gate reflects empty required fields immediately.
@@ -273,6 +276,7 @@ export function WorkflowView({
   campaignId,
   signalType,
   sourceType,
+  channels,
   onGraphChange,
   onNodeClick,
   onPaneClick,
@@ -283,7 +287,7 @@ export function WorkflowView({
   // Rehydrate from the durable cache so manual edits survive the unmount on
   // launch (workflow → campaign) and navigation; fall back to the template.
   const [graph, setGraph] = useState<GraphState>(
-    () => getCachedGraph(campaignId) ?? initialGraph(signalType, sourceType)
+    () => getCachedGraph(campaignId) ?? initialGraph(signalType, sourceType, channels)
   );
 
   useEffect(() => {

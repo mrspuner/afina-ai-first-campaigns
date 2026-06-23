@@ -5,6 +5,7 @@ import type {
   NodeParams,
 } from "@/types/workflow";
 import { NODE_ACTIONS } from "./node-actions";
+import { CHANNEL_NODE_MAP } from "./channel-nodes";
 
 export type Placement =
   | { mode: "after"; ref: string }
@@ -329,24 +330,12 @@ function uniqueLabel(
 
 function defaultParamsFor(kind: WorkflowNodeType): NodeParams | undefined {
   switch (kind) {
+    // Channel defaults delegate to CHANNEL_NODE_MAP (single source of truth)
     case "sms":
-      return {
-        kind: "sms",
-        text: "",
-        alphaName: "BRAND",
-        scheduledAt: "immediate",
-      };
     case "email":
-      return {
-        kind: "email",
-        subject: "",
-        body: "",
-        sender: "noreply@brand.com",
-      };
     case "push":
-      return { kind: "push", title: "", body: "" };
     case "ivr":
-      return { kind: "ivr", scenario: "", voiceType: "neutral" };
+      return CHANNEL_NODE_MAP[kind].defaultParams;
     case "wait":
       return { kind: "wait", mode: "duration", durationHours: 24 };
     case "split":

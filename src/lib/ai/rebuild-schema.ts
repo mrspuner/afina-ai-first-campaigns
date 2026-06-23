@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
+import { CHANNEL_NODE_MAP } from "@/state/channel-nodes";
 
 /** Типы, доступные модели при пересборке. Без legacy и без signal —
  *  сигнальную ноду билдер всегда ставит сам первой. */
@@ -30,10 +31,13 @@ const STEP = 210;
 
 function defaultParams(nodeType: z.infer<typeof rebuildNodeTypeSchema>): NodeParams {
   switch (nodeType) {
-    case "sms": return { kind: "sms", text: "Текст сообщения", alphaName: "BRAND", scheduledAt: "immediate" };
-    case "email": return { kind: "email", subject: "Тема письма", body: "Текст письма", sender: "noreply@brand.com" };
-    case "push": return { kind: "push", title: "Заголовок", body: "Текст уведомления" };
-    case "ivr": return { kind: "ivr", scenario: "Сценарий звонка", voiceType: "neutral" };
+    // Channel defaults delegate to CHANNEL_NODE_MAP (single source of truth).
+    // Note: rebuild-schema uses channelTemplateParams (pre-filled) so AI-generated
+    // graphs also pass validation immediately.
+    case "sms": return CHANNEL_NODE_MAP["sms"].defaultParams;
+    case "email": return CHANNEL_NODE_MAP["email"].defaultParams;
+    case "push": return CHANNEL_NODE_MAP["push"].defaultParams;
+    case "ivr": return CHANNEL_NODE_MAP["ivr"].defaultParams;
     case "wait": return { kind: "wait", mode: "duration", durationHours: 24 };
     case "condition": return { kind: "condition", trigger: "opened" };
     case "split": return { kind: "split", by: "equal", branches: 2 };

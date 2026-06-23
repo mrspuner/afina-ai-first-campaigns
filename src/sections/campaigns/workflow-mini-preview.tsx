@@ -5,9 +5,12 @@ import { WorkflowGraph } from "@/sections/campaigns/workflow-graph";
 import { createTemplate } from "@/state/workflow-templates";
 import { createBaseNodes, createBaseEdges } from "@/types/workflow";
 import type { SignalType } from "@/state/app-state";
+import type { Channel } from "@/types/campaign";
 
 interface WorkflowMiniPreviewProps {
   signalType?: SignalType;
+  /** Selected communication channels — passed to createTemplate for accurate preview. */
+  channels?: Channel[];
   /**
    * When supplied, the mini preview is rendered as a real `<button>` and
    * invokes this handler on click / Enter / Space. When omitted the preview
@@ -27,15 +30,16 @@ interface WorkflowMiniPreviewProps {
  */
 export function WorkflowMiniPreview({
   signalType,
+  channels,
   onClick,
 }: WorkflowMiniPreviewProps) {
   const graph = useMemo(() => {
     if (signalType) {
-      const t = createTemplate(signalType);
+      const t = createTemplate(signalType, undefined, channels);
       return { nodes: t.nodes, edges: t.edges };
     }
     return { nodes: createBaseNodes(), edges: createBaseEdges() };
-  }, [signalType]);
+  }, [signalType, channels]);
 
   const innerGraph = (
     <div

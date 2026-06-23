@@ -75,7 +75,7 @@ export function CampaignPaymentScreen() {
     const graph =
       getCachedGraph(campaign.id) ??
       (scenarioSignalType
-        ? createTemplate(scenarioSignalType, campaign.sourceType)
+        ? createTemplate(scenarioSignalType, campaign.sourceType, campaign.channels ?? [])
         : null);
     if (!graph) return null;
     return computeCampaignCost(graph.nodes, graph.edges, audienceSize);
