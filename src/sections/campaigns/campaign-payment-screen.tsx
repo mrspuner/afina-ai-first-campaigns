@@ -39,6 +39,19 @@ function formatRub(n: number): string {
   return `₽ ${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Scoring («Сигналы») payment line text. Own bases score for free. For
+ * new/stream the scoring was already paid during signal scoring, so we show
+ * the actual already-paid rouble amount instead of a static «уже оплачено».
+ */
+export function scoringLineDisplay(args: {
+  sourceType: "own" | "new" | "stream";
+  scoring: number;
+}): string {
+  if (args.sourceType === "own" || args.scoring <= 0) return "бесплатно";
+  return formatRubPlain(args.scoring);
+}
+
 export function CampaignPaymentScreen() {
   const { view, campaigns, artifacts, balance } = useAppState();
   const dispatch = useAppDispatch();
@@ -285,11 +298,12 @@ export function CampaignPaymentScreen() {
             </h2>
             <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
               <li className="flex items-baseline justify-between gap-3">
-                <span className="text-muted-foreground">Скоринг (сигналы)</span>
+                <span className="text-muted-foreground">Сигналы</span>
                 <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
-                  {campaign.sourceType === "own"
-                    ? "бесплатно"
-                    : "уже оплачено"}
+                  {scoringLineDisplay({
+                    sourceType: campaign.sourceType ?? "new",
+                    scoring: displaySplit.scoring,
+                  })}
                 </span>
               </li>
               <li className="flex items-baseline justify-between gap-3">

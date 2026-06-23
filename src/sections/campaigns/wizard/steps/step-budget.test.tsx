@@ -2,6 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { buildBudgetRows, StepBudget } from "./step-budget";
 import type { StepData } from "@/types/campaign";
+import { AppStateProvider } from "@/state/app-state-context";
+
+// StepBudget reads `balance` via useAppState (aim #19), so renders must be
+// wrapped in the app-state provider. The default balance (0) is fine here —
+// these tests don't assert the launch-button label.
+function renderStep(ui: React.ReactElement) {
+  return render(<AppStateProvider>{ui}</AppStateProvider>);
+}
 
 // StepContent runs a typewriter animation and only mounts children once it
 // finishes. Stub it to render children synchronously so the step body is in
@@ -77,7 +85,7 @@ function makeData(overrides: Partial<StepData> = {}): StepData {
 
 describe("StepBudget — channel list + repeat-buffer UI", () => {
   it("shows channel names when channels are selected", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({ channels: ["sms", "email"] })}
         onNext={vi.fn()}
@@ -89,7 +97,7 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 
   it("shows 'Каналы: —' when no channels selected", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({ channels: [] })}
         onNext={vi.fn()}
@@ -101,7 +109,7 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 
   it("shows repeat-buffer line when channels are present", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({ channels: ["push"] })}
         onNext={vi.fn()}
@@ -113,7 +121,7 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 
   it("does NOT show repeat-buffer line when no channels", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({ channels: [] })}
         onNext={vi.fn()}
@@ -125,7 +133,7 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 
   it("shows updated recommended card caption", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({ channels: ["sms"] })}
         onNext={vi.fn()}
@@ -141,7 +149,7 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
   const SCENARIO = "base-first-deal"; // signalType "Первая сделка"
 
   it("renders the ~…контактов figure as a sub-line under the Сигналы row (not on the row)", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({
           scenario: SCENARIO,
@@ -164,7 +172,7 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
   });
 
   it("renders a per-channel line (channel label + rouble amount) from the graph cost", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({
           scenario: SCENARIO,
@@ -177,9 +185,12 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
       />
     );
     // Graph cost for base-first-deal/new yields an SMS line of ₽50 000.
-    const line = screen.getByText(/^SMS · /);
-    expect(line).toBeTruthy();
-    const row = line.parentElement;
+    // Channel-aware after aim #2: base-first-deal/new now produces a primary
+    // SMS line (₽50 000) plus a post-condition (repeat) SMS line, so multiple
+    // "SMS · …" rows exist. The first is the ₽50 000 primary line.
+    const lines = screen.getAllByText(/^SMS · /);
+    expect(lines.length).toBeGreaterThan(0);
+    const row = lines[0].parentElement;
     expect(row?.textContent).toMatch(/₽\s*50[\s ]?000/);
     // The simple "Каналы: …" fallback must NOT be shown when graph lines exist.
     expect(screen.queryByText(/^Каналы:/)).toBeNull();
@@ -187,7 +198,7 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
   });
 
   it("appends the buffer rouble amount to the repeat-communications line", () => {
-    render(
+    renderStep(
       <StepBudget
         data={makeData({
           scenario: SCENARIO,
@@ -201,7 +212,10 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
     );
     const buffer = screen.getByText(/Повторные коммуникации \(\+30% буфер\)/);
     const row = buffer.parentElement;
-    expect(row?.textContent).toMatch(/₽\s*1[\s ]?500/);
+    // Channel-aware after aim #2: the repeat (post-condition) SMS line for
+    // base-first-deal/new over 10 000 contacts is ₽15 000 (was a stale ₽1 500
+    // when the wizard graph dropped channels).
+    expect(row?.textContent).toMatch(/₽\s*15\D?000/);
     cleanup();
   });
 });

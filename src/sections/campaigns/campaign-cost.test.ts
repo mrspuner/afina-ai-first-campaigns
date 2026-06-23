@@ -296,3 +296,31 @@ describe("estimateTouches", () => {
     expect(estimateTouches(100, 0)).toBe(0);
   });
 });
+
+// ── repeat = non-first-time communications (aim #3) ─────────────────────────────
+
+describe("repeat = non-first-time communications (aim #3)", () => {
+  it("splits cost lines into primary (first touch) and repeat (post-condition) buckets", () => {
+    // Graph: signal → sms (first touch) → condition → push (repeat, post-condition).
+    const nodes = [
+      signalNode(1000),
+      node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }),
+      node("cond", "condition", { kind: "condition", trigger: "delivered" }),
+      node("push", "push", { kind: "push", title: "", body: "" }),
+    ];
+    const edges = [edge("signal", "sms"), edge("sms", "cond"), edge("cond", "push")];
+
+    const cost = computeCampaignCost(nodes, edges, 1000);
+    const smsLine = cost.lines.find((l) => l.channel === "sms")!;
+    const pushLine = cost.lines.find((l) => l.channel === "push")!;
+
+    // SMS is the first touch → not dynamic → counts toward primary.
+    expect(smsLine.isDynamic).toBe(false);
+    // Push sits after the condition → a repeat (non-first-time) communication.
+    expect(pushLine.isDynamic).toBe(true);
+    // Buckets reflect the split.
+    expect(cost.primary).toBe(smsLine.sum);
+    expect(cost.repeat).toBe(pushLine.sum);
+    expect(cost.hasDynamic).toBe(true);
+  });
+});

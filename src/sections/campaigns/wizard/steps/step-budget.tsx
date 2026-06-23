@@ -11,6 +11,8 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
+import { useAppState } from "@/state/app-state-context";
+import { computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import type { StepData } from "@/types/campaign";
@@ -71,6 +73,7 @@ export function buildBudgetForecast(input: BudgetForecastInput): BudgetForecast 
     scenarioId: input.scenarioId,
     sourceType: input.sourceType,
     baseSize: base,
+    channels: input.channels,
   });
   const communication = graph ? graph.total : flat.communication;
   const signals = flat.signals;
@@ -115,6 +118,33 @@ export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
 
 type Mode = "recommended" | "custom";
 
+/**
+ * Launch button label for the budget step: when the balance does not cover
+ * the chosen budget we surface the top-up path, matching the payment screen
+ * (campaign-payment-screen.tsx). Uses the same computeShortfall as the
+ * payment screen so the threshold is identical.
+ */
+export function launchButtonLabel(args: {
+  balance: number;
+  required: number;
+}): string {
+  return computeShortfall(args.balance, args.required) <= 0
+    ? "Запустить"
+    : "Пополнить и запустить";
+}
+
+/**
+ * Optional ceiling line for the budget summary (aim #20). Display-only — it
+ * does NOT alter the cost model. Returns null when unset so the row is
+ * omitted entirely.
+ */
+export function maxDailyBudgetLine(
+  value: number | undefined,
+): { label: string; display: string } | null {
+  if (value === undefined || !(value > 0)) return null;
+  return { label: "Максимальный дневной бюджет", display: formatRub(value) };
+}
+
 function RadioDot({ active }: { active: boolean }) {
   return (
     <span
@@ -153,12 +183,14 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         scenarioId: data.scenario,
         sourceType: data.sourceType,
         baseSize: data.fileRowCount && data.fileRowCount > 0 ? data.fileRowCount : FALLBACK_BASE,
+        channels: data.channels,
       }),
-    [data.scenario, data.sourceType, data.fileRowCount]
+    [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
+  const { balance } = useAppState();
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -168,6 +200,18 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     return recommendedValue > 0 ? String(recommendedValue) : "";
   });
   const customInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [maxDailyValue, setMaxDailyValue] = useState<string>(
+    data.maxDailyBudget != null ? String(data.maxDailyBudget) : "",
+  );
+  const maxDailyParsed = parseFloat(maxDailyValue.replace(",", "."));
+  const maxDailyLine = maxDailyBudgetLine(
+    !isNaN(maxDailyParsed) ? maxDailyParsed : undefined,
+  );
+
+  function handleMaxDailyChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setMaxDailyValue(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."));
+  }
 
   const customParsed = parseFloat(customValue);
   const customIsValid = !isNaN(customParsed) && customParsed > 0;
@@ -316,6 +360,12 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               </span>
             </div>
           )}
+          {maxDailyLine && (
+            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>{maxDailyLine.label}</span>
+              <span className="tabular-nums">{maxDailyLine.display}</span>
+            </div>
+          )}
         </div>
 
         {/* Recommended / custom budget cards (reuses step-5 RadioDot pattern) */}
@@ -405,10 +455,34 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
           </button>
         </div>
 
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="max-daily-budget"
+            className="text-xs font-medium text-muted-foreground"
+          >
+            Максимальный дневной бюджет (необязательно)
+          </label>
+          <div className="relative">
+            <Input
+              id="max-daily-budget"
+              type="text"
+              inputMode="decimal"
+              placeholder="Без ограничения"
+              value={maxDailyValue}
+              onChange={handleMaxDailyChange}
+              className="pr-8 tabular-nums"
+              aria-label="Максимальный дневной бюджет"
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+              ₽
+            </span>
+          </div>
+        </div>
+
         <StepFooter
           onBack={onBack}
           onContinue={handleContinue}
-          continueLabel="Запустить"
+          continueLabel={launchButtonLabel({ balance, required: activeValue })}
           continueDisabled={!canContinue}
         />
       </div>
