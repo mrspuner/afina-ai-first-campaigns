@@ -133,12 +133,65 @@ describe("TemplateCard", () => {
     expect(screen.getByText("AFINA")).toBeInTheDocument();
   });
 
-  it("renders per-channel fields for email: subject, body, sender", () => {
-    render(<TemplateCard template={email} onRename={vi.fn()} />);
-    expect(screen.getByText("Тема:")).toBeInTheDocument();
-    expect(screen.getByText("Добро пожаловать в Afina")).toBeInTheDocument();
-    expect(screen.getByText("Отправитель:")).toBeInTheDocument();
-    expect(screen.getByText("hello@afina.ru")).toBeInTheDocument();
+  it("does not truncate a long field value with line-clamp-1 (#29)", () => {
+    const longText =
+      "Очень длинный текст сообщения, который раньше обрезался по одной " +
+      "строке line-clamp-1, а теперь должен показываться полностью без усечения.";
+    const longSms: MessageTemplate = {
+      ...sms,
+      content: {
+        ...sms.content,
+        kind: "sms",
+        text: longText,
+      } as MessageTemplate["content"],
+    };
+    const { container } = render(
+      <TemplateCard template={longSms} onRename={vi.fn()} />,
+    );
+    // The full value must be present in the DOM…
+    const valueEl = screen.getByText(longText);
+    expect(valueEl).toBeInTheDocument();
+    // …and rendered without the line-clamp-1 truncation class anywhere.
+    expect(container.querySelector(".line-clamp-1")).toBeNull();
+    expect(valueEl.className).not.toContain("line-clamp-1");
+  });
+
+  it("renders an email template as a styled email block, not a single truncated line (#30)", () => {
+    const longEmail: MessageTemplate = {
+      ...email,
+      content: {
+        kind: "email",
+        subject: "Тема письма для предпросмотра",
+        body:
+          "Здравствуйте!\n\n" +
+          "Это первый содержательный абзац письма, который должен отрисоваться " +
+          "отдельным параграфом.\n\n" +
+          "А это второй абзац — он тоже должен быть виден целиком.",
+        sender: "Афина <hello@afina.ru>",
+        link: "https://example.com/cta",
+      },
+    };
+    const { container } = render(
+      <TemplateCard template={longEmail} onRename={vi.fn()} />,
+    );
+    // Subject as a header.
+    expect(
+      screen.getByText("Тема письма для предпросмотра"),
+    ).toBeInTheDocument();
+    // Both body paragraphs are split on "\n\n" and rendered separately.
+    expect(screen.getByText(/первый содержательный абзац/)).toBeInTheDocument();
+    expect(screen.getByText(/второй абзац/)).toBeInTheDocument();
+    // Sender is shown.
+    expect(screen.getByText(/hello@afina\.ru/)).toBeInTheDocument();
+    // Not the old plain truncated single-line rendering.
+    expect(container.querySelector(".line-clamp-1")).toBeNull();
+    // The styled email block renders the two paragraphs as distinct elements.
+    const paragraphs = Array.from(container.querySelectorAll("p")).filter(
+      (p) =>
+        p.textContent?.includes("первый содержательный") ||
+        p.textContent?.includes("второй абзац"),
+    );
+    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders a fields list for push channel", () => {
