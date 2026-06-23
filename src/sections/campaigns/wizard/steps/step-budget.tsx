@@ -360,7 +360,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               </span>
             </div>
           )}
-          {maxDailyLine && (
+          {isStream && maxDailyLine && (
             <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
               <span>{maxDailyLine.label}</span>
               <span className="tabular-nums">{maxDailyLine.display}</span>
@@ -455,29 +455,31 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
           </button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="max-daily-budget"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            Максимальный дневной бюджет (необязательно)
-          </label>
-          <div className="relative">
-            <Input
-              id="max-daily-budget"
-              type="text"
-              inputMode="decimal"
-              placeholder="Без ограничения"
-              value={maxDailyValue}
-              onChange={handleMaxDailyChange}
-              className="pr-8 tabular-nums"
-              aria-label="Максимальный дневной бюджет"
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-              ₽
-            </span>
+        {isStream && (
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="max-daily-budget"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              Максимальный дневной бюджет (необязательно)
+            </label>
+            <div className="relative">
+              <Input
+                id="max-daily-budget"
+                type="text"
+                inputMode="decimal"
+                placeholder="Без ограничения"
+                value={maxDailyValue}
+                onChange={handleMaxDailyChange}
+                className="pr-8 tabular-nums"
+                aria-label="Максимальный дневной бюджет"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+                ₽
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         <StepFooter
           onBack={onBack}

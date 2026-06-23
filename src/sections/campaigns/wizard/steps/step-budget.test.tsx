@@ -145,6 +145,50 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 });
 
+describe("StepBudget — max daily budget field (aim #21, stream-only)", () => {
+  it("shows the «Максимальный дневной бюджет» field for stream source", () => {
+    renderStep(
+      <StepBudget
+        data={makeData({ sourceType: "stream", channels: ["sms"] })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByText(/Максимальный дневной бюджет \(необязательно\)/)
+    ).toBeTruthy();
+    cleanup();
+  });
+
+  it("hides the «Максимальный дневной бюджет» field for new source", () => {
+    renderStep(
+      <StepBudget
+        data={makeData({ sourceType: "new", channels: ["sms"] })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(
+      screen.queryByText(/Максимальный дневной бюджет \(необязательно\)/)
+    ).toBeNull();
+    cleanup();
+  });
+
+  it("hides the «Максимальный дневной бюджет» field for own source", () => {
+    renderStep(
+      <StepBudget
+        data={makeData({ sourceType: "own", channels: ["sms"] })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(
+      screen.queryByText(/Максимальный дневной бюджет \(необязательно\)/)
+    ).toBeNull();
+    cleanup();
+  });
+});
+
 describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
   const SCENARIO = "base-first-deal"; // signalType "Первая сделка"
 
