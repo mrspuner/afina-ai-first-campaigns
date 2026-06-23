@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Search } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
@@ -55,6 +56,19 @@ export function sourceTypeLabel(sourceType: SourceType): string {
 /** Подобранные сценарии, показываемые по умолчанию («Подобрали для вас»). */
 const CURATED_SCENARIOS = SCENARIOS.filter((s) => s.isCurated);
 
+/**
+ * Вертикальное сжатие/разжатие при переключении «Подобрали для вас» ↔ полный
+ * каталог. ease-out-quart (--ease-out), без bounce, ~0.28s (PRODUCT.md §анимация).
+ */
+const COLLAPSE_TRANSITION = { duration: 0.28, ease: [0.23, 1, 0.32, 1] } as const;
+const collapseMotion = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: "auto" as const, opacity: 1 },
+  exit: { height: 0, opacity: 0 },
+  transition: COLLAPSE_TRANSITION,
+  className: "overflow-hidden",
+};
+
 export function Step1Scenario({ data, onNext }: StepProps) {
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
@@ -104,8 +118,10 @@ export function Step1Scenario({ data, onNext }: StepProps) {
       subtitle="Готовая связка сигнала и кампании под бизнес-цель"
     >
       <div className="flex flex-col gap-4">
-        {!showAll ? (
-          <section className="flex flex-col gap-3">
+        <AnimatePresence initial={false} mode="wait">
+          {!showAll ? (
+            <motion.section key="curated" {...collapseMotion}>
+              <div className="flex flex-col gap-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Подобрали для вас
             </h2>
@@ -127,9 +143,11 @@ export function Step1Scenario({ data, onNext }: StepProps) {
             >
               Показать все
             </button>
-          </section>
-        ) : (
-          <>
+              </div>
+            </motion.section>
+          ) : (
+            <motion.div key="all" {...collapseMotion}>
+              <div className="flex flex-col gap-4">
             <button
               type="button"
               onClick={() => setShowAll(false)}
@@ -206,8 +224,10 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                 </div>
               )}
             </div>
-          </>
-        )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </StepContent>
   );
