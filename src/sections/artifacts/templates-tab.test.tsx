@@ -31,7 +31,6 @@ describe("TemplatesTabView", () => {
     render(
       <TemplatesTabView
         templates={[]}
-        onUseInNewCampaign={vi.fn()}
         onCreateManual={onCreateManual}
       />,
     );
@@ -46,7 +45,6 @@ describe("TemplatesTabView", () => {
     render(
       <TemplatesTabView
         templates={templates}
-        onUseInNewCampaign={vi.fn()}
         onCreateManual={vi.fn()}
       />,
     );

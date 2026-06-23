@@ -10,14 +10,12 @@ import { TemplatesEmptyState } from "./templates-empty-state";
 
 interface TemplatesTabViewProps {
   templates: MessageTemplate[];
-  onUseInNewCampaign: (templateId: string) => void;
   onCreateManual: () => void;
 }
 
 /** Presentational list — pure, no state access (testable in isolation). */
 export function TemplatesTabView({
   templates,
-  onUseInNewCampaign,
   onCreateManual,
 }: TemplatesTabViewProps) {
   if (templates.length === 0) {
@@ -33,12 +31,7 @@ export function TemplatesTabView({
         </Button>
       </div>
       {templates.map((template, i) => (
-        <TemplateCard
-          key={template.id}
-          template={template}
-          index={i}
-          onUseInNewCampaign={onUseInNewCampaign}
-        />
+        <TemplateCard key={template.id} template={template} index={i} />
       ))}
     </div>
   );
@@ -50,16 +43,9 @@ export function TemplatesTab() {
   const chat = useChat();
 
   // «Создать шаблон» opens the AI template drawer (#15).
-  // «Использовать в кампании» still enters the wizard (Кампании-epic concern).
   function openDrawer() {
     chat.openTemplateDrawer();
   }
 
-  return (
-    <TemplatesTabView
-      templates={templates}
-      onUseInNewCampaign={openDrawer}
-      onCreateManual={openDrawer}
-    />
-  );
+  return <TemplatesTabView templates={templates} onCreateManual={openDrawer} />;
 }
