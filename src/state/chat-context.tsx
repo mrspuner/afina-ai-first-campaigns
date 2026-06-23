@@ -34,20 +34,47 @@ export interface TemplateDrawerVariant {
   id: string;
   name: string;
   content: NodeParams;
+  /** Состав компонентов шаблона (#15) — человекочитаемые имена полей. */
+  components: string[];
+}
+
+/** Опция вопроса пикера вариантов (#14). */
+export interface TemplateQuestionOption {
+  id: string;
+  label: string;
+  /** Состав компонентов варианта (#15). */
+  components?: string[];
+}
+
+/** Активный вопрос пикера вариантов (#14). */
+export interface TemplateQuestion {
+  /** Текст вопроса = заголовок пикера и текст assistant-сообщения. */
+  prompt: string;
+  options: TemplateQuestionOption[];
+  /** false для закрытых множеств (канал) → нет строки «Другой вариант»/«Пропустить». */
+  allowFreeInput: boolean;
 }
 
 /**
- * Состояние структурированного drawer'а создания шаблона (#15).
- * Зеркалит паттерн EmailEditorState.
+ * Состояние структурированного drawer'а создания/предпросмотра шаблона
+ * (#14, #15). Поток переехал в боковой чат-дровер: вопросы — отдельные
+ * assistant-сообщения, варианты ответа рендерятся в VariantPicker над
+ * промпт-баром.
  */
 export interface TemplateDrawerState {
   open: boolean;
+  /** create — пошаговое создание; preview — read-only показ готового шаблона (#14, шов для блока 5). */
+  mode: "create" | "preview";
   step: "channel" | "intent" | "variants";
   channel: Channel | null;
   intent: string;
   variants: TemplateDrawerVariant[];
   selectedId: string | null;
   generating: boolean;
+  /** Активный вопрос пикера (#14). null → пикер не рендерим. */
+  question: TemplateQuestion | null;
+  /** id шаблона в режиме preview (#14, шов для блока 5). */
+  previewTemplateId: string | null;
 }
 
 /**
@@ -95,12 +122,15 @@ export type ChatAction =
   | { type: "close_email_editor" }
   | { type: "set_email_draft"; patch: Partial<EmailDraft> }
   | { type: "open_template_drawer" }
+  | { type: "open_template_create"; channel: Channel }
+  | { type: "open_template_preview"; templateId: string }
   | { type: "close_template_drawer" }
   | { type: "set_template_channel"; channel: Channel }
   | { type: "set_template_intent"; intent: string }
   | { type: "set_template_variants"; variants: TemplateDrawerVariant[] }
   | { type: "set_template_selected"; id: string }
-  | { type: "set_template_generating"; generating: boolean };
+  | { type: "set_template_generating"; generating: boolean }
+  | { type: "set_template_question"; question: TemplateQuestion | null };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -170,6 +200,35 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         templateDrawer: { ...INITIAL_TEMPLATE_DRAWER, open: true },
       };
     }
+    case "open_template_create": {
+      return {
+        ...state,
+        templateDrawer: {
+          ...INITIAL_TEMPLATE_DRAWER,
+          open: true,
+          mode: "create",
+          channel: action.channel,
+          step: "intent",
+        },
+      };
+    }
+    case "open_template_preview": {
+      return {
+        ...state,
+        templateDrawer: {
+          ...INITIAL_TEMPLATE_DRAWER,
+          open: true,
+          mode: "preview",
+          previewTemplateId: action.templateId,
+        },
+      };
+    }
+    case "set_template_question": {
+      return {
+        ...state,
+        templateDrawer: { ...state.templateDrawer, question: action.question },
+      };
+    }
     case "close_template_drawer": {
       return { ...state, templateDrawer: INITIAL_TEMPLATE_DRAWER };
     }
@@ -214,12 +273,15 @@ const INITIAL_EMAIL_EDITOR: EmailEditorState = {
 
 const INITIAL_TEMPLATE_DRAWER: TemplateDrawerState = {
   open: false,
+  mode: "create",
   step: "channel",
   channel: null,
   intent: "",
   variants: [],
   selectedId: null,
   generating: false,
+  question: null,
+  previewTemplateId: null,
 };
 
 export const INITIAL_CHAT_STATE: ChatState = {
@@ -273,12 +335,18 @@ interface ChatContextValue {
   /** Template-drawer (#15): состояние и операции. */
   templateDrawer: TemplateDrawerState;
   openTemplateDrawer: () => void;
+  /** Шов для блока 5: открыть дровер сразу на шаге намерения для канала (#14). */
+  openTemplateCreate: (channel: Channel) => void;
+  /** Шов для блока 5: открыть дровер в режиме предпросмотра готового шаблона (#14). */
+  openTemplatePreview: (templateId: string) => void;
   closeTemplateDrawer: () => void;
   setTemplateChannel: (channel: Channel) => void;
   setTemplateIntent: (intent: string) => void;
   setTemplateVariants: (variants: TemplateDrawerVariant[]) => void;
   setTemplateSelected: (id: string) => void;
   setTemplateGenerating: (generating: boolean) => void;
+  /** Активный вопрос пикера (#14). null скрывает пикер. */
+  setTemplateQuestion: (question: TemplateQuestion | null) => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -359,6 +427,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   const openTemplateDrawer = useCallback(() => dispatch({ type: "open_template_drawer" }), []);
+  const openTemplateCreate = useCallback(
+    (channel: Channel) => dispatch({ type: "open_template_create", channel }),
+    []
+  );
+  const openTemplatePreview = useCallback(
+    (templateId: string) => dispatch({ type: "open_template_preview", templateId }),
+    []
+  );
   const closeTemplateDrawer = useCallback(() => dispatch({ type: "close_template_drawer" }), []);
   const setTemplateChannel = useCallback(
     (channel: Channel) => dispatch({ type: "set_template_channel", channel }),
@@ -380,6 +456,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (generating: boolean) => dispatch({ type: "set_template_generating", generating }),
     []
   );
+  const setTemplateQuestion = useCallback(
+    (question: TemplateQuestion | null) => dispatch({ type: "set_template_question", question }),
+    []
+  );
 
   const value = useMemo<ChatContextValue>(
     () => ({
@@ -397,12 +477,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setEmailDraft,
       templateDrawer: state.templateDrawer,
       openTemplateDrawer,
+      openTemplateCreate,
+      openTemplatePreview,
       closeTemplateDrawer,
       setTemplateChannel,
       setTemplateIntent,
       setTemplateVariants,
       setTemplateSelected,
       setTemplateGenerating,
+      setTemplateQuestion,
     }),
     [
       state.messages,
@@ -419,12 +502,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setEmailDraft,
       state.templateDrawer,
       openTemplateDrawer,
+      openTemplateCreate,
+      openTemplatePreview,
       closeTemplateDrawer,
       setTemplateChannel,
       setTemplateIntent,
       setTemplateVariants,
       setTemplateSelected,
       setTemplateGenerating,
+      setTemplateQuestion,
     ]
   );
 

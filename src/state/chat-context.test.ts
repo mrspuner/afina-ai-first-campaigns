@@ -8,12 +8,15 @@ const empty: ChatState = {
   emailEditor: { open: false, nodeId: null, draft: null },
   templateDrawer: {
     open: false,
+    mode: "create",
     step: "channel",
     channel: null,
     intent: "",
     variants: [],
     selectedId: null,
     generating: false,
+    question: null,
+    previewTemplateId: null,
   },
 };
 
@@ -184,8 +187,8 @@ describe("chatReducer — templateDrawer slice (#15)", () => {
     s = chatReducer(s, { type: "set_template_channel", channel: "push" });
     s = chatReducer(s, { type: "set_template_intent", intent: "Акция" });
     const variants = [
-      { id: "v1", name: "Push 1", content: { kind: "push" as const, title: "T1", body: "B1" } },
-      { id: "v2", name: "Push 2", content: { kind: "push" as const, title: "T2", body: "B2" } },
+      { id: "v1", name: "Push 1", content: { kind: "push" as const, title: "T1", body: "B1" }, components: ["заголовок", "текст"] },
+      { id: "v2", name: "Push 2", content: { kind: "push" as const, title: "T2", body: "B2" }, components: ["заголовок", "текст"] },
     ];
     s = chatReducer(s, { type: "set_template_variants", variants });
     expect(s.templateDrawer.step).toBe("variants");
@@ -214,5 +217,69 @@ describe("chatReducer — templateDrawer slice (#15)", () => {
     s = chatReducer(s, { type: "close_template_drawer" });
     expect(s.templateDrawer.open).toBe(false);
     expect(s.templateDrawer.channel).toBeNull();
+  });
+});
+
+describe("chatReducer — template create/preview seam (#14)", () => {
+  it("open_template_create opens at intent step for the given channel", () => {
+    const s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_create", channel: "sms" });
+    expect(s.templateDrawer.open).toBe(true);
+    expect(s.templateDrawer.mode).toBe("create");
+    expect(s.templateDrawer.channel).toBe("sms");
+    expect(s.templateDrawer.step).toBe("intent");
+  });
+
+  it("open_template_preview opens in preview mode with templateId", () => {
+    const s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_preview", templateId: "tpl_1" });
+    expect(s.templateDrawer.open).toBe(true);
+    expect(s.templateDrawer.mode).toBe("preview");
+    expect(s.templateDrawer.previewTemplateId).toBe("tpl_1");
+  });
+
+  it("set_template_question stores the active picker question", () => {
+    let s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_drawer" });
+    const question = {
+      prompt: "Выберите канал",
+      allowFreeInput: false,
+      options: [
+        { id: "sms", label: "SMS" },
+        { id: "email", label: "Email" },
+      ],
+    };
+    s = chatReducer(s, { type: "set_template_question", question });
+    expect(s.templateDrawer.question?.prompt).toBe("Выберите канал");
+    expect(s.templateDrawer.question?.allowFreeInput).toBe(false);
+  });
+
+  it("set_template_question accepts null to hide the picker", () => {
+    let s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_drawer" });
+    s = chatReducer(s, {
+      type: "set_template_question",
+      question: { prompt: "x", allowFreeInput: true, options: [] },
+    });
+    s = chatReducer(s, { type: "set_template_question", question: null });
+    expect(s.templateDrawer.question).toBeNull();
+  });
+
+  it("set_template_variants carries components per variant (#15)", () => {
+    let s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_drawer" });
+    s = chatReducer(s, { type: "set_template_channel", channel: "email" });
+    s = chatReducer(s, {
+      type: "set_template_variants",
+      variants: [
+        {
+          id: "v1",
+          name: "A",
+          content: { kind: "email", subject: "S", body: "B", sender: "S" },
+          components: ["тема", "текст", "отправитель"],
+        },
+      ],
+    });
+    expect(s.templateDrawer.variants[0].components).toEqual(["тема", "текст", "отправитель"]);
+  });
+
+  it("open_template_drawer default mode is create", () => {
+    const s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_drawer" });
+    expect(s.templateDrawer.mode).toBe("create");
   });
 });
