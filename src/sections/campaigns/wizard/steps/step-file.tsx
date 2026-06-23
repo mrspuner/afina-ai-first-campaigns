@@ -11,7 +11,7 @@ import {
 } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
 import { cn } from "@/lib/utils";
-import { StepProps } from "@/types/campaign";
+import { StepData, StepProps } from "@/types/campaign";
 import { rngFor, seededInt } from "@/state/metrics";
 import {
   SCENARIOS,
@@ -50,10 +50,14 @@ function fileCopy(sourceType: StepProps["data"]["sourceType"]): {
 /**
  * Own-source signal-type selector. Reuses step-1's grouping
  * (`groupScenariosByCategory`) + `ScenarioCard` so the user can label their
- * uploaded list with a scenario; the scenario's `signalType` is what we
- * surface. Persists the choice through the shared `scenario` field via
- * `onSelect` — mirroring how Step1Scenario calls `onNext({ scenario: id })`.
- * No curated/«Показать все» collapse here: this is a focused in-step picker.
+ * uploaded list with a scenario; the scenario's `signalType` is surfaced.
+ *
+ * The selection is HELD LOCALLY by the parent step and reflected back via
+ * `selectedId`. Picking a card only calls `onSelect` (a local state update) —
+ * it does NOT advance the wizard. The chosen scenario is flushed into the
+ * wizard's dedicated `ownSignalScenario` field only when the user clicks the
+ * existing «Далее» button, so neither the upload nor the step progress is ever
+ * reset (handleNext's scenarioChanged reset watches `scenario`, not this field).
  */
 function OwnSignalTypeSelector({
   selectedId,
@@ -159,21 +163,26 @@ function OwnSignalTypeSelector({
 export function StepFile({ data, onNext, onBack }: StepProps) {
   const [file, setFile] = useState<File | null>(data.file);
   const [isHashing, setIsHashing] = useState(false);
-
-  const { title, subtitle } = fileCopy(data.sourceType);
   const isOwn = data.sourceType === "own";
 
-  const selectedScenarioId =
-    typeof data.scenario === "string" && data.scenario.length > 0
-      ? data.scenario
-      : null;
+  // Own-source signal-type choice held LOCALLY (seeded from the wizard's
+  // dedicated field). Selecting only updates this state — it never calls
+  // onNext, so the wizard does not advance and the upload is not reset. The
+  // value is flushed into `ownSignalScenario` on «Далее» (see emit()).
+  const [ownSignalScenario, setOwnSignalScenario] = useState<string | null>(
+    data.ownSignalScenario ?? null
+  );
+
+  const { title, subtitle } = fileCopy(data.sourceType);
 
   function emit(rowCount: number) {
-    onNext({ file, fileRowCount: rowCount });
-  }
-
-  function handleSelectScenario(id: string) {
-    onNext({ scenario: id });
+    const partial: Partial<StepData> = { file, fileRowCount: rowCount };
+    // Carry the own-source signal-type choice on the DEDICATED field — never on
+    // `scenario` — so handleNext's scenarioChanged reset never fires.
+    if (isOwn && ownSignalScenario) {
+      partial.ownSignalScenario = ownSignalScenario;
+    }
+    onNext(partial);
   }
 
   function handleContinue() {
@@ -216,8 +225,8 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
 
         {isOwn ? (
           <OwnSignalTypeSelector
-            selectedId={selectedScenarioId}
-            onSelect={handleSelectScenario}
+            selectedId={ownSignalScenario}
+            onSelect={setOwnSignalScenario}
           />
         ) : null}
 

@@ -73,25 +73,58 @@ describe("StepFile — own-source scenario (signal-type) selector", () => {
     ).toBeInTheDocument();
   });
 
-  it("selecting a scenario card persists the choice via onNext({ scenario })", () => {
+  it("does NOT render the scenario selector for non-own sources", () => {
+    render(
+      <StepFile
+        data={{ ...initialStepData, sourceType: "new" }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    // No category chips, no scenario cards for the "new" base flow.
+    for (const category of SCENARIO_CATEGORIES) {
+      expect(
+        screen.queryByRole("button", { name: category })
+      ).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("button", { name: nonBase[0].name })
+    ).not.toBeInTheDocument();
+  });
+
+  it("selecting a scenario records it locally WITHOUT calling the step-advancing onNext", () => {
     const onNext = vi.fn();
     renderOwn(onNext);
     const target = nonBase[0];
     fireEvent.click(screen.getByRole("button", { name: target.name }));
-    expect(onNext).toHaveBeenCalledWith({ scenario: target.id });
+    // Critical: selecting must NOT advance the step / trigger any reset. The
+    // wizard only persists+advances via onNext, so onNext must NOT be called
+    // on selection.
+    expect(onNext).not.toHaveBeenCalled();
   });
 
-  it("marks the already-selected scenario (from data.scenario) as pressed", () => {
-    const selected = SCENARIOS.find((s) => !s.isBase)!;
-    renderOwn(vi.fn(), { scenario: selected.id });
-    const card = screen.getByRole("button", { name: selected.name });
-    expect(card).toHaveAttribute("aria-pressed", "true");
+  it("marks the just-selected scenario as pressed (local state reflects the choice)", () => {
+    renderOwn();
+    const target = nonBase[0];
+    const card = screen.getByRole("button", { name: target.name });
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(card);
+    expect(
+      screen.getByRole("button", { name: target.name })
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("seeds the selection from data.ownSignalScenario on mount", () => {
+    const selected = nonBase[0];
+    renderOwn(vi.fn(), { ownSignalScenario: selected.id });
+    expect(
+      screen.getByRole("button", { name: selected.name })
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("surfaces the signal type of the selected scenario", () => {
-    const selected = SCENARIOS.find((s) => !s.isBase)!;
-    renderOwn(vi.fn(), { scenario: selected.id });
-    // The chosen scenario's signalType is shown somewhere in the step.
+    const selected = nonBase[0];
+    renderOwn(vi.fn(), { ownSignalScenario: selected.id });
     expect(
       screen.getAllByText((_, node) =>
         (node?.textContent ?? "").includes(selected.signalType)
@@ -99,9 +132,34 @@ describe("StepFile — own-source scenario (signal-type) selector", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("includes the chosen ownSignalScenario in the continue payload (persists on «Далее», no reset)", () => {
+    const onNext = vi.fn();
+    // Seed an already-uploaded file (file === data.file) so «Далее» skips the
+    // hashing branch and emits synchronously with the existing row count.
+    const file = new File(["a,b\n1,2"], "list.csv", { type: "text/csv" });
+    renderOwn(onNext, { file, fileRowCount: 4242 });
+
+    const target = nonBase[0];
+    fireEvent.click(screen.getByRole("button", { name: target.name }));
+    // Still no advance from the selection itself.
+    expect(onNext).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+    expect(onNext).toHaveBeenCalledTimes(1);
+    const payload = onNext.mock.calls[0][0];
+    // The continue payload carries the file + row count AND the dedicated
+    // own-signal field — and crucially NOT `scenario`, so handleNext's
+    // scenarioChanged reset never fires.
+    expect(payload).toMatchObject({
+      file,
+      fileRowCount: 4242,
+      ownSignalScenario: target.id,
+    });
+    expect(payload).not.toHaveProperty("scenario");
+  });
+
   it("clicking a category chip filters the visible scenario cards", () => {
     renderOwn();
-    // Pick a category and assert a scenario from a DIFFERENT category disappears.
     const cat = SCENARIO_CATEGORIES[0];
     const inCat = SCENARIOS.find((s) => !s.isBase && s.category === cat)!;
     const outOfCat = SCENARIOS.find((s) => !s.isBase && s.category !== cat)!;
