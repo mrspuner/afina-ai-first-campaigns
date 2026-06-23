@@ -71,6 +71,7 @@ export function buildBudgetForecast(input: BudgetForecastInput): BudgetForecast 
     scenarioId: input.scenarioId,
     sourceType: input.sourceType,
     baseSize: base,
+    channels: input.channels,
   });
   const communication = graph ? graph.total : flat.communication;
   const signals = flat.signals;
@@ -153,8 +154,9 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         scenarioId: data.scenario,
         sourceType: data.sourceType,
         baseSize: data.fileRowCount && data.fileRowCount > 0 ? data.fileRowCount : FALLBACK_BASE,
+        channels: data.channels,
       }),
-    [data.scenario, data.sourceType, data.fileRowCount]
+    [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
 
   const recommendedValue = estimate.total;

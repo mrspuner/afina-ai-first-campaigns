@@ -177,9 +177,12 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
       />
     );
     // Graph cost for base-first-deal/new yields an SMS line of ₽50 000.
-    const line = screen.getByText(/^SMS · /);
-    expect(line).toBeTruthy();
-    const row = line.parentElement;
+    // Channel-aware after aim #2: base-first-deal/new now produces a primary
+    // SMS line (₽50 000) plus a post-condition (repeat) SMS line, so multiple
+    // "SMS · …" rows exist. The first is the ₽50 000 primary line.
+    const lines = screen.getAllByText(/^SMS · /);
+    expect(lines.length).toBeGreaterThan(0);
+    const row = lines[0].parentElement;
     expect(row?.textContent).toMatch(/₽\s*50[\s ]?000/);
     // The simple "Каналы: …" fallback must NOT be shown when graph lines exist.
     expect(screen.queryByText(/^Каналы:/)).toBeNull();
@@ -201,7 +204,10 @@ describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
     );
     const buffer = screen.getByText(/Повторные коммуникации \(\+30% буфер\)/);
     const row = buffer.parentElement;
-    expect(row?.textContent).toMatch(/₽\s*1[\s ]?500/);
+    // Channel-aware after aim #2: the repeat (post-condition) SMS line for
+    // base-first-deal/new over 10 000 contacts is ₽15 000 (was a stale ₽1 500
+    // when the wizard graph dropped channels).
+    expect(row?.textContent).toMatch(/₽\s*15\D?000/);
     cleanup();
   });
 });
