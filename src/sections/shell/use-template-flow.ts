@@ -32,6 +32,96 @@ export function variantQuestion(variants: TemplateDrawerVariant[]): TemplateQues
 }
 
 /**
+ * Человекочитаемое описание одного варианта (#28): «<n>. <имя> — <поля>».
+ * Поля title/text выводятся по каналу из content.kind, чтобы пользователь
+ * мог прочитать содержимое варианта до выбора, не открывая превью.
+ */
+export function describeVariant(variant: TemplateDrawerVariant, index: number): string {
+  const { content } = variant;
+  let fields: string;
+  switch (content.kind) {
+    case "email":
+      fields = `Тема: ${content.subject}, Текст: ${content.body}`;
+      break;
+    case "sms":
+      fields = `Текст: ${content.text}`;
+      break;
+    case "push":
+      fields = `Заголовок: ${content.title}, Текст: ${content.body}`;
+      break;
+    case "ivr":
+      fields = `Сценарий: ${content.scenario}`;
+      break;
+    default:
+      fields = variant.components.join(", ");
+  }
+  return `${index}. ${variant.name} — ${fields}`;
+}
+
+/**
+ * Сообщение ассистента после генерации (#28): подсказка выбора + перечень
+ * всех вариантов с их заголовками/текстами, по одному на строку.
+ */
+export function buildVariantsMessage(variants: TemplateDrawerVariant[]): string {
+  const lines = variants.map((v, i) => describeVariant(v, i + 1));
+  return `Готово. Какой вариант сохранить?\n${lines.join("\n")}`;
+}
+
+/** Минимальный контракт чата, нужный потоку submitIntent (для тестируемости). */
+export interface SubmitIntentChat {
+  templateDrawer: { channel: Channel | null; variants: TemplateDrawerVariant[] };
+  append: (m: { role: "user" | "assistant"; text: string; pending?: boolean }) => void;
+  setTemplateIntent: (intent: string) => void;
+  setTemplateQuestion: (q: TemplateQuestion | null) => void;
+  setTemplateGenerating: (v: boolean) => void;
+  setTemplateVariants: (variants: TemplateDrawerVariant[]) => void;
+}
+
+/**
+ * Чистая (не-React) реализация потока намерения → генерация вариантов (#28).
+ * Вынесена из useCallback, чтобы покрыть тестами без рендера хука: на успехе
+ * добавляет сообщение ассистента, перечисляющее заголовки/тексты каждого
+ * варианта (buildVariantsMessage), и ставит вопрос выбора.
+ */
+export async function runSubmitIntent(chat: SubmitIntentChat, intent: string): Promise<void> {
+  const channel = chat.templateDrawer.channel;
+  if (!channel || !intent.trim()) return;
+  chat.append({ role: "user", text: intent });
+  chat.setTemplateIntent(intent);
+  chat.setTemplateQuestion(null);
+  chat.setTemplateGenerating(true);
+  chat.append({ role: "assistant", text: "Готовлю варианты…", pending: true });
+  try {
+    const res = await fetch(TEMPLATE_GENERATE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ channel, intent }),
+    });
+    if (!res.ok) throw new Error("api");
+    const json = (await res.json()) as {
+      variants?: Array<{ name: string; content: Record<string, unknown> }>;
+    };
+    const variants: TemplateDrawerVariant[] = (json.variants ?? []).map((v) => {
+      const content = v.content as TemplateDrawerVariant["content"];
+      return {
+        id: nanoid(6),
+        name: v.name,
+        content,
+        components: templateComponentLabels(content),
+      };
+    });
+    chat.setTemplateVariants(variants);
+    chat.append({ role: "assistant", text: buildVariantsMessage(variants) });
+    chat.setTemplateQuestion(variantQuestion(variants));
+  } catch {
+    chat.append({ role: "assistant", text: "Не удалось сгенерировать. Попробуйте ещё раз." });
+    chat.setTemplateQuestion(null);
+  } finally {
+    chat.setTemplateGenerating(false);
+  }
+}
+
+/**
  * Оркестратор потока создания/предпросмотра шаблона в чат-дровере (#14).
  * Каждый шаг публикует вопрос ассистента через chat.append и ставит активный
  * вопрос пикера через setTemplateQuestion. Ответ продвигает state-машину
@@ -98,46 +188,7 @@ export function useTemplateFlow() {
   );
 
   /** Свободный текст намерения → генерация вариантов. */
-  const submitIntent = useCallback(
-    async (intent: string) => {
-      const channel = chat.templateDrawer.channel;
-      if (!channel || !intent.trim()) return;
-      chat.append({ role: "user", text: intent });
-      chat.setTemplateIntent(intent);
-      chat.setTemplateQuestion(null);
-      chat.setTemplateGenerating(true);
-      chat.append({ role: "assistant", text: "Готовлю варианты…", pending: true });
-      try {
-        const res = await fetch(TEMPLATE_GENERATE_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ channel, intent }),
-        });
-        if (!res.ok) throw new Error("api");
-        const json = (await res.json()) as {
-          variants?: Array<{ name: string; content: Record<string, unknown> }>;
-        };
-        const variants: TemplateDrawerVariant[] = (json.variants ?? []).map((v) => {
-          const content = v.content as TemplateDrawerVariant["content"];
-          return {
-            id: nanoid(6),
-            name: v.name,
-            content,
-            components: templateComponentLabels(content),
-          };
-        });
-        chat.setTemplateVariants(variants);
-        chat.append({ role: "assistant", text: "Готово. Какой вариант сохранить?" });
-        chat.setTemplateQuestion(variantQuestion(variants));
-      } catch {
-        chat.append({ role: "assistant", text: "Не удалось сгенерировать. Попробуйте ещё раз." });
-        chat.setTemplateQuestion(null);
-      } finally {
-        chat.setTemplateGenerating(false);
-      }
-    },
-    [chat]
-  );
+  const submitIntent = useCallback((intent: string) => runSubmitIntent(chat, intent), [chat]);
 
   /** Выбор варианта → сохранить шаблон и закрыть поток. */
   const selectVariant = useCallback(
