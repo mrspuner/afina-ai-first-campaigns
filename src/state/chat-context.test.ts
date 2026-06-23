@@ -114,6 +114,26 @@ describe("chatReducer email editor", () => {
     expect(s.emailEditor.draft?.subject).toBe("Тема");
   });
 
+  it("open_email_editor carries the preview flag onto emailEditor (#32)", () => {
+    const s = chatReducer(empty, {
+      type: "open_email_editor",
+      nodeId: "",
+      preview: true,
+      draft,
+    });
+    expect(s.emailEditor.preview).toBe(true);
+    expect(s.emailEditor.open).toBe(true);
+  });
+
+  it("open_email_editor defaults preview to undefined when not passed (#32)", () => {
+    const s = chatReducer(empty, {
+      type: "open_email_editor",
+      nodeId: "email",
+      draft,
+    });
+    expect(s.emailEditor.preview).toBeUndefined();
+  });
+
   it("set_email_draft patches the current draft", () => {
     let s = chatReducer(empty, {
       type: "open_email_editor",

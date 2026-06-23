@@ -23,11 +23,12 @@ export function EmailEditorPanel() {
   const chat = useChat();
   const appState = useAppState();
   const dispatch = useAppDispatch();
-  const { open, nodeId, draft } = chat.emailEditor;
+  const { open, nodeId, draft, preview } = chat.emailEditor;
 
-  // Запущенная/просматриваемая кампания — редактор только на просмотр.
+  // Только на просмотр: либо письмо открыто из карточки шаблона (#32, preview),
+  // либо это запущенная/просматриваемая кампания.
   const readOnly =
-    appState.view.kind === "workflow" && appState.view.launched;
+    preview || (appState.view.kind === "workflow" && appState.view.launched);
 
   // Канвас резервирует справа ширину предпросмотра — через --email-preview-width
   // (дровер дополнительно читает её, чтобы встать на левую границу превью).
