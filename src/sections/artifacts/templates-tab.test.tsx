@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { TemplatesTabView } from "./templates-tab";
+import { TemplatesTabView, TemplatesTab } from "./templates-tab";
+import { AppStateProvider } from "@/state/app-state-context";
+import { ChatProvider } from "@/state/chat-context";
+import { EmailEditorPanel } from "@/sections/campaigns/email-editor-panel";
 import type { MessageTemplate } from "@/state/app-state";
 
 const templates: MessageTemplate[] = [
@@ -55,5 +58,54 @@ describe("TemplatesTabView", () => {
     expect(
       screen.getByRole("button", { name: /Создать шаблон вручную/i }),
     ).toBeInTheDocument();
+  });
+
+  it("threads onOpenEmail down to an email card and calls it with the content (#32)", () => {
+    const onOpenEmail = vi.fn();
+    const emailTemplate: MessageTemplate = {
+      id: "tpl_email",
+      channel: "email",
+      name: "Email — приветствие",
+      content: {
+        kind: "email",
+        subject: "Добро пожаловать",
+        body: "Текст",
+        sender: "hello@afina.ru",
+      },
+      usedInCampaigns: 0,
+    };
+    render(
+      <TemplatesTabView
+        templates={[emailTemplate]}
+        onCreateManual={vi.fn()}
+        onRename={vi.fn()}
+        onOpenEmail={onOpenEmail}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Письмо/i }));
+    expect(onOpenEmail).toHaveBeenCalledWith(emailTemplate.content);
+  });
+});
+
+describe("TemplatesTab (connected) — opens email in the side drawer (#32)", () => {
+  it("opens a seeded email template in the read-only preview drawer on «Письмо» click", () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <TemplatesTab />
+          <EmailEditorPanel />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    // Click the first «Письмо» field (seeded email templates come first).
+    const fields = screen.getAllByRole("button", { name: /Письмо/i });
+    expect(fields.length).toBeGreaterThan(0);
+    fireEvent.click(fields[0]);
+    // The side drawer mounts…
+    expect(screen.getByTestId("email-editor-panel")).toBeInTheDocument();
+    // …in read-only preview mode: no «Сохранить» button.
+    expect(
+      screen.queryByRole("button", { name: "Сохранить" }),
+    ).toBeNull();
   });
 });

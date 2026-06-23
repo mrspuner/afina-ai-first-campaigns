@@ -1,49 +1,55 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { ChevronRight, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { NODE_STYLES } from "@/sections/campaigns/node-visuals";
-import { EmailRenderer } from "@/sections/campaigns/email-renderer";
-import type { EmailDraft } from "@/state/email-directory";
 import type { EmailParams, WorkflowNodeType } from "@/types/workflow";
 
 /**
- * Read-only styled preview of an email template — reuses the same letter card
- * (`EmailRenderer`) as the email editor, in read-only mode. The user picked a
- * styled letter-card preview (not a builder): subject as a header, body split
- * on "\n\n" into paragraphs, a CTA button when `link` is present, sender shown.
+ * Compact clickable «Письмо» field for email templates (#32). The inline
+ * letter card was hidden behind this row: it surfaces the subject as the value
+ * and, on click, opens the full letter in the side drawer (read-only preview).
+ * Pure — the actual drawer open is delegated to `onOpenEmail` so the card stays
+ * testable without ChatProvider.
  */
-function EmailPreview({ content }: { content: EmailParams }) {
-  // EmailRenderer wants an EmailDraft; templates store the plain EmailParams
-  // (subject/body/sender/link, no name/cta). Map them onto a draft and only
-  // show the CTA block when a link exists.
-  const hasLink = Boolean(content.link);
-  const draft: EmailDraft = {
-    id: content.emailId ?? "preview",
-    name: content.subject || "Письмо",
-    subject: content.subject,
-    body: content.body,
-    sender: content.sender,
-    link: content.link ?? "",
-    cta: "Перейти",
-    showCta: hasLink,
-    showImage: false,
-  };
-
+function EmailField({
+  content,
+  onOpenEmail,
+}: {
+  content: EmailParams;
+  onOpenEmail?: (content: EmailParams) => void;
+}) {
   return (
-    <EmailRenderer draft={draft} readOnly onChange={() => {}} />
+    <button
+      type="button"
+      aria-label="Письмо"
+      onClick={() => onOpenEmail?.(content)}
+      className="group flex w-full items-center gap-2 rounded-md border border-border bg-input/20 px-2.5 py-1.5 text-left transition-colors hover:border-ring/60 hover:bg-input/40"
+    >
+      <span className="shrink-0 text-xs text-muted-foreground/60">Письмо:</span>
+      <span className="flex-1 truncate text-xs text-muted-foreground">
+        {content.subject || "Без темы"}
+      </span>
+      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
+    </button>
   );
 }
 
 /** Per-channel field rows rendered below the preview. */
-function FieldList({ content }: { content: MessageTemplate["content"] }) {
-  // Email gets a dedicated styled letter-card preview instead of label rows.
+function FieldList({
+  content,
+  onOpenEmail,
+}: {
+  content: MessageTemplate["content"];
+  onOpenEmail?: (content: EmailParams) => void;
+}) {
+  // Email collapses to a compact clickable field; the letter opens in the drawer.
   if (content.kind === "email") {
-    return <EmailPreview content={content} />;
+    return <EmailField content={content} onOpenEmail={onOpenEmail} />;
   }
 
   let rows: Array<{ label: string; value: string | undefined }>;
@@ -98,6 +104,11 @@ interface TemplateCardProps {
   /** Commit a renamed template name. Empty/whitespace input is dropped. */
   onRename: (id: string, name: string) => void;
   /**
+   * #32: open an email template's letter in the side drawer. Delegated so the
+   * card stays pure (no ChatProvider dependency) — the connected tab wires this.
+   */
+  onOpenEmail?: (content: EmailParams) => void;
+  /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
    */
@@ -107,6 +118,7 @@ interface TemplateCardProps {
 export function TemplateCard({
   template,
   onRename,
+  onOpenEmail,
   index = 0,
 }: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
@@ -204,7 +216,7 @@ export function TemplateCard({
       )}
 
       {/* Per-channel component fields */}
-      <FieldList content={content} />
+      <FieldList content={content} onOpenEmail={onOpenEmail} />
     </Card>
   );
 }

@@ -90,6 +90,12 @@ export interface EmailEditorState {
   emailId?: string;
   /** true — письмо создаётся с нуля через ИИ. */
   isNew?: boolean;
+  /**
+   * true — панель открыта только на просмотр (#32): без тулбара блоков и без
+   * «Сохранить». Используется при открытии письма из карточки шаблона
+   * (раздел «Артефакты»), где сохранять некуда (нет nodeId).
+   */
+  preview?: boolean;
   draft: EmailDraft | null;
 }
 
@@ -117,6 +123,8 @@ export type ChatAction =
       nodeId: string;
       emailId?: string;
       isNew?: boolean;
+      /** #32: открыть панель в режиме просмотра (read-only). */
+      preview?: boolean;
       draft: EmailDraft | null;
     }
   | { type: "close_email_editor" }
@@ -177,6 +185,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           nodeId: action.nodeId,
           emailId: action.emailId,
           isNew: action.isNew,
+          preview: action.preview, // #32
           draft: action.draft,
         },
       };
@@ -328,7 +337,13 @@ interface ChatContextValue {
   emailEditor: EmailEditorState;
   openEmailEditor: (
     nodeId: string,
-    opts: { emailId?: string; isNew?: boolean; draft: EmailDraft | null }
+    opts: {
+      emailId?: string;
+      isNew?: boolean;
+      /** #32: открыть на просмотр (read-only). */
+      preview?: boolean;
+      draft: EmailDraft | null;
+    }
   ) => void;
   closeEmailEditor: () => void;
   setEmailDraft: (patch: Partial<EmailDraft>) => void;
@@ -406,13 +421,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const openEmailEditor = useCallback(
     (
       nodeId: string,
-      opts: { emailId?: string; isNew?: boolean; draft: EmailDraft | null }
+      opts: {
+        emailId?: string;
+        isNew?: boolean;
+        preview?: boolean;
+        draft: EmailDraft | null;
+      }
     ) =>
       dispatch({
         type: "open_email_editor",
         nodeId,
         emailId: opts.emailId,
         isNew: opts.isNew,
+        preview: opts.preview, // #32
         draft: opts.draft,
       }),
     []

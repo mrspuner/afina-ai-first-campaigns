@@ -156,42 +156,50 @@ describe("TemplateCard", () => {
     expect(valueEl.className).not.toContain("line-clamp-1");
   });
 
-  it("renders an email template as a styled email block, not a single truncated line (#30)", () => {
-    const longEmail: MessageTemplate = {
+  it("renders email as a compact «Письмо» field (no inline letter card) and opens it on click (#32)", () => {
+    const onOpenEmail = vi.fn();
+    const emailWithBody: MessageTemplate = {
       ...email,
       content: {
         kind: "email",
         subject: "Тема письма для предпросмотра",
         body:
           "Здравствуйте!\n\n" +
-          "Это первый содержательный абзац письма, который должен отрисоваться " +
-          "отдельным параграфом.\n\n" +
-          "А это второй абзац — он тоже должен быть виден целиком.",
+          "Это первый содержательный абзац письма.\n\n" +
+          "А это второй абзац.",
         sender: "Афина <hello@afina.ru>",
         link: "https://example.com/cta",
       },
     };
     const { container } = render(
-      <TemplateCard template={longEmail} onRename={vi.fn()} />,
+      <TemplateCard
+        template={emailWithBody}
+        onRename={vi.fn()}
+        onOpenEmail={onOpenEmail}
+      />,
     );
-    // Subject as a header.
+
+    // A compact field labelled «Письмо» is shown…
+    expect(screen.getByText("Письмо:")).toBeInTheDocument();
+    // …surfacing the subject as the value.
     expect(
       screen.getByText("Тема письма для предпросмотра"),
     ).toBeInTheDocument();
-    // Both body paragraphs are split on "\n\n" and rendered separately.
-    expect(screen.getByText(/первый содержательный абзац/)).toBeInTheDocument();
-    expect(screen.getByText(/второй абзац/)).toBeInTheDocument();
-    // Sender is shown.
-    expect(screen.getByText(/hello@afina\.ru/)).toBeInTheDocument();
-    // Not the old plain truncated single-line rendering.
-    expect(container.querySelector(".line-clamp-1")).toBeNull();
-    // The styled email block renders the two paragraphs as distinct elements.
+
+    // The inline letter card is GONE: body paragraphs are NOT rendered inline.
+    expect(screen.queryByText(/первый содержательный абзац/)).toBeNull();
+    expect(screen.queryByText(/второй абзац/)).toBeNull();
     const paragraphs = Array.from(container.querySelectorAll("p")).filter(
       (p) =>
         p.textContent?.includes("первый содержательный") ||
         p.textContent?.includes("второй абзац"),
     );
-    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
+    expect(paragraphs.length).toBe(0);
+
+    // Clicking the «Письмо» field opens the email with the template content.
+    fireEvent.click(screen.getByRole("button", { name: /Письмо/i }));
+    expect(onOpenEmail).toHaveBeenCalledTimes(1);
+    expect(onOpenEmail).toHaveBeenCalledWith(emailWithBody.content);
   });
 
   it("renders a fields list for push channel", () => {
