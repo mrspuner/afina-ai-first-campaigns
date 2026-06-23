@@ -15,6 +15,7 @@ import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
+import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
 import type { StepData } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +188,13 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
       }),
     [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
+  // «Коммуникация» breakdown split into «Первичные» / «Повторные», each
+  // deduped + summed by channel (aim #23). Display-only transform over the
+  // raw cost lines — does not change the cost model.
+  const commGroups = useMemo(
+    () => (cost ? groupCommunicationLines(cost.lines) : null),
+    [cost]
+  );
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
@@ -337,36 +345,48 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               )}
               {row.key === "communication" && (
                 <>
-                  {cost && cost.lines.length > 0 ? (
-                    cost.lines.map((line) => (
-                      <div
-                        key={line.nodeId}
-                        className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
-                      >
-                        <span>
-                          {CHANNEL_LABEL[line.channel]} · {line.label}
-                        </span>
-                        <span className="tabular-nums">{formatRub(line.sum)}</span>
-                      </div>
-                    ))
+                  {commGroups &&
+                  (commGroups.primary.length > 0 || commGroups.repeat.length > 0) ? (
+                    <>
+                      {commGroups.primary.length > 0 && (
+                        <div className="mt-1">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Первичные
+                          </p>
+                          {commGroups.primary.map((g) => (
+                            <div
+                              key={`primary-${g.channel}`}
+                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
+                            >
+                              <span>{CHANNEL_LABEL[g.channel]}</span>
+                              <span className="tabular-nums">{formatRub(g.sum)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {commGroups.repeat.length > 0 && (
+                        <div className="mt-1">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Повторные
+                          </p>
+                          {commGroups.repeat.map((g) => (
+                            <div
+                              key={`repeat-${g.channel}`}
+                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
+                            >
+                              <span>{CHANNEL_LABEL[g.channel]}</span>
+                              <span className="tabular-nums">{formatRub(g.sum)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {data.channels.length > 0
                         ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
                         : "Каналы: —"}
                     </p>
-                  )}
-                  {(cost?.hasDynamic || (cost && cost.repeat > 0)) ? (
-                    <div className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Повторные коммуникации (+30% буфер)</span>
-                      <span className="tabular-nums">{formatRub(cost.repeat)}</span>
-                    </div>
-                  ) : (
-                    data.channels.length > 0 && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Повторные коммуникации (+30% буфер)
-                      </p>
-                    )
                   )}
                 </>
               )}
