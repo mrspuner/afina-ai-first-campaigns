@@ -11,10 +11,11 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
-import { useAppState } from "@/state/app-state-context";
-import { computeShortfall } from "@/sections/signals/top-up-modal";
+import { useAppState, useAppDispatch } from "@/state/app-state-context";
+import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
+import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
 import type { StepData } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 
@@ -187,10 +188,19 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
       }),
     [data.scenario, data.sourceType, data.channels, data.fileRowCount]
   );
+  // «Коммуникация» breakdown split into «Первичные» / «Повторные», each
+  // deduped + summed by channel (aim #23). Display-only transform over the
+  // raw cost lines — does not change the cost model.
+  const commGroups = useMemo(
+    () => (cost ? groupCommunicationLines(cost.lines) : null),
+    [cost]
+  );
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
   const { balance } = useAppState();
+  const dispatch = useAppDispatch();
+  const [topUpOpen, setTopUpOpen] = useState(false);
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -219,6 +229,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     mode === "recommended" ? recommendedValue : customIsValid ? customParsed : 0;
   const canContinue =
     mode === "recommended" ? recommendedValue > 0 : customIsValid;
+  const enoughBalance = computeShortfall(balance, activeValue) <= 0;
 
   // In «Своя сумма» mode the forecast rows rescale proportionally to the chosen
   // budget (Итого = the custom sum); otherwise they show the recommended estimate.
@@ -271,7 +282,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     window.requestAnimationFrame(() => customInputRef.current?.focus());
   }
 
-  function handleContinue() {
+  function proceed() {
     onNext({
       budget: activeValue,
       budgetMode: mode,
@@ -279,6 +290,23 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         ? { dailyBudget: estimate.dailyBudget }
         : {}),
     });
+  }
+
+  function handleContinue() {
+    // Mirror the payment screen: when the balance does not cover the chosen
+    // budget the button reads «Пополнить и запустить» and must open the
+    // top-up modal instead of advancing the wizard (aim #22).
+    if (!enoughBalance) {
+      setTopUpOpen(true);
+      return;
+    }
+    proceed();
+  }
+
+  function handleTopUpSuccess(amount: number) {
+    dispatch({ type: "balance_topup", amount });
+    setTopUpOpen(false);
+    proceed();
   }
 
   return (
@@ -317,36 +345,48 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               )}
               {row.key === "communication" && (
                 <>
-                  {cost && cost.lines.length > 0 ? (
-                    cost.lines.map((line) => (
-                      <div
-                        key={line.nodeId}
-                        className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
-                      >
-                        <span>
-                          {CHANNEL_LABEL[line.channel]} · {line.label}
-                        </span>
-                        <span className="tabular-nums">{formatRub(line.sum)}</span>
-                      </div>
-                    ))
+                  {commGroups &&
+                  (commGroups.primary.length > 0 || commGroups.repeat.length > 0) ? (
+                    <>
+                      {commGroups.primary.length > 0 && (
+                        <div className="mt-1">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Первичные
+                          </p>
+                          {commGroups.primary.map((g) => (
+                            <div
+                              key={`primary-${g.channel}`}
+                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
+                            >
+                              <span>{CHANNEL_LABEL[g.channel]}</span>
+                              <span className="tabular-nums">{formatRub(g.sum)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {commGroups.repeat.length > 0 && (
+                        <div className="mt-1">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Повторные
+                          </p>
+                          {commGroups.repeat.map((g) => (
+                            <div
+                              key={`repeat-${g.channel}`}
+                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
+                            >
+                              <span>{CHANNEL_LABEL[g.channel]}</span>
+                              <span className="tabular-nums">{formatRub(g.sum)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {data.channels.length > 0
                         ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
                         : "Каналы: —"}
                     </p>
-                  )}
-                  {(cost?.hasDynamic || (cost && cost.repeat > 0)) ? (
-                    <div className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Повторные коммуникации (+30% буфер)</span>
-                      <span className="tabular-nums">{formatRub(cost.repeat)}</span>
-                    </div>
-                  ) : (
-                    data.channels.length > 0 && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Повторные коммуникации (+30% буфер)
-                      </p>
-                    )
                   )}
                 </>
               )}
@@ -360,7 +400,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
               </span>
             </div>
           )}
-          {maxDailyLine && (
+          {isStream && maxDailyLine && (
             <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
               <span>{maxDailyLine.label}</span>
               <span className="tabular-nums">{maxDailyLine.display}</span>
@@ -455,29 +495,31 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
           </button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="max-daily-budget"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            Максимальный дневной бюджет (необязательно)
-          </label>
-          <div className="relative">
-            <Input
-              id="max-daily-budget"
-              type="text"
-              inputMode="decimal"
-              placeholder="Без ограничения"
-              value={maxDailyValue}
-              onChange={handleMaxDailyChange}
-              className="pr-8 tabular-nums"
-              aria-label="Максимальный дневной бюджет"
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-              ₽
-            </span>
+        {isStream && (
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="max-daily-budget"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              Максимальный дневной бюджет (необязательно)
+            </label>
+            <div className="relative">
+              <Input
+                id="max-daily-budget"
+                type="text"
+                inputMode="decimal"
+                placeholder="Без ограничения"
+                value={maxDailyValue}
+                onChange={handleMaxDailyChange}
+                className="pr-8 tabular-nums"
+                aria-label="Максимальный дневной бюджет"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+                ₽
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         <StepFooter
           onBack={onBack}
@@ -486,6 +528,15 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
           continueDisabled={!canContinue}
         />
       </div>
+
+      <TopUpModal
+        open={topUpOpen}
+        onOpenChange={setTopUpOpen}
+        balance={balance}
+        cost={activeValue}
+        entityLabel="Запуск кампании"
+        onPaymentSuccess={handleTopUpSuccess}
+      />
     </StepContent>
   );
 }

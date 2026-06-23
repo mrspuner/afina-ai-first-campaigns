@@ -12,7 +12,8 @@ import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 import { splitCampaignPayments } from "./campaign-payments";
 import { STREAM_DAYS } from "./campaign-budget-estimate";
-import { scaleBreakdown } from "@/sections/campaigns/scale-breakdown";
+import { paymentSplitDisplay } from "@/sections/campaigns/payment-split-display";
+import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -141,38 +142,37 @@ export function CampaignPaymentScreen() {
   // In custom mode the breakdown blocks rescale proportionally to the chosen
   // sum so the displayed numbers reflect what the user actually pays; in
   // recommended mode they show the original computed values.
-  const { displayLines, displayRepeat } = useMemo(() => {
-    if (!cost) return { displayLines: [], displayRepeat: 0 };
+  const displayLines = useMemo(() => {
+    if (!cost) return [];
     const scaling = mode === "custom" && recommended > 0;
     const factor = scaling ? customParsed / recommended : 0;
-    if (!scaling) {
-      return { displayLines: cost.lines, displayRepeat: cost.repeat };
-    }
-    const lines = cost.lines.map((line) => {
+    if (!scaling) return cost.lines;
+    return cost.lines.map((line) => {
       const scaledReach = Math.round(line.reach * factor);
       // Recompute sum from unit × scaledReach so the equation stays honest.
       return { ...line, reach: scaledReach, sum: Math.round(line.unit * scaledReach) };
     });
-    return { displayLines: lines, displayRepeat: Math.round(cost.repeat * factor) };
   }, [cost, mode, customParsed, recommended]);
 
+  // «Коммуникация» breakdown grouped into «Первичные» / «Повторные», each
+  // channel deduped + summed and shown once per group (aim #23). Built from the
+  // already-scaled displayLines so custom-mode amounts carry through.
+  const commGroups = useMemo(
+    () => groupCommunicationLines(displayLines),
+    [displayLines]
+  );
+
+  // Scoring is already paid, so it is LOCKED — recalc / «своя сумма» rescales
+  // only the communication portion; all new payment goes to communications
+  // (aim #24). Recommended mode leaves the split untouched.
   const displaySplit = useMemo(() => {
     if (!paymentSplit) return null;
-    if (mode !== "custom" || recommended <= 0) return paymentSplit;
-    const [scoring, communication] = scaleBreakdown(
-      [
-        { key: "scoring", amount: paymentSplit.scoring },
-        { key: "communication", amount: paymentSplit.communication },
-      ],
-      customParsed,
-      recommended,
-    );
-    return {
-      ...paymentSplit,
-      scoring: scoring.amount,
-      communication: communication.amount,
-      total: scoring.amount + communication.amount,
-    };
+    return paymentSplitDisplay({
+      split: paymentSplit,
+      mode,
+      customTotal: customParsed,
+      recommendedTotal: recommended,
+    });
   }, [paymentSplit, mode, customParsed, recommended]);
 
   const touches = estimateTouches(activeBudget, audienceSize);
@@ -298,7 +298,15 @@ export function CampaignPaymentScreen() {
             </h2>
             <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
               <li className="flex items-baseline justify-between gap-3">
-                <span className="text-muted-foreground">Сигналы</span>
+                <span className="flex items-baseline gap-2 text-muted-foreground">
+                  Сигналы
+                  {(campaign.sourceType ?? "new") !== "own" &&
+                    displaySplit.scoring > 0 && (
+                      <span className="text-xs text-muted-foreground/70">
+                        уже оплачено
+                      </span>
+                    )}
+                </span>
                 <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
                   {scoringLineDisplay({
                     sourceType: campaign.sourceType ?? "new",
@@ -314,41 +322,58 @@ export function CampaignPaymentScreen() {
                     : "—"}
                 </span>
               </li>
-              {cost && displayLines.length > 0 && (
-                <li className="mt-0.5">
-                  <ul className="flex flex-col gap-1 border-l-2 border-border pl-3">
-                    {displayLines.map((line) => (
-                      <li
-                        key={line.nodeId}
-                        className="flex items-baseline justify-between gap-3 text-xs"
-                      >
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          <span className="text-foreground/80">
-                            {CHANNEL_LABEL[line.channel]}
-                          </span>
-                          {line.label ? ` · ${line.label}` : ""}
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {formatRubPlain(line.unit)} × ~{formatNumber(line.reach)} ={" "}
-                          <span className="font-medium text-foreground/80">
-                            {formatRubPlain(line.sum)}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                    {cost.hasDynamic && (
-                      <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1 text-xs">
-                        <span className="text-muted-foreground">
-                          Повторные коммуникации (+30% буфер)
-                        </span>
-                        <span className="shrink-0 font-medium tabular-nums text-foreground/80">
-                          {formatRubPlain(displayRepeat)}
-                        </span>
-                      </li>
-                    )}
-                  </ul>
-                </li>
-              )}
+              {cost &&
+                (commGroups.primary.length > 0 ||
+                  commGroups.repeat.length > 0) && (
+                  <li className="mt-0.5">
+                    <ul className="flex flex-col gap-2 border-l-2 border-border pl-3">
+                      {commGroups.primary.length > 0 && (
+                        <li>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Первичные
+                          </p>
+                          <ul className="mt-1 flex flex-col gap-1">
+                            {commGroups.primary.map((g) => (
+                              <li
+                                key={`primary-${g.channel}`}
+                                className="flex items-baseline justify-between gap-3 text-xs"
+                              >
+                                <span className="min-w-0 truncate text-foreground/80">
+                                  {CHANNEL_LABEL[g.channel]}
+                                </span>
+                                <span className="shrink-0 font-medium tabular-nums text-foreground/80">
+                                  {formatRubPlain(g.sum)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      )}
+                      {commGroups.repeat.length > 0 && (
+                        <li>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Повторные
+                          </p>
+                          <ul className="mt-1 flex flex-col gap-1">
+                            {commGroups.repeat.map((g) => (
+                              <li
+                                key={`repeat-${g.channel}`}
+                                className="flex items-baseline justify-between gap-3 text-xs"
+                              >
+                                <span className="min-w-0 truncate text-foreground/80">
+                                  {CHANNEL_LABEL[g.channel]}
+                                </span>
+                                <span className="shrink-0 font-medium tabular-nums text-foreground/80">
+                                  {formatRubPlain(g.sum)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      )}
+                    </ul>
+                  </li>
+                )}
               {streamDailyBudget !== undefined && (
                 <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
                   <span className="text-muted-foreground">Дневной бюджет · потолок</span>
