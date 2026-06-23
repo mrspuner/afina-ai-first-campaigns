@@ -12,7 +12,6 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { ProviderList } from "./provider-list";
-import { CampaignPathIndicator } from "./campaign-path-indicator";
 import { CampaignSignalProgress } from "./campaign-signal-progress";
 import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
 import { CampaignStatsBlock } from "./campaign-stats-block";
@@ -63,7 +62,10 @@ export function CampaignScreen() {
   const isActive = status === "active";
   const isCompleted = status === "completed";
   const hasStats = isActive || isCompleted;
-  const sourceType = campaign.sourceType;
+  // Data providers connect & generate signals during the scoring/collection
+  // era. Once the campaign moves to `communicating` that block is stale, so
+  // hide it (it only belongs to the signal-search stage).
+  const showProviders = isActive && campaign.phase !== "communicating";
   // Pre-launch collection: a `new` draft is still gathering signals. While
   // collecting, the card shows progress and «Запустить» stays locked.
   const collectingNow = isCollecting(campaign);
@@ -157,13 +159,6 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Статус кампании (read-only) — источник-зависимый линейный индикатор */}
-      {sourceType && (isActive || isCompleted) && (
-        <CardSection label="Статус кампании">
-          <CampaignPathIndicator sourceType={sourceType} campaign={campaign} />
-        </CardSection>
-      )}
-
       {/* Workflow */}
       <CardSection label="Workflow">
         <WorkflowMiniPreview
@@ -175,14 +170,15 @@ export function CampaignScreen() {
         />
       </CardSection>
 
-      {/* Сбор сигналов (new-черновик, фаза scoring) → прогресс; активная →
-          провайдеры; завершённая → статус; иначе (готовый черновик/пауза) →
-          CTA «Запустить». */}
+      {/* Сбор сигналов (new-черновик, фаза scoring) → прогресс; активная в
+          стадии сбора/скоринга → провайдеры (скрываются после перехода в
+          `communicating`); завершённая → статус; иначе (готовый черновик/
+          пауза) → CTA «Запустить». */}
       {collectingNow ? (
         <CardSection label="Сбор сигналов">
           <CampaignSignalProgress campaign={campaign} />
         </CardSection>
-      ) : isActive ? (
+      ) : showProviders ? (
         <CardSection label="Провайдеры данных">
           <ProviderList />
         </CardSection>
@@ -193,7 +189,7 @@ export function CampaignScreen() {
             A-B-тест.
           </p>
         </CardSection>
-      ) : (
+      ) : isActive ? null : (
         <CardSection label="Запуск">
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
