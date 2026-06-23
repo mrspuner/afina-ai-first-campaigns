@@ -11,8 +11,8 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
-import { useAppState } from "@/state/app-state-context";
-import { computeShortfall } from "@/sections/signals/top-up-modal";
+import { useAppState, useAppDispatch } from "@/state/app-state-context";
+import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import type { StepData } from "@/types/campaign";
@@ -191,6 +191,8 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
   const { balance } = useAppState();
+  const dispatch = useAppDispatch();
+  const [topUpOpen, setTopUpOpen] = useState(false);
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -219,6 +221,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     mode === "recommended" ? recommendedValue : customIsValid ? customParsed : 0;
   const canContinue =
     mode === "recommended" ? recommendedValue > 0 : customIsValid;
+  const enoughBalance = computeShortfall(balance, activeValue) <= 0;
 
   // In «Своя сумма» mode the forecast rows rescale proportionally to the chosen
   // budget (Итого = the custom sum); otherwise they show the recommended estimate.
@@ -271,7 +274,7 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     window.requestAnimationFrame(() => customInputRef.current?.focus());
   }
 
-  function handleContinue() {
+  function proceed() {
     onNext({
       budget: activeValue,
       budgetMode: mode,
@@ -279,6 +282,23 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         ? { dailyBudget: estimate.dailyBudget }
         : {}),
     });
+  }
+
+  function handleContinue() {
+    // Mirror the payment screen: when the balance does not cover the chosen
+    // budget the button reads «Пополнить и запустить» and must open the
+    // top-up modal instead of advancing the wizard (aim #22).
+    if (!enoughBalance) {
+      setTopUpOpen(true);
+      return;
+    }
+    proceed();
+  }
+
+  function handleTopUpSuccess(amount: number) {
+    dispatch({ type: "balance_topup", amount });
+    setTopUpOpen(false);
+    proceed();
   }
 
   return (
@@ -488,6 +508,15 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
           continueDisabled={!canContinue}
         />
       </div>
+
+      <TopUpModal
+        open={topUpOpen}
+        onOpenChange={setTopUpOpen}
+        balance={balance}
+        cost={activeValue}
+        entityLabel="Запуск кампании"
+        onPaymentSuccess={handleTopUpSuccess}
+      />
     </StepContent>
   );
 }

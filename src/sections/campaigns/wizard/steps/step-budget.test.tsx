@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { buildBudgetRows, StepBudget } from "./step-budget";
 import type { StepData } from "@/types/campaign";
 import { AppStateProvider } from "@/state/app-state-context";
@@ -141,6 +141,36 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
       />
     );
     expect(screen.getByText(/Рассчитали на основе источников и каналов/)).toBeTruthy();
+    cleanup();
+  });
+});
+
+describe("StepBudget — insufficient balance opens TopUpModal (aim #22)", () => {
+  const SCENARIO = "base-first-deal"; // signalType "Первая сделка", cost > 0
+
+  it("clicking «Пополнить и запустить» opens the TopUpModal and does NOT advance", () => {
+    // Default app-state balance is 0; with a scenario + channels the
+    // recommended cost is > 0, so the footer button reads «Пополнить и
+    // запустить» and the balance is insufficient.
+    const onNext = vi.fn();
+    renderStep(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "new",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />
+    );
+    const button = screen.getByRole("button", { name: "Пополнить и запустить" });
+    fireEvent.click(button);
+    // TopUpModal is now open (its dialog title is rendered).
+    expect(screen.getByText("Пополнить баланс")).toBeTruthy();
+    // The wizard must NOT advance to the next step.
+    expect(onNext).not.toHaveBeenCalled();
     cleanup();
   });
 });
