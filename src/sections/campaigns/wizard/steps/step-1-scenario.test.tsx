@@ -13,6 +13,37 @@ vi.mock("@/sections/campaigns/wizard/steps/step-content", () => ({
   ),
 }));
 
+// The curated/all collapse uses `motion/react` (AnimatePresence + motion.*).
+// In jsdom there is no layout/RAF, so AnimatePresence's exit deferral never
+// resolves: the outgoing block lingers mounted while the incoming one appears,
+// producing duplicate/missing nodes for synchronous fireEvent assertions.
+// Stub it to a pass-through that renders the CURRENT children immediately and
+// drops animation-only props — the toggle's conditional render then behaves
+// like the original bare ternary, so assertions stay exactly as strict.
+vi.mock("motion/react", () => {
+  const MOTION_PROPS = ["initial", "animate", "exit", "transition"];
+  const passthrough = (Tag: "section" | "div") => {
+    const Comp = ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) => {
+      // strip motion-only props so they don't hit the real DOM element
+      const rest = Object.fromEntries(
+        Object.entries(props).filter(([key]) => !MOTION_PROPS.includes(key))
+      );
+      return <Tag {...(rest as React.HTMLAttributes<HTMLElement>)}>{children}</Tag>;
+    };
+    Comp.displayName = `motion.${Tag}`;
+    return Comp;
+  };
+  return {
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    motion: { section: passthrough("section"), div: passthrough("div") },
+  };
+});
+
 describe("groupScenariosByCategory (ЖЦК grouping)", () => {
   it("groups scenarios under all six ЖЦК categories with counts", () => {
     const groups = groupScenariosByCategory();
