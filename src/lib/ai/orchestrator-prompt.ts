@@ -35,11 +35,14 @@ export function buildSystemPrompt(context: AssistContext): string {
             .join("; "),
         ]
       : []),
+    // ─── BLOCK 5 SEAM START ── (node-params bias; не трогать BRANCHING_RULES блока 7)
     ...(context.selectedNode
       ? [
-          `Выбрана нода: [${context.selectedNode.id}] "${context.selectedNode.label}" (${context.selectedNode.nodeType})`,
+          `Выбрана нода: [${context.selectedNode.id}] "${context.selectedNode.label}" (${context.selectedNode.nodeType}). ` +
+            `Текст и заголовок коммуникационных нод задаются ШАБЛОНОМ через интерфейс, а не правкой полей через чат — на вопрос о тексте отвечай (answer), не предлагай node-params.`,
         ]
       : []),
+    // ─── BLOCK 5 SEAM END ──
     ...(context.wizardStep
       ? [`Пользователь в визарде сигнала, шаг ${context.wizardStep.step}: ${context.wizardStep.title}.`]
       : []),

@@ -14,7 +14,6 @@ import { buildGraphFromSpec } from "@/lib/ai/rebuild-schema";
 import { validateAiGraph } from "@/state/ai-graph-validation";
 import { lookupInformationalReply, warmFallbackReply } from "@/lib/informational-replies";
 import type { AssistResult, AssistRequest } from "@/lib/ai/assist-contract";
-import type { NodeParams } from "@/types/workflow";
 
 /**
  * Зависимости исполнителя результатов. Выделены отдельно от React, чтобы
@@ -89,11 +88,9 @@ export function executeAssistResults(results: AssistResult[], d: ExecuteDeps): v
         break;
       }
       case "node-params":
-        if (!graphApplied) {
-          d.dispatch({ type: "workflow_node_field_set", nodeId: r.nodeId, patch: r.patch as Partial<NodeParams> });
-          confirmations.push(r.confirmation);
-          graphApplied = true;
-        }
+        // aim #11: свободные текстовые поля ноды убраны (текст живёт в шаблоне).
+        // Вопрос про параметры ноды отвечается, а не мутирует граф.
+        confirmations.push(r.confirmation);
         break;
       case "workflow-ops":
         if (!graphApplied && r.ops.length > 0) {

@@ -33,9 +33,25 @@ describe("NODE_FIELD_EDITABILITY", () => {
     }
   });
 
-  it("classifies sms text as manual and sms link as ai", () => {
-    expect(getFieldMeta("sms", "Текст")?.editability).toBe("manual");
+  it("classifies sms link as ai", () => {
     expect(getFieldMeta("sms", "Ссылка")?.editability).toBe("ai");
+  });
+
+  it("communication nodes expose «Шаблон» instead of free Текст/Заголовок (aim #10)", () => {
+    expect(getFieldMeta("sms", "Шаблон")?.control).toBe("template");
+    expect(getFieldMeta("email", "Шаблон")?.control).toBe("template");
+    expect(getFieldMeta("push", "Шаблон")?.control).toBe("template");
+    // free text fields removed
+    expect(getFieldMeta("sms", "Текст")).toBeUndefined();
+    expect(getFieldMeta("email", "Текст")).toBeUndefined();
+    expect(getFieldMeta("push", "Текст")).toBeUndefined();
+    expect(getFieldMeta("push", "Заголовок")).toBeUndefined();
+  });
+
+  it("«Шаблон» field is manual but carries no combo optionsKey", () => {
+    const m = getFieldMeta("sms", "Шаблон");
+    expect(m?.editability).toBe("manual");
+    expect(m?.optionsKey).toBeUndefined();
   });
 
   it("classifies signal fields as readonly", () => {
@@ -47,17 +63,14 @@ describe("NODE_FIELD_EDITABILITY", () => {
   });
 
   it("gives former-manual fields a combo control with an optionsKey", () => {
-    const combo = getFieldMeta("sms", "Текст");
+    const combo = getFieldMeta("ivr", "Сценарий");
     expect(combo?.control).toBe("combo");
-    expect(combo?.optionsKey).toBe("smsText");
+    expect(combo?.optionsKey).toBe("ivrScenario");
     expect(getFieldMeta("landing", "Оффер")?.control).toBe("combo");
   });
 
-  it("gives the email body the email control, not combo", () => {
-    const body = getFieldMeta("email", "Текст");
-    expect(body?.control).toBe("email");
-    expect(body?.optionsKey).toBeUndefined();
-    // Subject stays a normal combo.
+  it("keeps the email subject as a normal combo", () => {
+    // Email body free field is gone (aim #10) — only «Тема» stays a combo.
     expect(getFieldMeta("email", "Тема")?.control).toBe("combo");
   });
 

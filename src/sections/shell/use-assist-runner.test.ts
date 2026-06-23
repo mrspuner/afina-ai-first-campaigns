@@ -62,6 +62,27 @@ describe("executeAssistResults — владение пузырём", () => {
     expect(d.chat.updatePending).toHaveBeenCalledWith("P", "fallback");
   });
 
+  it("node-params → отвечает текстом, НЕ мутирует ноду (aim #11)", () => {
+    const d = makeDeps();
+    executeAssistResults(
+      [
+        {
+          kind: "node-params",
+          nodeId: "n1",
+          patch: { text: "x" },
+          confirmation: "Текст задаётся через шаблон.",
+        } as AssistResult,
+      ],
+      d
+    );
+    // не диспатчим workflow_node_field_set
+    expect(d.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "workflow_node_field_set" })
+    );
+    // закрываем пузырь подтверждением как ответом
+    expect(d.chat.updatePending).toHaveBeenCalledWith("P", "Текст задаётся через шаблон.");
+  });
+
   it("navigate к несуществующей кампании → фоллбек (ничего не подтверждено)", () => {
     const d = makeDeps();
     executeAssistResults(
