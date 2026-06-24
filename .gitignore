@@ -54,3 +54,9 @@ next-env.d.ts
 
 # aim skill local server state
 .claude/aim/
+
+.superpowers/
+
+# internal planning / specs / working docs — local only, don't push
+/docs/
+/plans/
