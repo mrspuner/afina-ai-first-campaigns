@@ -17,6 +17,7 @@ import { NodeFieldCombobox } from "./node-field-combobox";
 import { NodeTemplateSelect } from "./node-template-select";
 import { EmailField } from "./email-field";
 import { SplitFields } from "./split-fields";
+import { WaitFields } from "./wait-fields";
 
 type ParamRow = { label: string; value: string };
 
@@ -212,7 +213,21 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
         </div>
       )}
 
-      {data.params?.kind !== "split" && rows.length > 0 && (
+      {/* Block 7 §3 — нода ожидания: «Режим» (Select) + «Длительность»
+          (число+единица) либо «Событие» (combo из справочника). */}
+      {data.params?.kind === "wait" && (
+        <div className="flex flex-col gap-0.5">
+          <WaitFields
+            nodeId={id}
+            params={data.params}
+            dirtyParams={data.dirtyParams}
+            readOnly={readOnly}
+            onEventAiHandoff={() => handleAiField("Событие")}
+          />
+        </div>
+      )}
+
+      {data.params?.kind !== "split" && data.params?.kind !== "wait" && rows.length > 0 && (
         <div className="flex flex-col gap-0.5">
           {rows.map((row) => {
             const meta = data.params
