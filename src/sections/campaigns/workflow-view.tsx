@@ -65,6 +65,7 @@ interface WorkflowViewProps {
 interface CampaignContext {
   files?: { name: string; rowCount: number }[];
   interests?: string[];
+  triggers?: string[];
 }
 
 function initialGraph(
@@ -309,6 +310,7 @@ export function WorkflowView({
       initialGraph(signalType, sourceType, channels, {
         files: campaign?.files,
         interests: campaign?.interests,
+        triggers: campaign?.triggers,
       })
   );
   // «Добавить файл» (Block C #8) — inline upload panel on the graph pane.
@@ -320,7 +322,11 @@ export function WorkflowView({
     dispatch({ type: "campaign_file_added", campaignId, file });
     const nextFiles = [...(campaign?.files ?? []), file];
     setGraph((prev) =>
-      applyCampaignContext(prev, { files: nextFiles, interests: campaign?.interests })
+      applyCampaignContext(prev, {
+        files: nextFiles,
+        interests: campaign?.interests,
+        triggers: campaign?.triggers,
+      })
     );
     setAddFileOpen(false);
   }

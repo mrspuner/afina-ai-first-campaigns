@@ -156,6 +156,20 @@ describe("applyCampaignContext — files on «Файл», interests on «Ско�
     expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: ["Ипотека", "Авто"] });
   });
 
+  it("populates the «Скоринг» node triggers from the campaign", () => {
+    const t = createTemplate("Регистрация", "new");
+    const out = applyCampaignContext(t, {
+      interests: ["Ипотека"],
+      triggers: ["Посещение сайтов застройщиков", "Ипотечные калькуляторы"],
+    });
+    const scoring = out.nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect(scoring.data.params).toMatchObject({
+      kind: "scoring",
+      interests: ["Ипотека"],
+      triggers: ["Посещение сайтов застройщиков", "Ипотечные калькуляторы"],
+    });
+  });
+
   it("leaves a graph without files/interests untouched (no crash)", () => {
     const t = createTemplate("Регистрация", "own");
     const out = applyCampaignContext(t, {});

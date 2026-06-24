@@ -567,15 +567,20 @@ export function fileSummaryLine(
 /**
  * Overlays real campaign data onto a freshly-built graph (Block C #8): the entry
  * «Файл» node shows the uploaded bases (names + total rows) and the «Скоринг»
- * node carries the campaign's interests. Pure — returns a new graph; leaves
- * graphs without a matching node untouched.
+ * node carries the campaign's interests and triggers. Pure — returns a new
+ * graph; leaves graphs without a matching node untouched.
  */
 export function applyCampaignContext(
   t: Template,
-  ctx: { files?: { name: string; rowCount: number }[]; interests?: string[] }
+  ctx: {
+    files?: { name: string; rowCount: number }[];
+    interests?: string[];
+    triggers?: string[];
+  }
 ): Template {
   const files = ctx.files ?? [];
   const interests = ctx.interests ?? [];
+  const triggers = ctx.triggers ?? [];
   const totalRows = files.reduce((s, f) => s + f.rowCount, 0);
   const summary = fileSummaryLine(files);
 
@@ -595,7 +600,7 @@ export function applyCampaignContext(
       };
     }
     if (nd.data.nodeType === "scoring" && nd.data.params?.kind === "scoring") {
-      return { ...nd, data: { ...nd.data, params: { ...nd.data.params, interests } } };
+      return { ...nd, data: { ...nd.data, params: { ...nd.data.params, interests, triggers } } };
     }
     return nd;
   });

@@ -60,6 +60,9 @@ export type Campaign = {
   sourceType?: SourceType;
   channels?: Channel[];
   interests?: string[];
+  /** Wizard-selected behavioral triggers (intent signals). Mirrors `interests`;
+   *  surfaced read-only in the scoring node's «Интересы и триггеры» drawer. */
+  triggers?: string[];
   files?: { name: string; rowCount: number }[];
   dailyBudget?: number;
   /**
@@ -457,6 +460,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         sourceType: sd.sourceType,
         channels: sd.channels,
         interests: sd.interests,
+        triggers: sd.triggers,
         files,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,

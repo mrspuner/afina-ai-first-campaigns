@@ -1,8 +1,10 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Eye } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
+import { ScoringInsightsDrawer } from "./scoring-insights-drawer";
 import { getFieldMeta } from "@/state/node-field-editability";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
@@ -125,6 +127,45 @@ export function getParamRows(params: NodeParams): ParamRow[] {
   return renderer(params);
 }
 
+/**
+ * Scoring node body: a single «Интересы и триггеры» row whose value is an
+ * eye affordance opening a read-only drawer. The interests/triggers themselves
+ * come from the wizard (overlaid onto params by `applyCampaignContext`) — the
+ * card stays compact; the explanation lives in the drawer.
+ */
+function ScoringRow({
+  params,
+}: {
+  params: Extract<NodeParams, { kind: "scoring" }>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
+        <span className="text-muted-foreground">Интересы и триггеры</span>
+        <span aria-hidden />
+        <button
+          type="button"
+          aria-label="Показать интересы и триггеры"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <ScoringInsightsDrawer
+        open={open}
+        onOpenChange={setOpen}
+        interests={params.interests}
+        triggers={params.triggers}
+      />
+    </>
+  );
+}
+
 interface NodeCardBodyProps {
   id: string;
   data: WorkflowNodeData;
@@ -222,7 +263,13 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
         </div>
       )}
 
-      {data.params?.kind !== "split" && data.params?.kind !== "wait" && rows.length > 0 && (
+      {/* Скоринг — одна строка «Интересы и триггеры» с дровером (read-only). */}
+      {data.params?.kind === "scoring" && <ScoringRow params={data.params} />}
+
+      {data.params?.kind !== "split" &&
+        data.params?.kind !== "wait" &&
+        data.params?.kind !== "scoring" &&
+        rows.length > 0 && (
         <div className="flex flex-col gap-0.5">
           {rows.map((row) => {
             const meta = data.params
