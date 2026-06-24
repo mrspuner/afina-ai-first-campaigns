@@ -18,15 +18,23 @@ function renderForm(onSubmit: (s: Survey) => void) {
 }
 
 describe("SurveyForm", () => {
-  it("blocks submit on empty description and shows an error", () => {
+  it("blocks submit when both fields are empty and shows the error", () => {
     const onSubmit = vi.fn();
     renderForm(onSubmit);
+
+    // Error is not shown before an invalid submit attempt.
+    expect(
+      screen.queryByText("Заполните хотя бы одно поле — сайт или задачу"),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Продолжить" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
-    // The validation error is surfaced to the user.
-    expect(screen.getByText(/опишите задачу/i)).toBeTruthy();
+    // The exact validation error is surfaced (not the subtitle copy, which
+    // also contains the words «опишите задачу»).
+    expect(
+      screen.getByText("Заполните хотя бы одно поле — сайт или задачу"),
+    ).toBeInTheDocument();
   });
 
   it("submits task description with empty site when site field is left blank", () => {

@@ -39,7 +39,7 @@ export function OnboardingScenariosScreen({ onChooseScenario, onBack }: Onboardi
         transition={{ duration: 0.45, delay: 0.25, ease: [0.23, 1, 0.32, 1] }}
         className="flex items-center gap-3"
       >
-        <Button variant="ghost" onClick={onBack}>Назад</Button>
+        <Button variant="outline" onClick={onBack}>Назад</Button>
         <Button onClick={onChooseScenario}>Далее</Button>
       </motion.div>
     </motion.div>

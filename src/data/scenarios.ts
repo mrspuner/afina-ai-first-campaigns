@@ -94,7 +94,7 @@ export const curatedScenarios = (): Scenario[] => SCENARIOS.filter((s) => s.isCu
 
 /**
  * Count shown on the welcome hero ("Подобрали N сценариев под ваш бизнес").
- * It must equal what sits under the "Подобрано для вас" header on the scenario
+ * It must equal what sits under the "Подобрали для вас" header on the scenario
  * screen — i.e. the curated set — so the message never overstates the list.
  */
 export const curatedScenarioCount = SCENARIOS.filter((s) => s.isCurated).length;
