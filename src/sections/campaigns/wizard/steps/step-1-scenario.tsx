@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { Search } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
-import type { SourceType } from "@/types/campaign";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -39,18 +38,6 @@ export function groupScenariosByCategory(
     const inGroup = usable.filter((s) => s.category === category);
     return { category, scenarios: inGroup, count: inGroup.length };
   });
-}
-
-/** Russian label for a recommended source type (shown as a chip on the card). */
-export function sourceTypeLabel(sourceType: SourceType): string {
-  switch (sourceType) {
-    case "new":
-      return "Новая база номеров";
-    case "stream":
-      return "Поток";
-    case "own":
-      return "Свои сигналы";
-  }
 }
 
 /** Подобранные сценарии, показываемые по умолчанию («Подобрали для вас»). */
@@ -118,81 +105,75 @@ export function Step1Scenario({ data, onNext }: StepProps) {
       subtitle="Готовая связка сигнала и кампании под бизнес-цель"
     >
       <div className="flex flex-col gap-4">
-        <AnimatePresence initial={false} mode="wait">
-          {!showAll ? (
-            <motion.section key="curated" {...collapseMotion}>
-              <div className="flex flex-col gap-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Подобрали для вас
-            </h2>
-            <div className="grid grid-cols-3 gap-3">
-              {CURATED_SCENARIOS.map((s) => (
-                <ScenarioCard
-                  key={s.id}
-                  scenario={s}
-                  selected={selectedId === s.id}
-                  onClick={handleSelect}
-                  sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
-                />
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Показать все
-            </button>
-              </div>
-            </motion.section>
-          ) : (
-            <motion.div key="all" {...collapseMotion}>
-              <div className="flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={() => setShowAll(false)}
-              className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Свернуть
-            </button>
+        {/* Поиск — всегда сверху */}
+        <div className="relative">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по сценариям"
+            aria-label="Поиск по сценариям"
+            className="pl-9"
+          />
+        </div>
 
-            <div className="relative">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+        {/* Чипсы категорий — всегда сверху */}
+        <div className="flex flex-wrap gap-2">
+          {SCENARIO_CATEGORIES.map((category) => {
+            const active = activeCategories.has(category);
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => toggleCategory(category)}
+                aria-pressed={active}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs transition-colors",
+                  active
+                    ? "border-brand/50 bg-brand-muted text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                {category}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Подборка — постоянный блок */}
+        <section aria-label="Подобрали для вас" className="flex flex-col gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Подобрали для вас
+          </h2>
+          <div className="grid grid-cols-3 gap-3">
+            {CURATED_SCENARIOS.map((s) => (
+              <ScenarioCard
+                key={s.id}
+                scenario={s}
+                selected={selectedId === s.id}
+                onClick={handleSelect}
+                curatedLabel="Из подборки"
               />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск по сценариям"
-                aria-label="Поиск по сценариям"
-                className="pl-9"
-              />
-            </div>
+            ))}
+          </div>
+        </section>
 
-            <div className="flex flex-wrap gap-2">
-              {SCENARIO_CATEGORIES.map((category) => {
-                const active = activeCategories.has(category);
-                return (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => toggleCategory(category)}
-                    aria-pressed={active}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs transition-colors",
-                      active
-                        ? "border-brand/50 bg-brand-muted text-foreground"
-                        : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
-                    )}
-                  >
-                    {category}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Тоггл «Показать все» ↔ «Свернуть» */}
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {showAll ? "Свернуть" : "Показать все"}
+        </button>
 
-            <div>
+        {/* Полный каталог — добавляется ниже подборки */}
+        <AnimatePresence initial={false}>
+          {showAll && (
+            <motion.section key="all" aria-label="Все сценарии" {...collapseMotion}>
               {groups.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   Ничего не нашлось. Измените запрос или сбросьте фильтр.
@@ -214,8 +195,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                             scenario={s}
                             selected={selectedId === s.id}
                             onClick={handleSelect}
-                            sourceLabel={sourceTypeLabel(s.recommendedSourceType)}
-                            curatedLabel={s.isCurated ? "Подобрано для вас" : undefined}
+                            curatedLabel={s.isCurated ? "Из подборки" : undefined}
                           />
                         ))}
                       </div>
@@ -223,9 +203,7 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                   ))}
                 </div>
               )}
-            </div>
-              </div>
-            </motion.div>
+            </motion.section>
           )}
         </AnimatePresence>
       </div>
