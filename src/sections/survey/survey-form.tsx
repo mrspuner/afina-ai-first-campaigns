@@ -67,7 +67,7 @@ export function SurveyForm({
           {subtitle}
         </p>
       </header>
-      <Field id="survey-site" label="Сайт компании" hint="Необязательно">
+      <Field id="survey-site" label="Сайт компании">
         <Input
           id="survey-site"
           type="text"
@@ -77,7 +77,7 @@ export function SurveyForm({
         />
       </Field>
       <div className="mt-5">
-        <Field id="survey-task" label="Ваша задача" hint="Необязательно">
+        <Field id="survey-task" label="Ваша задача">
           <Textarea
             id="survey-task"
             rows={4}

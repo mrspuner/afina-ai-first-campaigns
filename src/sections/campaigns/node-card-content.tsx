@@ -80,11 +80,6 @@ const PARAM_RENDERERS: {
   ],
   signal: (p) => [
     { label: "Файл", value: p.fileName },
-    { label: "Сигналов", value: String(p.count) },
-    {
-      label: "Сегменты",
-      value: `${p.segments.max}/${p.segments.high}/${p.segments.mid}/${p.segments.low}`,
-    },
   ],
   success: (p) => [{ label: "Цель", value: p.goal }],
   end: (p) => (p.reason ? [{ label: "Причина", value: p.reason }] : []),

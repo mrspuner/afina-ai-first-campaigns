@@ -82,13 +82,6 @@ describe("Step1Scenario — фильтры всегда сверху + «Пок�
     expect(screen.queryByText("Свои сигналы")).not.toBeInTheDocument();
   });
 
-  it("карточки подборки помечены тегом «Из подборки»", () => {
-    renderStep();
-    const region = screen.getByRole("region", { name: "Подобрали для вас" });
-    const tags = within(region).getAllByText("Из подборки");
-    expect(tags.length).toBe(curated.length);
-  });
-
   it("«Показать все» добавляет каталог ниже подборки (подборка остаётся)", () => {
     renderStep();
     fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
@@ -110,21 +103,6 @@ describe("Step1Scenario — фильтры всегда сверху + «Пок�
     expect(screen.getByRole("region", { name: "Подобрали для вас" })).toBeInTheDocument();
     expect(screen.getByLabelText("Поиск по сценариям")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Показать все" })).toBeInTheDocument();
-  });
-
-  it("в каталоге курированные несут «Из подборки», обычные — нет", () => {
-    renderStep();
-    fireEvent.click(screen.getByRole("button", { name: "Показать все" }));
-    const catalog = screen.getByRole("region", { name: "Все сценарии" });
-    for (const s of curated) {
-      const card = within(catalog).getByRole("button", { name: s.name });
-      expect(within(card).getByText("Из подборки")).toBeInTheDocument();
-    }
-    const nonCurated = SCENARIOS.filter((s) => !s.isBase && !s.isCurated);
-    for (const s of nonCurated) {
-      const card = within(catalog).getByRole("button", { name: s.name });
-      expect(within(card).queryByText("Из подборки")).not.toBeInTheDocument();
-    }
   });
 
   it("выбор карточки из подборки вызывает onNext с id", () => {

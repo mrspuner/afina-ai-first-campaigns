@@ -159,7 +159,6 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                 scenario={s}
                 selected={selectedId === s.id}
                 onClick={handleSelect}
-                curatedLabel="Из подборки"
               />
             ))}
           </div>
@@ -199,7 +198,6 @@ export function Step1Scenario({ data, onNext }: StepProps) {
                             scenario={s}
                             selected={selectedId === s.id}
                             onClick={handleSelect}
-                            curatedLabel={s.isCurated ? "Из подборки" : undefined}
                           />
                         ))}
                       </div>
