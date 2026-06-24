@@ -6,7 +6,7 @@ import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
 import { CHANNELS, type Channel } from "@/types/campaign";
-import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
+import { CHANNEL_LABEL, UNIT_COST } from "@/sections/campaigns/campaign-cost";
 import { cn } from "@/lib/utils";
 
 /** Pure selection toggle keeping channels in canonical CHANNELS order. */
@@ -15,6 +15,13 @@ export function toggleChannel(channels: Channel[], channel: Channel): Channel[] 
   if (set.has(channel)) set.delete(channel);
   else set.add(channel);
   return CHANNELS.filter((c) => set.has(c));
+}
+
+/** «5 ₽ / отправка», «0,5 ₽ / отправка» — стоимость канала за одну отправку из UNIT_COST. */
+export function formatUnitCost(channel: Channel): string {
+  const cost = UNIT_COST[channel];
+  const rub = Number.isInteger(cost) ? String(cost) : String(cost).replace(".", ",");
+  return `${rub} ₽ / отправка`;
 }
 
 export function StepChannels({ data, onNext, onBack }: StepProps) {
@@ -69,18 +76,25 @@ export function StepChannels({ data, onNext, onBack }: StepProps) {
                 >
                   {selected && <Check className="h-3 w-3" />}
                 </span>
-                {CHANNEL_LABEL[channel]}
+                <span className="flex flex-col">
+                  <span>{CHANNEL_LABEL[channel]}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatUnitCost(channel)}
+                  </span>
+                </span>
               </button>
             );
           })}
         </div>
+
+        <div className="border-t border-border" />
 
         <button
           type="button"
           aria-pressed={noComms}
           onClick={selectNoComms}
           className={cn(
-            "flex items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
+            "flex items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             noComms
               ? "border-brand/50 bg-brand-muted text-foreground"
@@ -90,11 +104,14 @@ export function StepChannels({ data, onNext, onBack }: StepProps) {
           <span
             aria-hidden
             className={cn(
-              "h-3 w-3 shrink-0 rounded-full border-2 transition-colors",
+              "mt-1 h-3 w-3 shrink-0 rounded-full border-2 transition-colors",
               noComms ? "border-foreground bg-foreground" : "border-border"
             )}
           />
-          Не проводить коммуникацию
+          <span className="flex flex-col">
+            <span className="font-medium text-foreground">Получить только сигналы</span>
+            <span className="text-xs text-muted-foreground">Не проводить коммуникации</span>
+          </span>
         </button>
 
         <StepFooter
