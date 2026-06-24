@@ -88,6 +88,11 @@ export function SurveySection({
     onComplete();
   }
 
+  function handleScenariosBack() {
+    if (phase.kind !== "scenarios") return;
+    setPhase({ kind: "form" });
+  }
+
   return (
     <div className="relative flex flex-1 items-center justify-center px-8 pb-16 pt-[120px]">
       <motion.div
@@ -175,7 +180,10 @@ export function SurveySection({
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
             className="flex w-full justify-center"
           >
-            <OnboardingScenariosScreen onChooseScenario={handleChooseScenario} />
+            <OnboardingScenariosScreen
+              onChooseScenario={handleChooseScenario}
+              onBack={handleScenariosBack}
+            />
           </motion.div>
         )}
       </AnimatePresence>

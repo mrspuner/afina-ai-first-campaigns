@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
-import { isTaskDescriptionValid } from "@/state/survey-validation";
+import { isSurveyMinimallyFilled } from "@/state/survey-validation";
 import type { Survey } from "@/types/survey";
 
 interface SurveyFormProps {
@@ -19,7 +19,7 @@ interface SurveyFormProps {
 export function SurveyForm({
   onSubmit,
   title = "С чего начнём — опишите вашу задачу",
-  subtitle = "Опишите, кого хотите привлечь или какую задачу решаете. Афина подберёт подходящие сценарии.",
+  subtitle = "Укажите сайт компании или опишите задачу — достаточно одного. Афина подберёт подходящие сценарии.",
 }: SurveyFormProps) {
   const { survey } = useAppState();
   const dispatch = useAppDispatch();
@@ -28,20 +28,21 @@ export function SurveyForm({
   const [site, setSite] = useState(survey.companyWebsite ?? "");
   const [showErrors, setShowErrors] = useState(false);
 
-  const descriptionOk = isTaskDescriptionValid(description);
+  const minimallyFilled = isSurveyMinimallyFilled({
+    companyWebsite: site,
+    taskDescription: description,
+  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!descriptionOk) {
+    if (!minimallyFilled) {
       setShowErrors(true);
       return;
     }
-    const trimmedTask = description.trim();
-    const trimmedSite = site.trim();
     const filled: Survey = {
       companyName: survey.companyName,
-      companyWebsite: trimmedSite,
-      taskDescription: trimmedTask,
+      companyWebsite: site.trim(),
+      taskDescription: description.trim(),
       directionId: survey.directionId,
     };
     // Persist the partial as we go so navigation away keeps draft state.
@@ -66,39 +67,31 @@ export function SurveyForm({
           {subtitle}
         </p>
       </header>
-      <Field
-        id="survey-task"
-        label="Ваша задача"
-        error={
-          showErrors && !descriptionOk
-            ? "Опишите задачу хотя бы парой слов"
-            : undefined
-        }
-      >
-        <Textarea
-          id="survey-task"
-          rows={4}
-          placeholder="Например: привлечь людей, которые ищут ипотеку"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          aria-invalid={showErrors && !descriptionOk ? true : undefined}
+      <Field id="survey-site" label="Сайт компании" hint="Необязательно">
+        <Input
+          id="survey-site"
+          type="text"
+          placeholder="example.com"
+          value={site}
+          onChange={(e) => setSite(e.target.value)}
         />
       </Field>
       <div className="mt-5">
-        <Field
-          id="survey-site"
-          label="Сайт компании"
-          hint="Необязательно"
-        >
-          <Input
-            id="survey-site"
-            type="text"
-            placeholder="example.com"
-            value={site}
-            onChange={(e) => setSite(e.target.value)}
+        <Field id="survey-task" label="Ваша задача" hint="Необязательно">
+          <Textarea
+            id="survey-task"
+            rows={4}
+            placeholder="Например: привлечь людей, которые ищут ипотеку"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
           />
         </Field>
       </div>
+      {showErrors && !minimallyFilled ? (
+        <p className="mt-3 text-xs text-destructive">
+          Заполните хотя бы одно поле — сайт или задачу
+        </p>
+      ) : null}
       <div className="mt-8 flex items-center justify-between gap-3">
         <span aria-hidden />
         <Button type="submit" variant="default" size="lg">
