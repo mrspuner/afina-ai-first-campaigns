@@ -10,3 +10,11 @@ export function isCompanyNameValid(value: string): boolean {
 export function isTaskDescriptionValid(value: string): boolean {
   return value.trim().length >= 3;
 }
+
+/** Анкета минимально заполнена, если непусто хотя бы одно из (сайт, задача). */
+export function isSurveyMinimallyFilled(args: {
+  companyWebsite: string;
+  taskDescription: string;
+}): boolean {
+  return args.companyWebsite.trim().length > 0 || args.taskDescription.trim().length > 0;
+}

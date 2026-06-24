@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isCompanyNameValid,
   isTaskDescriptionValid,
+  isSurveyMinimallyFilled,
 } from "./survey-validation";
 
 describe("isCompanyNameValid", () => {
@@ -32,5 +33,20 @@ describe("isTaskDescriptionValid", () => {
   });
   it("rejects too-short input", () => {
     expect(isTaskDescriptionValid("ок")).toBe(false); // < min length
+  });
+});
+
+describe("isSurveyMinimallyFilled (хотя бы одно поле)", () => {
+  it("оба пустые → false", () => {
+    expect(isSurveyMinimallyFilled({ companyWebsite: "", taskDescription: "" })).toBe(false);
+  });
+  it("оба из пробелов → false", () => {
+    expect(isSurveyMinimallyFilled({ companyWebsite: "  ", taskDescription: "\n\t" })).toBe(false);
+  });
+  it("только сайт → true", () => {
+    expect(isSurveyMinimallyFilled({ companyWebsite: "example.com", taskDescription: "" })).toBe(true);
+  });
+  it("только задача → true", () => {
+    expect(isSurveyMinimallyFilled({ companyWebsite: "", taskDescription: "ищу ипотеку" })).toBe(true);
   });
 });
