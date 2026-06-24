@@ -1,20 +1,12 @@
 "use client";
 
-import { Check, CircleDashed, Loader2, MessageCircle } from "lucide-react";
+import { MessageCircle, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProviderList } from "./provider-list";
-import { rngFor } from "@/state/metrics";
+import { rngFor, seededInt } from "@/state/metrics";
 import type { Campaign } from "@/state/app-state";
 
 type Phase = NonNullable<Campaign["phase"]>;
-
-/** Salvaged from step-7-processing: the collection-stage checklist. */
-const STEPS: Array<{ id: string; label: string }> = [
-  { id: "uploaded", label: "База загружена и проверена" },
-  { id: "sent", label: "Отправлено провайдерам" },
-  { id: "processing", label: "Идёт обработка" },
-  { id: "ready", label: "Сигналы готовы" },
-];
 
 /**
  * Deterministic fraction of the base processed (0..1). Driven by campaign id +
@@ -27,33 +19,76 @@ export function processedFraction(campaignId: string, phase: Phase): number {
   return 0.3 + rngFor("progress", campaignId)() * 0.5;
 }
 
-/** Salvaged from step-7: which checklist step is active for a given phase. */
-function activeIndexForPhase(phase: Phase): number {
-  return phase === "communicating" ? STEPS.length : 2;
+/**
+ * Deterministic count of signals accumulated for a stream campaign so far —
+ * stable per campaign id (seeded, no Math.random). Drives the realtime line.
+ */
+export function streamSignalCount(campaignId: string): number {
+  return seededInt(rngFor("stream-signals", campaignId), 1_200, 48_000);
 }
 
 function formatPct(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
 
-interface CampaignSignalProgressProps {
-  campaign: Campaign;
+const supportClick = () => window.alert("Поддержка: support@afina.ai");
+
+function SupportRow() {
+  return (
+    <div className="flex items-center justify-start">
+      <Button variant="outline" onClick={supportClick} className="gap-2">
+        <MessageCircle className="h-4 w-4" />
+        Связаться с поддержкой
+      </Button>
+    </div>
+  );
 }
 
-export function CampaignSignalProgress({ campaign }: CampaignSignalProgressProps) {
-  const phase: Phase = campaign.phase ?? "scoring";
-  const activeIndex = activeIndexForPhase(phase);
-  const fraction = processedFraction(campaign.id, phase);
-
-  const supportClick = () => window.alert("Поддержка: support@afina.ai");
-
+/**
+ * Stream source — the signal file is written continuously, so there is no
+ * staged collection. Show a live "writing in real time" indicator + the running
+ * signal count, then the connected operators.
+ */
+function StreamSignalRealtime({ campaign }: { campaign: Campaign }) {
+  const count = streamSignalCount(campaign.id);
   return (
     <div className="flex flex-col gap-5">
-      {/* % of base processed */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+          <span className="text-sm font-medium text-foreground">
+            Файл сигнала пишется в реальном времени
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          <Radio className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+          ~{count.toLocaleString("ru-RU")} сигналов · обновляется
+        </p>
+      </div>
+
+      <ProviderList />
+      <SupportRow />
+    </div>
+  );
+}
+
+/**
+ * Non-stream sources (`new` / `own`) — a single, non-staged collection
+ * indicator: a progress bar + a neutral caption. No numbered "Сбор → Скоринг →
+ * Коммуникация" stages (Block 9: открытая кампания без стадий).
+ */
+function CollectionProgress({ campaign }: { campaign: Campaign }) {
+  const phase: Phase = campaign.phase ?? "scoring";
+  const fraction = processedFraction(campaign.id, phase);
+  return (
+    <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs uppercase tracking-widest text-muted-foreground">
-            Обработано базы
+          <span className="text-sm font-medium text-foreground">
+            Идёт сбор аудитории
           </span>
           <span className="text-sm font-semibold tabular-nums text-foreground">
             {formatPct(fraction)}
@@ -65,49 +100,25 @@ export function CampaignSignalProgress({ campaign }: CampaignSignalProgressProps
             style={{ width: formatPct(fraction) }}
           />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Подбираем горячую аудиторию по интент-сигналам — это занимает несколько минут.
+        </p>
       </div>
 
-      {/* Step-by-step checklist (salvaged from step-7-processing) */}
-      <ol className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-5">
-        {STEPS.map((s, idx) => {
-          const done = idx < activeIndex;
-          const active = idx === activeIndex;
-          return (
-            <li key={s.id} className="flex items-center gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center">
-                {done ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : active ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-foreground" />
-                ) : (
-                  <CircleDashed className="h-4 w-4 text-muted-foreground/60" />
-                )}
-              </span>
-              <span
-                className={
-                  done
-                    ? "text-sm text-muted-foreground line-through decoration-muted-foreground/30"
-                    : active
-                      ? "text-sm font-medium text-foreground"
-                      : "text-sm text-muted-foreground"
-                }
-              >
-                {s.label}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-
-      {/* Connected operators */}
       <ProviderList />
-
-      <div className="flex items-center justify-start">
-        <Button variant="outline" onClick={supportClick} className="gap-2">
-          <MessageCircle className="h-4 w-4" />
-          Связаться с поддержкой
-        </Button>
-      </div>
+      <SupportRow />
     </div>
+  );
+}
+
+interface CampaignSignalProgressProps {
+  campaign: Campaign;
+}
+
+export function CampaignSignalProgress({ campaign }: CampaignSignalProgressProps) {
+  return campaign.sourceType === "stream" ? (
+    <StreamSignalRealtime campaign={campaign} />
+  ) : (
+    <CollectionProgress campaign={campaign} />
   );
 }

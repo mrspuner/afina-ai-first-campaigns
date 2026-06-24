@@ -69,6 +69,13 @@ export function CampaignScreen() {
   // Pre-launch collection: a `new` draft is still gathering signals. While
   // collecting, the card shows progress and «Запустить» stays locked.
   const collectingNow = isCollecting(campaign);
+  // A streaming campaign (active, past the connect era → `communicating`) writes
+  // its signal file continuously — show the real-time signal block instead of
+  // the providers section. Before that (phase still unset) it shows providers.
+  const isStreamActive =
+    isActive &&
+    campaign.sourceType === "stream" &&
+    campaign.phase === "communicating";
   const canLaunch = canLaunchCampaign(campaign);
 
   // Artifacts produced by this campaign (newest first).
@@ -170,12 +177,16 @@ export function CampaignScreen() {
         />
       </CardSection>
 
-      {/* Сбор сигналов (new-черновик, фаза scoring) → прогресс; активная в
-          стадии сбора/скоринга → провайдеры (скрываются после перехода в
-          `communicating`); завершённая → статус; иначе (готовый черновик/
-          пауза) → CTA «Запустить». */}
+      {/* Сбор сигналов (new-черновик) → неэтапный прогресс; запущенный поток →
+          «сигнал в реальном времени»; активная в стадии сбора → провайдеры
+          (скрываются после перехода в `communicating`); завершённая → статус;
+          иначе (готовый черновик/пауза) → CTA «Запустить». */}
       {collectingNow ? (
         <CardSection label="Сбор сигналов">
+          <CampaignSignalProgress campaign={campaign} />
+        </CardSection>
+      ) : isStreamActive ? (
+        <CardSection label="Сигнал">
           <CampaignSignalProgress campaign={campaign} />
         </CardSection>
       ) : showProviders ? (
