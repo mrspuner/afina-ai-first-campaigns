@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { OnboardingStepCards } from "./onboarding-step-cards";
 
-describe("OnboardingStepCards — block-8 copy", () => {
-  it("renders the three concept headings with the first card as Сигналы", () => {
+describe("OnboardingStepCards — копирайт услуг", () => {
+  it("рендерит три карточки: Сигналы / Коммуникации / Статистика", () => {
     render(<OnboardingStepCards />);
     expect(screen.getByText("Сигналы")).toBeInTheDocument();
-    expect(screen.getByText("Кампании")).toBeInTheDocument();
+    expect(screen.getByText("Коммуникации")).toBeInTheDocument();
     expect(screen.getByText("Статистика")).toBeInTheDocument();
-    expect(screen.queryByText("Коммуникация")).not.toBeInTheDocument();
+    expect(screen.queryByText("Кампании")).not.toBeInTheDocument();
   });
 
-  it("renders the Сигналы description about intent audiences", () => {
+  it("карточка «Сигналы» — описание про intent-аудитории", () => {
     render(<OnboardingStepCards />);
     expect(
       screen.getByText(
@@ -20,11 +20,11 @@ describe("OnboardingStepCards — block-8 copy", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Кампании description about launching on the audience", () => {
+  it("карточка «Коммуникации» — описание про сообщение по каналам", () => {
     render(<OnboardingStepCards />);
     expect(
       screen.getByText(
-        "Запускаем кампанию на собранную аудиторию — нужное сообщение в нужный момент, по выбранным каналам.",
+        "Запускаем нужное сообщение в нужный момент — по выбранным каналам.",
       ),
     ).toBeInTheDocument();
   });
