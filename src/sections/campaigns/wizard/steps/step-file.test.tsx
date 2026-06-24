@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { StepFile } from "./step-file";
+import { StepFile, fileCopy } from "./step-file";
 import { initialStepData, type StepData } from "@/types/campaign";
 import { SIGNAL_TYPES } from "@/state/app-state";
 
@@ -98,5 +98,55 @@ describe("StepFile — own-source signal-type dropdown", () => {
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
     expect(onNext).toHaveBeenCalledTimes(1);
     expect(onNext.mock.calls[0][0]).not.toHaveProperty("ownSignalType");
+  });
+});
+
+describe("StepFile — multiple bases (group B #4)", () => {
+  afterEach(cleanup);
+
+  it("«Загрузить ещё одну базу» reveals an extra empty upload slot", () => {
+    const file = new File(["a"], "base-1.csv", { type: "text/csv" });
+    render(
+      <StepFile
+        data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    // One uploaded base → one file input, plus the add button (no empty slot yet).
+    expect(document.querySelectorAll('input[type="file"]')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Загрузить ещё одну базу/i }));
+
+    // The empty slot is revealed → a second file input appears.
+    expect(document.querySelectorAll('input[type="file"]')).toHaveLength(2);
+    // The add button collapses while the empty slot is open.
+    expect(screen.queryByRole("button", { name: /Загрузить ещё одну базу/i })).toBeNull();
+  });
+
+  it("each uploaded base carries a remove control", () => {
+    const file = new File(["a"], "base-1.csv", { type: "text/csv" });
+    render(
+      <StepFile
+        data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Удалить базу" })).toBeTruthy();
+  });
+});
+
+describe("fileCopy — per-source upload copy", () => {
+  it("stream → numbers base for monitoring", () => {
+    const { title, subtitle } = fileCopy("stream");
+    expect(title).toBe("Загрузите базу номеров");
+    expect(subtitle).toMatch(/мониторинг/i);
+  });
+  it("own → ready signal list", () => {
+    expect(fileCopy("own").title).toBe("Загрузите ваш список сигналов");
+  });
+  it("new → audience base", () => {
+    expect(fileCopy("new").title).toBe("Загрузите вашу базу");
   });
 });

@@ -33,14 +33,15 @@ describe("STEP_LABELS", () => {
     ]);
   });
 
-  it("own sequence omits Интересы; stream omits Файл and adds Интеграция", () => {
+  it("own sequence omits Интересы; stream loads a Файл (no Интеграция)", () => {
     const own = stepsForSource("own").map((id) => STEP_LABELS[id]);
     expect(own).not.toContain("Интересы");
     expect(own).toContain("Файл");
 
+    // Group B #4: stream now uploads a numbers base (Файл) instead of Интеграция.
     const stream = stepsForSource("stream").map((id) => STEP_LABELS[id]);
-    expect(stream).not.toContain("Файл");
-    expect(stream).toContain("Интеграция");
+    expect(stream).toContain("Файл");
+    expect(stream).not.toContain("Интеграция");
     expect(stream).toContain("Интересы");
   });
 });

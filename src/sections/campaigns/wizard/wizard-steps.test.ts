@@ -8,8 +8,9 @@ describe("stepsForSource", () => {
   it("own: scenario, source, file, channels, budget (no interests)", () => {
     expect(stepsForSource("own")).toEqual(["scenario","source","file","channels","budget"]);
   });
-  it("stream: scenario, source, interests, integration, channels, budget (no file)", () => {
-    expect(stepsForSource("stream")).toEqual(["scenario","source","interests","integration","channels","budget"]);
+  it("stream: scenario, source, interests, file, channels, budget (loads a base, no integration)", () => {
+    expect(stepsForSource("stream")).toEqual(["scenario","source","interests","file","channels","budget"]);
+    expect(stepsForSource("stream")).not.toContain("integration");
   });
   it("before a source is chosen, only scenario+source are known", () => {
     expect(stepsForSource(undefined)).toEqual(["scenario","source"]);

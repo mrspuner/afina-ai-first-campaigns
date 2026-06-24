@@ -8,7 +8,9 @@ export type WizardStepId =
  * source is picked only scenario+source are determined.
  *  - new    → interests, file
  *  - own    → file (no interests)
- *  - stream → interests, integration (no file)
+ *  - stream → interests, file (uploads a numbers base to monitor; no separate
+ *             integration step — `integration` stays a valid id for the still-
+ *             alive StepIntegration component, just out of the default chain)
  */
 export function stepsForSource(source: SourceType | undefined): WizardStepId[] {
   const head: WizardStepId[] = ["scenario", "source"];
@@ -16,6 +18,6 @@ export function stepsForSource(source: SourceType | undefined): WizardStepId[] {
   const tail: WizardStepId[] =
     source === "new" ? ["interests", "file"]
     : source === "own" ? ["file"]
-    : ["interests", "integration"]; // stream
+    : ["interests", "file"]; // stream — loads a numbers base instead of integration
   return [...head, ...tail, "channels", "budget"];
 }
