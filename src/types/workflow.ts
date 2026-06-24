@@ -91,6 +91,17 @@ export type SignalParams = {
   segments: { max: number; high: number; mid: number; low: number };
 };
 
+/**
+ * Scoring node (Block C #8) — carries the campaign's interests/triggers so they
+ * can be edited from the graph drawer. No required human field: empty lists are
+ * valid (scoring never blocks launch), so it is exempt from `nodeNeedsAttention`.
+ */
+export type ScoringParams = {
+  kind: "scoring";
+  interests: string[];
+  triggers: string[];
+};
+
 export type SuccessParams = {
   kind: "success";
   goal: string;
@@ -115,7 +126,7 @@ export type LandingParams = {
 export type NodeParams =
   | SmsParams | EmailParams | PushParams | IvrParams
   | WaitParams | ConditionParams | SplitParams | MergeParams
-  | SignalParams | SuccessParams | EndParams
+  | SignalParams | ScoringParams | SuccessParams | EndParams
   | StorefrontParams | LandingParams;
 
 export interface WorkflowNodeData extends Record<string, unknown> {

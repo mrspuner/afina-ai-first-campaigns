@@ -195,6 +195,7 @@ function fallbackParamsPatch(
       return null;
     case "merge":
     case "signal":
+    case "scoring":
       return null;
   }
 }

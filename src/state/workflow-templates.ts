@@ -263,38 +263,75 @@ export const TEMPLATE_BY_TYPE: Record<SignalType, () => Template> = {
   "Удержание": retentionTemplate,
 };
 
+/** Relabels the entry node «Сигнал» → «Файл» (Block C #8): the graph now reads
+ *  as a path Файл → Скоринг → Сигнал → Коммуникация, so the entry (the uploaded
+ *  base) is the «Файл», and the scored audience becomes a downstream «Сигнал». */
+function relabelEntryToFile(t: Template): Template {
+  const [entry, ...rest] = t.nodes;
+  if (!entry) return t;
+  return {
+    nodes: [{ ...entry, data: { ...entry.data, label: "Файл" } }, ...rest],
+    edges: t.edges,
+  };
+}
+
 /**
- * Splices a `scoring` node between the entry `source` node and its first
- * downstream node. Used for `new`/`stream` sources (spec §3): collected/streamed
- * audiences must be scored before communication. `own` bases are pre-loaded and
- * skip scoring entirely. The scoring node carries no params (no required human
- * field — `nodeNeedsAttention` returns false), so it never blocks launch.
+ * Builds the campaign path between the entry `Файл` node and its first
+ * downstream node (Block C #8): inserts a `scoring` node (for `new`/`stream` —
+ * collected/streamed audiences are scored before communication; `own` bases are
+ * pre-loaded and skip it) and always a `signal` result node (the scored
+ * audience). Path: Файл → [Скоринг →] Сигнал → <original first target>.
+ *
+ * The scoring node carries `ScoringParams` (interests/triggers, empty by default
+ * — filled from the campaign), and the signal node carries `SignalParams`;
+ * neither has a required human field, so `nodeNeedsAttention` stays false and
+ * the path never blocks launch.
  */
-function withScoring(t: Template): Template {
+function withSignalPath(t: Template, sourceType: SourceType): Template {
   const entry = t.nodes[0];
   if (!entry) return t;
   const entryId = entry.id;
   const firstEdge = t.edges.find((edge) => edge.source === entryId);
   if (!firstEdge) return t;
 
-  const scoringNode = n(
-    "scoring",
-    "Скоринг",
-    "scoring",
-    entry.position.x + STEP,
-    entry.position.y,
-    "Качество базы"
-  );
-  // Shift everything to the right of the entry by STEP to make room.
+  const hasScoring = sourceType !== "own";
+  const inserted = hasScoring ? 2 : 1;
+
+  // Make room: shift every non-entry node right by the inserted-node count.
   const shifted = t.nodes.map((nd) =>
     nd.id === entryId
       ? nd
-      : { ...nd, position: { ...nd.position, x: nd.position.x + STEP } }
+      : { ...nd, position: { ...nd.position, x: nd.position.x + inserted * STEP } }
   );
+
+  const newNodes: WorkflowNode[] = [];
+  const newEdges: WorkflowEdge[] = [];
+  let prevId = entryId;
+  let x = entry.position.x;
+
+  if (hasScoring) {
+    x += STEP;
+    newNodes.push(
+      n("scoring", "Скоринг", "scoring", x, entry.position.y, "Качество базы", undefined,
+        { kind: "scoring", interests: [], triggers: [] })
+    );
+    newEdges.push(e(prevId, "scoring"));
+    prevId = "scoring";
+  }
+
+  x += STEP;
+  newNodes.push(
+    n("signal_result", "Сигнал", "signal", x, entry.position.y, "Готовая аудитория", undefined,
+      { kind: "signal", fileName: "", count: 0, segments: EMPTY_SEGMENTS })
+  );
+  newEdges.push(e(prevId, "signal_result"));
+  prevId = "signal_result";
+
   const edges = t.edges
     .filter((edge) => edge.id !== firstEdge.id)
-    .concat([e(entryId, "scoring"), e("scoring", firstEdge.target)]);
-  return { nodes: [...shifted, scoringNode], edges };
+    .concat(newEdges, [e(prevId, firstEdge.target)]);
+
+  return { nodes: [...shifted, ...newNodes], edges };
 }
 
 // ── Channel-aware template builders ──────────────────────────────────────────
@@ -528,5 +565,6 @@ export function createTemplate(
     base = TEMPLATE_BY_TYPE[signalType]();
   }
 
-  return sourceType === "own" ? base : withScoring(base);
+  // Graph reads as Файл → [Скоринг →] Сигнал → Коммуникация (Block C #8).
+  return withSignalPath(relabelEntryToFile(base), sourceType);
 }

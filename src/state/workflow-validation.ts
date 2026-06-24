@@ -28,6 +28,7 @@ export function nodeNeedsAttention(node: WorkflowNode): boolean {
     case "merge":
     case "end":
     case "signal":
+    case "scoring":
       return false;
     default:
       return false;

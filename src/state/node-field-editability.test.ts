@@ -9,7 +9,7 @@ describe("NODE_FIELD_EDITABILITY", () => {
     const kinds = Object.keys(NODE_FIELD_EDITABILITY).sort();
     expect(kinds).toEqual(
       [
-        "condition", "email", "end", "ivr", "landing", "merge",
+        "condition", "email", "end", "ivr", "landing", "merge", "scoring",
         "push", "signal", "split", "sms", "storefront", "success", "wait",
       ].sort()
     );

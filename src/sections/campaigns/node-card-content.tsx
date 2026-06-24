@@ -86,6 +86,10 @@ const PARAM_RENDERERS: {
     },
   ],
   merge: () => [],
+  scoring: (p) => [
+    { label: "Интересы", value: p.interests.length ? p.interests.join(", ") : "—" },
+    { label: "Триггеры", value: p.triggers.length ? p.triggers.join(", ") : "—" },
+  ],
   signal: (p) => [
     { label: "Файл", value: p.fileName },
     { label: "Сигналов", value: String(p.count) },

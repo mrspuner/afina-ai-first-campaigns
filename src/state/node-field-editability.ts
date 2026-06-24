@@ -72,6 +72,12 @@ export const NODE_FIELD_EDITABILITY: Record<
     "Ветки": { editability: "manual", paramKey: "branches", control: "select" },
   },
   merge: {},
+  scoring: {
+    // Block C #8 — интересы/триггеры показываются в дровере скоринга
+    // (полноценная правка полей — отдельный трек Блока 7; пока только показ).
+    "Интересы": { editability: "readonly", paramKey: "interests" },
+    "Триггеры": { editability: "readonly", paramKey: "triggers" },
+  },
   signal: {
     "Файл": { editability: "readonly", paramKey: "fileName" },
     "Сигналов": { editability: "readonly", paramKey: "count" },

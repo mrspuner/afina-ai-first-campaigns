@@ -68,12 +68,6 @@ describe("all template nodes have matching params.kind", () => {
   it.each(SIGNAL_TYPES)("template \"%s\" — каждая нода имеет params.kind === nodeType", (type) => {
     const { nodes } = createTemplate(type);
     for (const node of nodes) {
-      // The `scoring` node (inserted for new/stream sources) has no params
-      // kind, just like `source` — both are param-less structural endpoints.
-      if (node.data.nodeType === "scoring") {
-        expect(node.data.params).toBeUndefined();
-        continue;
-      }
       expect(
         node.data.params,
         `node ${node.id} (${node.data.nodeType}) has no params`
@@ -86,6 +80,45 @@ describe("all template nodes have matching params.kind", () => {
         expect(node.data.params.kind).toBe(expectedKind);
       }
     }
+  });
+});
+
+describe("graph path Файл → Скоринг → Сигнал → Коммуникация (group C #8)", () => {
+  it.each(SIGNAL_TYPES)("entry node of %s is labelled «Файл»", (type) => {
+    const { nodes } = createTemplate(type, "new");
+    expect(nodes[0].data.label).toBe("Файл");
+    expect(nodes[0].data.nodeType).toBe("source");
+  });
+
+  it("new/stream: path is Файл → Скоринг → Сигнал → <comm>", () => {
+    for (const st of ["new", "stream"] as const) {
+      const { nodes, edges } = createTemplate("Регистрация", st);
+      const entry = nodes[0];
+      const scoring = nodes.find((n) => n.data.nodeType === "scoring")!;
+      const signal = nodes.find((n) => n.id === "signal_result")!;
+      expect(scoring).toBeDefined();
+      expect(signal.data.nodeType).toBe("signal");
+      expect(signal.data.label).toBe("Сигнал");
+      // entry → scoring → signal chain
+      expect(edges.some((e) => e.source === entry.id && e.target === scoring.id)).toBe(true);
+      expect(edges.some((e) => e.source === scoring.id && e.target === signal.id)).toBe(true);
+    }
+  });
+
+  it("own: path is Файл → Сигнал → <comm> (no scoring)", () => {
+    const { nodes, edges } = createTemplate("Регистрация", "own");
+    expect(nodes.some((n) => n.data.nodeType === "scoring")).toBe(false);
+    const entry = nodes[0];
+    const signal = nodes.find((n) => n.id === "signal_result")!;
+    expect(signal).toBeDefined();
+    expect(edges.some((e) => e.source === entry.id && e.target === signal.id)).toBe(true);
+  });
+
+  it("scoring node carries ScoringParams (interests/triggers) and never needs attention", () => {
+    const { nodes } = createTemplate("Регистрация", "new");
+    const scoring = nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: [], triggers: [] });
+    expect(scoring.data.needsAttention ?? false).toBe(false);
   });
 });
 
