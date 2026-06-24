@@ -17,8 +17,11 @@ import type {
 } from "@/types/workflow";
 import type { SignalType } from "@/state/app-state";
 import type { SourceType, Channel } from "@/types/campaign";
-import { createTemplate } from "@/state/workflow-templates";
+import { createTemplate, applyCampaignContext } from "@/state/workflow-templates";
 import { computeNeedsAttention } from "@/state/workflow-validation";
+import { DropZone } from "@/components/ui/drop-zone";
+import { rngFor, seededInt } from "@/state/metrics";
+import { Plus } from "lucide-react";
 import { matchActions } from "@/state/node-actions";
 import {
   applyOps,
@@ -57,17 +60,33 @@ interface WorkflowViewProps {
   onPaneClick?: () => void;
 }
 
+/** Campaign data overlaid onto a freshly-built graph (Block C #8). */
+interface CampaignContext {
+  files?: { name: string; rowCount: number }[];
+  interests?: string[];
+}
+
 function initialGraph(
   signalType?: SignalType,
   sourceType?: SourceType,
-  channels?: Channel[]
+  channels?: Channel[],
+  ctx?: CampaignContext
 ): GraphState {
-  const base = signalType
+  const template = signalType
     ? createTemplate(signalType, sourceType, channels)
     : { nodes: createBaseNodes(), edges: createBaseEdges() };
+  // Block C #8 — overlay the real uploaded bases on «Файл» and the campaign's
+  // interests on «Скоринг» (no-op when there is no campaign context).
+  const base = ctx ? applyCampaignContext(template, ctx) : template;
   // A1: template graphs must start with correct needs-attention flags so the
   // launch gate reflects empty required fields immediately.
   return { ...base, nodes: computeNeedsAttention(base.nodes) };
+}
+
+/** Deterministic stand-in for parsing an uploaded base's row count (matches the
+ *  wizard's upload step — seeded, never Math.random). */
+function fileRowCount(f: File): number {
+  return seededInt(rngFor("rowcount", f.name, f.size), 1000, 100_000);
 }
 
 function computeDynamicSublabel(
@@ -285,11 +304,33 @@ export function WorkflowView({
   const chat = useChat();
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const campaign = campaignId
+    ? state.campaigns.find((c) => c.id === campaignId)
+    : undefined;
   // Rehydrate from the durable cache so manual edits survive the unmount on
-  // launch (workflow → campaign) and navigation; fall back to the template.
+  // launch (workflow → campaign) and navigation; fall back to the template
+  // overlaid with the campaign's real bases/interests (Block C #8).
   const [graph, setGraph] = useState<GraphState>(
-    () => getCachedGraph(campaignId) ?? initialGraph(signalType, sourceType, channels)
+    () =>
+      getCachedGraph(campaignId) ??
+      initialGraph(signalType, sourceType, channels, {
+        files: campaign?.files,
+        interests: campaign?.interests,
+      })
   );
+  // «Добавить файл» (Block C #8) — inline upload panel on the graph pane.
+  const [addFileOpen, setAddFileOpen] = useState(false);
+
+  function handleAddFile(f: File) {
+    if (!campaignId) return;
+    const file = { name: f.name, rowCount: fileRowCount(f) };
+    dispatch({ type: "campaign_file_added", campaignId, file });
+    const nextFiles = [...(campaign?.files ?? []), file];
+    setGraph((prev) =>
+      applyCampaignContext(prev, { files: nextFiles, interests: campaign?.interests })
+    );
+    setAddFileOpen(false);
+  }
 
   useEffect(() => {
     onGraphChange?.(graph);
@@ -656,6 +697,36 @@ export function WorkflowView({
           onPaneClick={onPaneClick}
         />
       </motion.div>
+
+      {/* «Добавить файл» — only on an editable (pre-launch) campaign graph */}
+      {!launched && campaignId && (
+        <div className="absolute left-3 top-3 z-10">
+          {addFileOpen ? (
+            <div className="w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">Добавить базу</span>
+                <button
+                  type="button"
+                  onClick={() => setAddFileOpen(false)}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Отмена
+                </button>
+              </div>
+              <DropZone accept=".csv,.xlsx,.txt" file={null} onFile={handleAddFile} />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddFileOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card/80 px-2.5 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Добавить файл
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Unknown command feedback */}
       {unknownCmd && (

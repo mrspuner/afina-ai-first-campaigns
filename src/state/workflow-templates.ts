@@ -10,6 +10,7 @@ import type {
 
 import type { Channel } from "@/types/campaign";
 import { buildCommUnit } from "./channel-nodes";
+import { pluralRu } from "@/lib/plural-ru";
 
 export interface Template {
   nodes: WorkflowNode[];
@@ -567,4 +568,52 @@ export function createTemplate(
 
   // Graph reads as Файл → [Скоринг →] Сигнал → Коммуникация (Block C #8).
   return withSignalPath(relabelEntryToFile(base), sourceType);
+}
+
+/** Short human summary of the uploaded bases, e.g. «2 базы · ~14 000 строк». */
+export function fileSummaryLine(
+  files: { name: string; rowCount: number }[]
+): string | undefined {
+  if (!files.length) return undefined;
+  const totalRows = files.reduce((s, f) => s + f.rowCount, 0);
+  return `${files.length} ${pluralRu(files.length, ["база", "базы", "баз"])} · ~${totalRows.toLocaleString("ru-RU")} строк`;
+}
+
+/**
+ * Overlays real campaign data onto a freshly-built graph (Block C #8): the entry
+ * «Файл» node shows the uploaded bases (names + total rows) and the «Скоринг»
+ * node carries the campaign's interests. Pure — returns a new graph; leaves
+ * graphs without a matching node untouched.
+ */
+export function applyCampaignContext(
+  t: Template,
+  ctx: { files?: { name: string; rowCount: number }[]; interests?: string[] }
+): Template {
+  const files = ctx.files ?? [];
+  const interests = ctx.interests ?? [];
+  const totalRows = files.reduce((s, f) => s + f.rowCount, 0);
+  const summary = fileSummaryLine(files);
+
+  const nodes = t.nodes.map((nd) => {
+    if (nd.data.nodeType === "source" && nd.data.params?.kind === "signal") {
+      return {
+        ...nd,
+        data: {
+          ...nd.data,
+          ...(summary ? { sublabel: summary } : {}),
+          params: {
+            ...nd.data.params,
+            fileName: files.map((f) => f.name).join(", ") || nd.data.params.fileName,
+            count: totalRows || nd.data.params.count,
+          },
+        },
+      };
+    }
+    if (nd.data.nodeType === "scoring" && nd.data.params?.kind === "scoring") {
+      return { ...nd, data: { ...nd.data, params: { ...nd.data.params, interests } } };
+    }
+    return nd;
+  });
+
+  return { nodes, edges: t.edges };
 }

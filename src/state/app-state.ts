@@ -265,6 +265,7 @@ export type Action =
   | { type: "campaign_artifact_ready"; campaignId: string; kind: Artifact["kind"]; count: number }
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
+  | { type: "campaign_file_added"; campaignId: string; file: { name: string; rowCount: number } }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
@@ -525,6 +526,19 @@ export function appReducer(state: AppState, action: Action): AppState {
           state.view.kind === "workflow" && state.view.campaign.id === action.id
             ? { ...state.view, campaign: { ...state.view.campaign, name } }
             : state.view,
+      };
+    }
+
+    case "campaign_file_added": {
+      // Block C #8 — «Добавить файл» с графа: дописывает базу в Campaign.files.
+      if (!state.campaigns.some((c) => c.id === action.campaignId)) return state;
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.campaignId
+            ? { ...c, files: [...(c.files ?? []), action.file] }
+            : c
+        ),
       };
     }
 

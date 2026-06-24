@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { TEMPLATE_BY_TYPE, createTemplate } from "./workflow-templates";
+import {
+  TEMPLATE_BY_TYPE,
+  createTemplate,
+  applyCampaignContext,
+  fileSummaryLine,
+} from "./workflow-templates";
 import { validateWorkflow } from "./workflow-validation";
 import type { SignalType } from "./app-state";
 
@@ -119,6 +124,42 @@ describe("graph path Файл → Скоринг → Сигнал → Комму
     const scoring = nodes.find((n) => n.data.nodeType === "scoring")!;
     expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: [], triggers: [] });
     expect(scoring.data.needsAttention ?? false).toBe(false);
+  });
+});
+
+describe("applyCampaignContext — files on «Файл», interests on «Скоринг» (group C #8)", () => {
+  it("fileSummaryLine pluralises bases and sums rows", () => {
+    expect(fileSummaryLine([])).toBeUndefined();
+    expect(fileSummaryLine([{ name: "a", rowCount: 1000 }])).toMatch(/^1 база · ~1[\s ]?000 строк$/);
+    expect(
+      fileSummaryLine([{ name: "a", rowCount: 1000 }, { name: "b", rowCount: 1500 }])
+    ).toMatch(/^2 базы · ~2[\s ]?500 строк$/);
+  });
+
+  it("populates the entry «Файл» node from campaign files", () => {
+    const t = createTemplate("Регистрация", "new");
+    const out = applyCampaignContext(t, {
+      files: [{ name: "base-1.csv", rowCount: 4000 }, { name: "base-2.csv", rowCount: 6000 }],
+      interests: ["Ипотека"],
+    });
+    const entry = out.nodes[0];
+    expect(entry.data.nodeType).toBe("source");
+    expect(entry.data.sublabel).toMatch(/2 базы/);
+    expect(entry.data.params).toMatchObject({ kind: "signal", count: 10000 });
+    expect((entry.data.params as { fileName: string }).fileName).toBe("base-1.csv, base-2.csv");
+  });
+
+  it("populates the «Скоринг» node interests from the campaign", () => {
+    const t = createTemplate("Регистрация", "new");
+    const out = applyCampaignContext(t, { interests: ["Ипотека", "Авто"] });
+    const scoring = out.nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: ["Ипотека", "Авто"] });
+  });
+
+  it("leaves a graph without files/interests untouched (no crash)", () => {
+    const t = createTemplate("Регистрация", "own");
+    const out = applyCampaignContext(t, {});
+    expect(out.nodes.length).toBe(t.nodes.length);
   });
 });
 
