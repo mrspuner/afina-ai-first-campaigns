@@ -18,9 +18,7 @@ export type FieldOptionsKey =
   | "ivrScenario"
   | "successGoal"
   | "endReason"
-  | "eventCatalog"
-  | "landingCta"
-  | "landingOffer";
+  | "eventCatalog";
 
 export const FIELD_PRESETS: Record<FieldOptionsKey, string[]> = {
   smsText: [
@@ -75,18 +73,6 @@ export const FIELD_PRESETS: Record<FieldOptionsKey, string[]> = {
     "Заявка оформлена",
     "Платёж прошёл",
     "Визит на сайт",
-  ],
-  landingCta: [
-    "Оформить заявку",
-    "Узнать ставку",
-    "Получить предложение",
-    "Записаться на встречу",
-  ],
-  landingOffer: [
-    "Кредит наличными от 12%",
-    "Ипотека со ставкой от 6%",
-    "Премиальная карта без платы за обслуживание",
-    "Рефинансирование с выгодой до 30%",
   ],
 };
 

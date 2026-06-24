@@ -166,7 +166,6 @@ const FALLBACK_SMS = "Спецпредложение действует толь
 const FALLBACK_EMAIL = "Подготовили для вас персональную подборку — откройте, чтобы узнать детали.";
 const FALLBACK_PUSH = "Загляните — для вас есть кое-что интересное";
 const FALLBACK_GOALS = ["Конверсия в заявку", "Повторная покупка", "Активация клиента"];
-const FALLBACK_OFFERS = ["Кэшбэк 5%", "Премиум на месяц", "Бесплатная доставка"];
 
 function randPick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -196,14 +195,6 @@ function fallbackParamsPatch(
       return { goal: text || randPick(FALLBACK_GOALS) };
     case "end":
       return { reason: text || "Цель не достигнута" };
-    case "landing":
-      return { offerTitle: text || randPick(FALLBACK_OFFERS) };
-    case "storefront": {
-      const offers = text
-        ? text.split(/[,;]/).map((o) => o.trim()).filter(Boolean)
-        : [randPick(FALLBACK_OFFERS)];
-      return { offers };
-    }
     case "wait":
       return { mode: "duration", durationHours: randPick([1, 3, 6, 12, 24, 48]) };
     case "condition":

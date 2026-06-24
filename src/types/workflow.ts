@@ -17,9 +17,6 @@ export type WorkflowNodeType =
   | "email"
   | "push"
   | "ivr"
-  // Web (passive)
-  | "storefront"
-  | "landing"
   // Legacy (retained for base graph + parseWorkflowCommand)
   | "default"
   | "channel"
@@ -114,22 +111,10 @@ export type EndParams = {
   reason?: string;
 };
 
-export type StorefrontParams = {
-  kind: "storefront";
-  offers: string[];
-};
-
-export type LandingParams = {
-  kind: "landing";
-  cta: string;
-  offerTitle: string;
-};
-
 export type NodeParams =
   | SmsParams | EmailParams | PushParams | IvrParams
   | WaitParams | ConditionParams | SplitParams | MergeParams
-  | SignalParams | ScoringParams | SuccessParams | EndParams
-  | StorefrontParams | LandingParams;
+  | SignalParams | ScoringParams | SuccessParams | EndParams;
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   label: string;
@@ -184,8 +169,6 @@ export const NODE_CATEGORY: Record<WorkflowNodeType, NodeCategory> = {
   email: "communication",
   push: "communication",
   ivr: "communication",
-  storefront: "web",
-  landing: "web",
   default: "legacy",
   channel: "legacy",
   retarget: "legacy",

@@ -7,7 +7,7 @@ import { CHANNEL_NODE_MAP } from "@/state/channel-nodes";
  *  сигнальную ноду билдер всегда ставит сам первой. */
 export const rebuildNodeTypeSchema = z.enum([
   "sms", "email", "push", "ivr", "wait", "condition", "split", "merge",
-  "storefront", "landing", "success", "end",
+  "success", "end",
 ]);
 
 export const rebuildNodeSchema = z.object({
@@ -43,8 +43,6 @@ function defaultParams(nodeType: z.infer<typeof rebuildNodeTypeSchema>): NodePar
     case "condition": return { kind: "condition", trigger: "opened" };
     case "split": return { kind: "split", by: "equal", branches: 2 };
     case "merge": return { kind: "merge" };
-    case "storefront": return { kind: "storefront", offers: [] };
-    case "landing": return { kind: "landing", cta: "Перейти", offerTitle: "Предложение" };
     case "success": return { kind: "success", goal: "Конверсия" };
     case "end": return { kind: "end", reason: "Без конверсии" };
   }

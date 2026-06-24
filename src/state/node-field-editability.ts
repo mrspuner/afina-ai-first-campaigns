@@ -85,13 +85,6 @@ export const NODE_FIELD_EDITABILITY: Record<
   end: {
     "Причина": { editability: "manual", paramKey: "reason", control: "combo", optionsKey: "endReason" },
   },
-  storefront: {
-    "Офферы": { editability: "ai", paramKey: "offers" },
-  },
-  landing: {
-    "CTA": { editability: "manual", paramKey: "cta", control: "combo", optionsKey: "landingCta" },
-    "Оффер": { editability: "manual", paramKey: "offerTitle", control: "combo", optionsKey: "landingOffer" },
-  },
 };
 
 /** Метаданные поля по kind ноды и label строки, либо undefined. */

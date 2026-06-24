@@ -15,10 +15,6 @@ export function nodeNeedsAttention(node: WorkflowNode): boolean {
       return !p.title?.trim() || !p.body?.trim();
     case "ivr":
       return !p.scenario?.trim();
-    case "landing":
-      return !p.cta?.trim() || !p.offerTitle?.trim();
-    case "storefront":
-      return !p.offers || p.offers.length === 0;
     case "success":
       return !p.goal?.trim();
     // No required human field — auto/structural:

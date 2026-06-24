@@ -266,44 +266,6 @@ export const NODE_ACTIONS: ActionsForAll = {
       },
     },
   ],
-  storefront: [
-    {
-      chipLabel: "Офферы",
-      promptTemplate: "офферы: ",
-      sublabelOnApply: "Офферы обновлены",
-      parse: (t) => {
-        const v = captureAfter("оффер[ыа]?", t);
-        if (!v) return null;
-        const offers = v
-          .split(/[,;]/)
-          .map((o) => o.trim())
-          .filter(Boolean);
-        return offers.length > 0
-          ? ({ offers } as Partial<NodeParams>)
-          : null;
-      },
-    },
-  ],
-  landing: [
-    {
-      chipLabel: "CTA",
-      promptTemplate: "cta: ",
-      sublabelOnApply: "CTA обновлён",
-      parse: (t) => {
-        const v = captureAfter("cta", t);
-        return v ? ({ cta: v } as Partial<NodeParams>) : null;
-      },
-    },
-    {
-      chipLabel: "Оффер",
-      promptTemplate: "оффер: ",
-      sublabelOnApply: "Оффер обновлён",
-      parse: (t) => {
-        const v = captureAfter("оффер[а]?", t);
-        return v ? ({ offerTitle: v } as Partial<NodeParams>) : null;
-      },
-    },
-  ],
 };
 
 /**

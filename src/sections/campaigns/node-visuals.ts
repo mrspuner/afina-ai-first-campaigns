@@ -10,8 +10,6 @@ import {
   Mail,
   Bell,
   Phone,
-  Store,
-  LayoutTemplate,
   CheckCircle2,
   CircleStop,
   type LucideIcon,
@@ -46,9 +44,6 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
   email:      { border: "#155e75", bg: "#03141a", color: "#67e8f9" },
   push:       { border: "#1e40af", bg: "#050c1e", color: "#93c5fd" },
   ivr:        { border: "#6d28d9", bg: "#0e051b", color: "#c4b5fd" },
-  // Web
-  storefront: { border: "#9a3412", bg: "#1a0806", color: "#fb923c" },
-  landing:    { border: "#b45309", bg: "#1a0f03", color: "#fbbf24" },
   // Legacy
   default:    { border: "#2a2a2a", bg: "#111111", color: "#e5e5e5" },
   channel:    { border: "#134e4a", bg: "#030f0e", color: "#5eead4" },
@@ -73,8 +68,6 @@ export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
   email: Mail,
   push: Bell,
   ivr: Phone,
-  storefront: Store,
-  landing: LayoutTemplate,
   success: CheckCircle2,
   end: CircleStop,
 };

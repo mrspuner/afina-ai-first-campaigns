@@ -69,11 +69,11 @@ describe("parseStructuralCommands", () => {
   });
 
   it("parses replace", () => {
-    const r = parseStructuralCommands("замени Витрина на Лендинг");
+    const r = parseStructuralCommands("замени СМС на Push");
     expect(r.ops[0]).toEqual({
       kind: "replace",
-      ref: "Витрина",
-      newType: "landing",
+      ref: "СМС",
+      newType: "push",
       inlineParams: undefined,
     });
   });
@@ -346,7 +346,7 @@ describe("normalizeNodeRef", () => {
   it("maps English variants to Russian canonical", () => {
     expect(normalizeNodeRef("sms")).toBe("смс");
     expect(normalizeNodeRef("wait")).toBe("задержка");
-    expect(normalizeNodeRef("landing")).toBe("лендинг");
+    expect(normalizeNodeRef("email")).toBe("email");
     expect(normalizeNodeRef("success")).toBe("успех");
   });
 

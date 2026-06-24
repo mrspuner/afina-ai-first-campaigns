@@ -87,13 +87,6 @@ const PARAM_RENDERERS: {
   ],
   success: (p) => [{ label: "Цель", value: p.goal }],
   end: (p) => (p.reason ? [{ label: "Причина", value: p.reason }] : []),
-  storefront: (p) => [
-    { label: "Офферы", value: p.offers.length > 0 ? p.offers.join(", ") : "—" },
-  ],
-  landing: (p) => [
-    { label: "CTA", value: p.cta },
-    { label: "Оффер", value: p.offerTitle },
-  ],
 };
 
 /** Readonly «средняя стоимость одной отправки» row for a communication node. */

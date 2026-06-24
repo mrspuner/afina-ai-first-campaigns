@@ -29,8 +29,6 @@ export const nodeTypeSchema = z.enum([
   "email",
   "push",
   "ivr",
-  "storefront",
-  "landing",
   "default",
   "channel",
   "retarget",
@@ -98,6 +96,5 @@ export type WorkflowOpsResult = z.infer<typeof workflowOpsResultSchema>;
 // ── Type-compat assertion ─────────────────────────────────────────────────────
 // Если StructuralOp в structural-commands.ts изменится и разойдётся
 // с этой схемой — компилятор выдаст ошибку именно здесь, а не в рантайме.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _check: StructuralOp[] = ({} as WorkflowOpsResult).ops;
 void _check;

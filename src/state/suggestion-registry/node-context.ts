@@ -203,32 +203,6 @@ const END: ParamSuggestions = {
   ],
 };
 
-const STOREFRONT: ParamSuggestions = {
-  "Офферы": [
-    ask("storefront-offers-top", "Топ-офферы", "оставь в витрине только самые конверсионные офферы"),
-    ask("storefront-offers-personal", "Под клиента", "подбери офферы под профиль клиента"),
-  ],
-  [WHOLE_NODE_KEY]: [
-    howNode("storefront-how", "Объясни простыми словами, как работает нода Витрина: что она показывает клиенту (подборку офферов), какой у неё параметр (офферы) и когда её стоит применять."),
-    ask("storefront-node-refresh", "Обновить витрину", "перебери витрину под текущий сегмент"),
-  ],
-};
-
-const LANDING: ParamSuggestions = {
-  "CTA": [
-    ask("landing-cta-strong", "Сильнее", "усиль call-to-action на лендинге"),
-    ask("landing-cta-clear", "Прозрачнее", "сделай CTA однозначным, без вариантов толкования"),
-  ],
-  "Оффер": [
-    ask("landing-offer-personal", "Под клиента", "сделай оффер под профиль клиента"),
-    ask("landing-offer-benefit", "Подсветить выгоду", "вынеси главную выгоду в первый экран"),
-  ],
-  [WHOLE_NODE_KEY]: [
-    howNode("landing-how", "Объясни простыми словами, как работает нода Лендинг: что это за страница, какие у неё параметры (CTA, оффер) и когда её стоит применять."),
-    ask("landing-node-clean", "Убрать лишнее", "убери с лендинга всё, что отвлекает от цели"),
-  ],
-};
-
 const MERGE: ParamSuggestions = {
   [WHOLE_NODE_KEY]: [
     howNode("merge-how", "Объясни простыми словами, как работает нода Слияние: что она делает (сводит ветки сценария обратно в одну), как обходится с дублями и когда её стоит применять."),
@@ -248,8 +222,6 @@ const CATALOG: Partial<Record<WorkflowNodeType, ParamSuggestions>> = {
   signal: SIGNAL,
   success: SUCCESS,
   end: END,
-  storefront: STOREFRONT,
-  landing: LANDING,
   merge: MERGE,
 };
 

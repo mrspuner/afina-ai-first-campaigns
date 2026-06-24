@@ -33,9 +33,9 @@ describe("field-directory", () => {
   });
 
   it("does not duplicate a repeated custom value", () => {
-    addFieldValue("landingCta", "Жми сюда");
-    addFieldValue("landingCta", "Жми сюда");
-    const opts = getFieldOptions("landingCta");
+    addFieldValue("eventCatalog", "Жми сюда");
+    addFieldValue("eventCatalog", "Жми сюда");
+    const opts = getFieldOptions("eventCatalog");
     expect(opts.filter((o) => o === "Жми сюда")).toHaveLength(1);
   });
 });

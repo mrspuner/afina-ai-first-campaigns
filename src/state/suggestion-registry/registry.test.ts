@@ -15,14 +15,12 @@ const NODE_FIXTURE: Array<{ nodeType: WorkflowNodeType; params: string[] }> = [
   { nodeType: "signal", params: [] },
   { nodeType: "success", params: ["Цель"] },
   { nodeType: "end", params: ["Причина"] },
-  { nodeType: "storefront", params: ["Офферы"] },
-  { nodeType: "landing", params: ["CTA", "Оффер"] },
   { nodeType: "merge", params: [] },
 ];
 
 const PARAMS_KINDS = [
   "sms", "email", "push", "ivr", "wait", "condition", "split",
-  "merge", "scoring", "signal", "success", "end", "storefront", "landing",
+  "merge", "scoring", "signal", "success", "end",
 ] as const satisfies ReadonlyArray<NodeParams["kind"]>;
 type _ExhaustiveCheck = Exclude<NodeParams["kind"], (typeof PARAMS_KINDS)[number]>;
 const _verifyExhaustive: _ExhaustiveCheck extends never ? true : false = true;

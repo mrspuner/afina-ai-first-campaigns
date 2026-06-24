@@ -9,8 +9,8 @@ describe("NODE_FIELD_EDITABILITY", () => {
     const kinds = Object.keys(NODE_FIELD_EDITABILITY).sort();
     expect(kinds).toEqual(
       [
-        "condition", "email", "end", "ivr", "landing", "merge", "scoring",
-        "push", "signal", "split", "sms", "storefront", "success", "wait",
+        "condition", "email", "end", "ivr", "merge", "scoring",
+        "push", "signal", "split", "sms", "success", "wait",
       ].sort()
     );
   });
@@ -88,7 +88,7 @@ describe("NODE_FIELD_EDITABILITY", () => {
     const combo = getFieldMeta("ivr", "Текст");
     expect(combo?.control).toBe("combo");
     expect(combo?.optionsKey).toBe("ivrScenario");
-    expect(getFieldMeta("landing", "Оффер")?.control).toBe("combo");
+    expect(getFieldMeta("success", "Цель")?.control).toBe("combo");
   });
 
   it("every combo field carries an optionsKey", () => {

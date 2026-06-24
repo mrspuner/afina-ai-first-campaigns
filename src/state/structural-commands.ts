@@ -64,8 +64,6 @@ const TYPE_LOOKUP: Record<string, WorkflowNodeType> = {
   "ivr": "ivr",
   "задержка": "wait",
   "ожидание": "wait",
-  "витрина": "storefront",
-  "лендинг": "landing",
   "успех": "success",
   "конец": "end",
 };
@@ -92,10 +90,6 @@ const REF_SYNONYMS: Record<string, string> = {
   пауза: "задержка",
   wait: "задержка",
   delay: "задержка",
-  витрина: "витрина",
-  storefront: "витрина",
-  лендинг: "лендинг",
-  landing: "лендинг",
   успех: "успех",
   success: "успех",
   конец: "конец",
@@ -291,8 +285,6 @@ const TYPE_LABEL: Record<WorkflowNodeType, string> = {
   email: "Email",
   push: "Push",
   ivr: "Звонок",
-  storefront: "Витрина",
-  landing: "Лендинг",
   default: "Нода",
   channel: "Канал",
   retarget: "Ретаргет",
@@ -363,10 +355,6 @@ function defaultParamsFor(kind: WorkflowNodeType): NodeParams | undefined {
     case "split":
       // Дефолт для новых сплитов — поровну (A6).
       return { kind: "split", by: "equal", branches: 2 };
-    case "storefront":
-      return { kind: "storefront", offers: [] };
-    case "landing":
-      return { kind: "landing", cta: "Подробнее", offerTitle: "" };
     case "success":
       return { kind: "success", goal: "Конверсия" };
     case "end":
