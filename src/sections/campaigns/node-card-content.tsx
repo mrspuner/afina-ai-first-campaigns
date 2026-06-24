@@ -52,7 +52,7 @@ const PARAM_RENDERERS: {
       : []),
   ],
   condition: (p) => [
-    { label: "Триггер", value: conditionTriggerLabel(p.trigger) },
+    { label: "Событие", value: conditionTriggerLabel(p.trigger) },
   ],
   split: (p) => [
     {

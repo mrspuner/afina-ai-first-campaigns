@@ -49,6 +49,16 @@ describe("NODE_FIELD_EDITABILITY", () => {
     expect(m?.optionsKey).toBe("smsTime");
   });
 
+  it("Block 7 §3 — wait/condition «Событие» pull from the shared event catalog", () => {
+    expect(getFieldMeta("condition", "Триггер")).toBeUndefined();
+    const cond = getFieldMeta("condition", "Событие");
+    expect(cond?.control).toBe("combo");
+    expect(cond?.optionsKey).toBe("eventCatalog");
+    const wait = getFieldMeta("wait", "Событие");
+    expect(wait?.control).toBe("combo");
+    expect(wait?.optionsKey).toBe("eventCatalog");
+  });
+
   it("communication nodes expose «Шаблон» instead of free Текст/Заголовок (aim #10)", () => {
     expect(getFieldMeta("sms", "Шаблон")?.control).toBe("template");
     expect(getFieldMeta("email", "Шаблон")?.control).toBe("template");

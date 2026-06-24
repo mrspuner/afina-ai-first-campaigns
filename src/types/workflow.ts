@@ -69,10 +69,12 @@ export type WaitParams = {
 
 export type ConditionParams = {
   kind: "condition";
-  trigger:
-    | "delivered" | "not_delivered"
-    | "opened" | "not_opened"
-    | "clicked" | "not_clicked";
+  /**
+   * Событие-условие (Block 7 §3) — берётся из общего справочника событий
+   * (`eventCatalog`). Строка, чтобы допускать любые события справочника; легаси
+   * значения («opened», «clicked», …) остаются валидными и маппятся в подписи.
+   */
+  trigger: string;
 };
 
 export type SplitParams = {

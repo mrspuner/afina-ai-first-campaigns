@@ -21,6 +21,7 @@ import { createTemplate, applyCampaignContext } from "@/state/workflow-templates
 import { computeNeedsAttention } from "@/state/workflow-validation";
 import { DropZone } from "@/components/ui/drop-zone";
 import { rngFor, seededInt } from "@/state/metrics";
+import { getFieldOptions } from "@/state/field-directory";
 import { Plus } from "lucide-react";
 import { matchActions } from "@/state/node-actions";
 import {
@@ -101,7 +102,7 @@ function computeDynamicSublabel(
     const days = Math.round(h / 24);
     return `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`;
   }
-  // Condition → triggerLabel.
+  // Condition → событие-метка (легаси-enum маппится, событие справочника — как есть).
   if (kind === "condition" && "trigger" in patch && patch.trigger !== undefined) {
     const t = patch.trigger as string;
     const map: Record<string, string> = {
@@ -112,7 +113,7 @@ function computeDynamicSublabel(
       delivered: "Доставлено?",
       not_delivered: "Не доставлено?",
     };
-    return map[t] ?? null;
+    return map[t] ?? t;
   }
   // Split → reflect mode.
   if (kind === "split" && "by" in patch && patch.by !== undefined) {
@@ -206,7 +207,8 @@ function fallbackParamsPatch(
     case "wait":
       return { mode: "duration", durationHours: randPick([1, 3, 6, 12, 24, 48]) };
     case "condition":
-      return { trigger: randPick(["opened", "not_opened", "clicked", "not_clicked"] as const) };
+      // Block 7 §3 — событие из общего справочника.
+      return { trigger: randPick(getFieldOptions("eventCatalog")) };
     case "split":
       // Число веток меняется только осознанно — через параметр «Ветки» или
       // тип разделения (структурный парсер), не случайно. Свободный промпт,

@@ -52,13 +52,15 @@ export const NODE_FIELD_EDITABILITY: Record<
     // «Сценарий» — это текст для проговаривания (выбор текста + ИИ-пункт).
     "Текст": { editability: "manual", paramKey: "scenario", control: "combo", optionsKey: "ivrScenario" },
   },
+  // Block 7 §3 — «Событие» берётся из общего справочника событий (combo + ИИ).
   wait: {
     "Режим": { editability: "readonly", paramKey: "mode" },
     "Длительность": { editability: "ai", paramKey: "durationHours" },
-    "Событие": { editability: "ai", paramKey: "untilEvent" },
+    "Событие": { editability: "manual", paramKey: "untilEvent", control: "combo", optionsKey: "eventCatalog" },
   },
   condition: {
-    "Триггер": { editability: "ai", paramKey: "trigger" },
+    // Триггер заменён на «Событие» из справочника (Block 7 §3).
+    "Событие": { editability: "manual", paramKey: "trigger", control: "combo", optionsKey: "eventCatalog" },
   },
   split: {
     // A6 — сознательное исключение из A7: сплиттер задаётся селектами, не ИИ.
