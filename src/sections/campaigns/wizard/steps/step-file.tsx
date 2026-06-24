@@ -81,7 +81,11 @@ function OwnSignalTypeSelector({
 }
 
 export function StepFile({ data, onNext, onBack }: StepProps) {
-  const [file, setFile] = useState<File | null>(data.file);
+  // Block 4a model migration: StepData now carries `files: File[]`. The upload
+  // UI here still handles a single base (multi-file UI lands in Block 4b); seed
+  // from the first uploaded file so revisits skip re-hashing.
+  const seededFile = data.files[0] ?? null;
+  const [file, setFile] = useState<File | null>(seededFile);
   const [isHashing, setIsHashing] = useState(false);
   const isOwn = data.sourceType === "own";
 
@@ -96,7 +100,10 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
   const { title, subtitle } = fileCopy(data.sourceType);
 
   function emit(rowCount: number) {
-    const partial: Partial<StepData> = { file, fileRowCount: rowCount };
+    const partial: Partial<StepData> = {
+      files: file ? [file] : [],
+      fileRowCount: rowCount,
+    };
     // Carry the own-source signal-type choice on the DEDICATED field — never on
     // `scenario` — so handleNext's scenarioChanged reset never fires.
     if (isOwn && ownSignalType) {
@@ -108,8 +115,8 @@ export function StepFile({ data, onNext, onBack }: StepProps) {
   function handleContinue() {
     if (!file) return;
     // Fresh file → hash before proceeding (mirrors the old upload step). A
-    // previously-hashed file (unchanged from data.file) reuses its row count.
-    if (file !== data.file) {
+    // previously-hashed file (unchanged from the seeded file) reuses its count.
+    if (file !== seededFile) {
       setIsHashing(true);
       return;
     }

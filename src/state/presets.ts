@@ -12,6 +12,7 @@ import {
   artifactKindForCampaign,
   estimateArtifactCount,
 } from "./artifact-metrics";
+import { campaignBaseRows } from "@/sections/campaigns/campaign-metrics";
 
 const PRETTY_NAMES = [
   "Летний апсейл премиум",
@@ -166,7 +167,7 @@ export function generateArtifacts(opts: GenerateArtifactsOpts): Artifact[] {
     if (!LAUNCHED_STATUSES.includes(campaign.status)) continue;
     const base = estimateArtifactCount(campaign);
     // Spread around the deterministic base for plausible variety.
-    const count = campaign.file?.rowCount
+    const count = campaignBaseRows(campaign)
       ? base
       : rndInt(rng, Math.round(base * 0.5), Math.round(base * 2.5));
     out.push({

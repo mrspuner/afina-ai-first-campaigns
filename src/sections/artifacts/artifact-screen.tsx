@@ -111,7 +111,7 @@ export function ArtifactScreenView({
             <SummaryRow label="Источник">{SOURCE_LABEL[campaign.sourceType ?? "new"]}</SummaryRow>
             <SummaryRow label="Интересы">{campaign.interests?.length ? campaign.interests.join(", ") : "—"}</SummaryRow>
             <SummaryRow label="Каналы">{campaign.channels?.length ? campaign.channels.map((c) => CHANNEL_LABEL[c]).join(", ") : "—"}</SummaryRow>
-            <SummaryRow label="Файл базы">{campaign.file ? campaign.file.name : "—"}</SummaryRow>
+            <SummaryRow label="Файл базы">{campaign.files?.length ? campaign.files.map((f) => f.name).join(", ") : "—"}</SummaryRow>
             <SummaryRow label="Бюджет">{campaign.budget ? `₽ ${campaign.budget.toLocaleString("ru-RU")}` : "—"}</SummaryRow>
           </div>
         </CardSection>

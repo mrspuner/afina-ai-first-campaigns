@@ -78,7 +78,7 @@ function makeData(overrides: Partial<StepData> = {}): StepData {
     sourceType: "new",
     channels: [],
     budget: null,
-    file: null,
+    files: [],
     ...overrides,
   };
 }

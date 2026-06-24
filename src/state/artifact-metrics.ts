@@ -1,4 +1,5 @@
 import type { Campaign, Artifact } from "./app-state";
+import { campaignBaseRows } from "@/sections/campaigns/campaign-metrics";
 
 /** Fallback audience base mirrors the wizard's FALLBACK_BASE. */
 const FALLBACK_BASE = 10_000;
@@ -9,7 +10,8 @@ const FALLBACK_BASE = 10_000;
  * deterministic scenario-independent fallback (no RNG — keeps tests stable).
  */
 export function estimateArtifactCount(campaign: Campaign): number {
-  if (campaign.file?.rowCount) return campaign.file.rowCount;
+  const rows = campaignBaseRows(campaign);
+  if (rows) return rows;
   return FALLBACK_BASE;
 }
 

@@ -6,6 +6,11 @@ import { UNIT_COST } from "./campaign-cost";
 /** Референсная цена за касание — та же база (SMS), что и в прогнозе оплаты. */
 const COST_PER_TOUCH = UNIT_COST.sms;
 
+/** Суммарный размер базы кампании (строк) по всем файлам; undefined, если файлов нет. */
+export function campaignBaseRows(c: Campaign): number | undefined {
+  return c.files?.length ? c.files.reduce((sum, f) => sum + f.rowCount, 0) : undefined;
+}
+
 /**
  * Метрики карточки кампании, посчитанные из того же куба статистики
  * (`fact-cube`), что и раздел «Статистика» — поэтому «Отправки» и CR на
@@ -39,7 +44,7 @@ export function getCampaignCardMetrics(
   // запуске; иначе — детерминированная рекомендация от размера загруженной
   // базы. Сигнал-джойна больше нет.
   const plannedBudget =
-    campaign.budget ?? recommendBudget(campaign.file?.rowCount ?? 0);
+    campaign.budget ?? recommendBudget(campaignBaseRows(campaign) ?? 0);
 
   if (!launched) {
     return { launched, sends: 0, crPct: 0, plannedBudget, actualSpend: 0 };

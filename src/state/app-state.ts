@@ -60,7 +60,7 @@ export type Campaign = {
   sourceType?: SourceType;
   channels?: Channel[];
   interests?: string[];
-  file?: { name: string; rowCount: number };
+  files?: { name: string; rowCount: number }[];
   dailyBudget?: number;
   /**
    * Distinguishes "scoring running" from "communication started" — `status`
@@ -433,11 +433,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       const scenarioId = sd.scenario ?? "";
       const n =
         state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
-      // StepData.file is the raw browser `File | null`; Campaign.file is the
-      // lightweight `{ name; rowCount }` snapshot. Map explicitly, pulling the
-      // approximate row count from StepData.fileRowCount.
-      const file = sd.file
-        ? { name: sd.file.name, rowCount: sd.fileRowCount ?? 0 }
+      // StepData.files are raw browser `File[]`; Campaign.files is the
+      // lightweight `{ name; rowCount }[]` snapshot. The upload step computes
+      // only the SUMMARY row count (sd.fileRowCount), so distribute it across
+      // the files evenly, with the remainder landing on the first file.
+      const totalRows = sd.fileRowCount ?? 0;
+      const files = sd.files.length
+        ? sd.files.map((f, i) => ({
+            name: f.name,
+            rowCount:
+              i === 0
+                ? totalRows -
+                  Math.floor(totalRows / sd.files.length) * (sd.files.length - 1)
+                : Math.floor(totalRows / sd.files.length),
+          }))
         : undefined;
       const newCampaign: Campaign = {
         id: `cmp_${nanoid(6)}`,
@@ -447,7 +456,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         sourceType: sd.sourceType,
         channels: sd.channels,
         interests: sd.interests,
-        file,
+        files,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,
         // new drafts collect signals pre-launch — start in the scoring phase so

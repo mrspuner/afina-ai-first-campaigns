@@ -10,7 +10,7 @@ function launchedState(over: Partial<Campaign>, artifacts: Artifact[] = []) {
 
 describe("campaign_launched artifact generation", () => {
   it("own → artifact at launch + phase communicating", () => {
-    const s = launchedState({ sourceType: "own", channels: ["sms"], file: { name: "b.csv", rowCount: 4200 } });
+    const s = launchedState({ sourceType: "own", channels: ["sms"], files: [{ name: "b.csv", rowCount: 4200 }] });
     expect(s.artifacts).toHaveLength(1);
     expect(s.artifacts[0]).toMatchObject({ campaignId: "c1", kind: "signals_conversions", count: 4200 });
     expect(s.campaigns[0].phase).toBe("communicating");

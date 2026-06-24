@@ -20,11 +20,12 @@ export interface StepData {
   /** Selected communication channels. Empty array = degenerate campaign (no comms). */
   channels: Channel[];
   budget: number | null;
-  file: File | null;
+  /** Uploaded base files (one or more). Empty array = no base uploaded yet. */
+  files: File[];
   /**
-   * Approximate number of rows in the uploaded base file. Populated on
-   * step-4 (база) when a file is selected; downstream steps (budget) read
-   * it to suggest a sensible default.
+   * Approximate total number of rows across ALL uploaded base files.
+   * Populated on the upload step (база); downstream steps (budget) read it to
+   * suggest a sensible default.
    */
   fileRowCount?: number;
   /**
@@ -58,7 +59,7 @@ export const initialStepData: StepData = {
   sourceType: "new",
   channels: [],
   budget: null,
-  file: null,
+  files: [],
 };
 
 export interface StepProps {

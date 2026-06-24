@@ -72,16 +72,16 @@ describe("StepFile — own-source signal-type dropdown", () => {
 
   it("flushes the chosen ownSignalType into the «Далее» payload — never on `scenario`", () => {
     const onNext = vi.fn();
-    // Seed an already-uploaded file (file === data.file) so «Далее» skips the
-    // hashing branch and emits synchronously, plus a pre-chosen signal type.
+    // Seed an already-uploaded file (file === data.files[0]) so «Далее» skips
+    // the hashing branch and emits synchronously, plus a pre-chosen signal type.
     const file = new File(["a,b\n1,2"], "list.csv", { type: "text/csv" });
-    renderOwn(onNext, { file, fileRowCount: 4242, ownSignalType: "Реактивация" });
+    renderOwn(onNext, { files: [file], fileRowCount: 4242, ownSignalType: "Реактивация" });
 
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
     expect(onNext).toHaveBeenCalledTimes(1);
     const payload = onNext.mock.calls[0][0];
     expect(payload).toMatchObject({
-      file,
+      files: [file],
       fileRowCount: 4242,
       ownSignalType: "Реактивация",
     });
@@ -93,7 +93,7 @@ describe("StepFile — own-source signal-type dropdown", () => {
   it("omits ownSignalType from the payload when none was chosen", () => {
     const onNext = vi.fn();
     const file = new File(["a"], "list.csv", { type: "text/csv" });
-    renderOwn(onNext, { file, fileRowCount: 10 });
+    renderOwn(onNext, { files: [file], fileRowCount: 10 });
 
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
     expect(onNext).toHaveBeenCalledTimes(1);

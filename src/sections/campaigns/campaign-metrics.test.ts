@@ -22,7 +22,7 @@ describe("getCampaignCardMetrics (campaign-first)", () => {
 
   it("falls back to recommendBudget from file rowCount when no budget", () => {
     const m = getCampaignCardMetrics(
-      campaign({ sourceType: "own", channels: ["sms"], file: { name: "b.csv", rowCount: 10_000 } })
+      campaign({ sourceType: "own", channels: ["sms"], files: [{ name: "b.csv", rowCount: 10_000 }] })
     );
     expect(m.plannedBudget).toBeGreaterThan(0);
   });

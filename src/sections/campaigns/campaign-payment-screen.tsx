@@ -14,6 +14,7 @@ import { splitCampaignPayments } from "./campaign-payments";
 import { STREAM_DAYS } from "./campaign-budget-estimate";
 import { paymentSplitDisplay } from "@/sections/campaigns/payment-split-display";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
+import { campaignBaseRows } from "@/sections/campaigns/campaign-metrics";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
@@ -74,7 +75,9 @@ export function CampaignPaymentScreen() {
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
     : undefined;
   const audienceSize =
-    campaign?.file?.rowCount ?? campaignArtifact?.count ?? FALLBACK_BASE;
+    (campaign ? campaignBaseRows(campaign) : undefined) ??
+    campaignArtifact?.count ??
+    FALLBACK_BASE;
 
   // The signal type the cost model needs comes from the campaign's scenario.
   const scenarioSignalType = campaign?.scenario
