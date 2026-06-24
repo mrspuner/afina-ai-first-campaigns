@@ -11,12 +11,14 @@
 
 export type FieldOptionsKey =
   | "smsText"
+  | "smsTime"
   | "emailSubject"
   | "pushTitle"
   | "pushText"
   | "ivrScenario"
   | "successGoal"
   | "endReason"
+  | "eventCatalog"
   | "landingCta"
   | "landingOffer";
 
@@ -26,6 +28,9 @@ export const FIELD_PRESETS: Record<FieldOptionsKey, string[]> = {
     "Только сегодня: ставка по кредиту от 12%. Подробности по ссылке.",
     "Напоминаем о вашей брони. Подтвердите, чтобы не потерять место.",
   ],
+  // Block 7 — выбор времени отправки SMS (таймпикер-пресеты; combo допускает
+  // ввод произвольного времени «ЧЧ:ММ»).
+  smsTime: ["Сразу", "09:00", "12:00", "15:00", "18:00", "20:00"],
   emailSubject: [
     "Ваше предложение готово",
     "Персональная ставка внутри",
@@ -58,6 +63,18 @@ export const FIELD_PRESETS: Record<FieldOptionsKey, string[]> = {
     "Превышен лимит контактов",
     "Отписка от рассылок",
     "Лид передан в другой сценарий",
+  ],
+  // Block 7 — общий справочник событий: питает wait.«Событие» и condition.«Событие».
+  eventCatalog: [
+    "Письмо доставлено",
+    "Письмо открыто",
+    "Ссылка в письме нажата",
+    "SMS доставлено",
+    "Push открыт",
+    "Звонок принят",
+    "Заявка оформлена",
+    "Платёж прошёл",
+    "Визит на сайт",
   ],
   landingCta: [
     "Оформить заявку",

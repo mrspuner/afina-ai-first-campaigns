@@ -33,8 +33,20 @@ describe("NODE_FIELD_EDITABILITY", () => {
     }
   });
 
-  it("classifies sms link as ai", () => {
-    expect(getFieldMeta("sms", "Ссылка")?.editability).toBe("ai");
+  it("Block 7 §1 — channel component fields move into the template (removed from the node)", () => {
+    expect(getFieldMeta("sms", "Alpha-name")).toBeUndefined();
+    expect(getFieldMeta("sms", "Ссылка")).toBeUndefined();
+    expect(getFieldMeta("email", "Тема")).toBeUndefined();
+    expect(getFieldMeta("email", "Отправитель")).toBeUndefined();
+    expect(getFieldMeta("email", "Ссылка")).toBeUndefined();
+    expect(getFieldMeta("push", "Deeplink")).toBeUndefined();
+    expect(getFieldMeta("ivr", "Голос")).toBeUndefined();
+  });
+
+  it("Block 7 §1 — SMS «Время» is a send-time combo (timepicker)", () => {
+    const m = getFieldMeta("sms", "Время");
+    expect(m?.control).toBe("combo");
+    expect(m?.optionsKey).toBe("smsTime");
   });
 
   it("communication nodes expose «Шаблон» instead of free Текст/Заголовок (aim #10)", () => {
@@ -63,19 +75,10 @@ describe("NODE_FIELD_EDITABILITY", () => {
   });
 
   it("gives former-manual fields a combo control with an optionsKey", () => {
-    const combo = getFieldMeta("ivr", "Сценарий");
+    const combo = getFieldMeta("ivr", "Текст");
     expect(combo?.control).toBe("combo");
     expect(combo?.optionsKey).toBe("ivrScenario");
     expect(getFieldMeta("landing", "Оффер")?.control).toBe("combo");
-  });
-
-  it("keeps the email subject as a normal combo", () => {
-    // Email body free field is gone (aim #10) — only «Тема» stays a combo.
-    expect(getFieldMeta("email", "Тема")?.control).toBe("combo");
-  });
-
-  it("leaves ai fields without a combo control", () => {
-    expect(getFieldMeta("sms", "Ссылка")?.control).toBeUndefined();
   });
 
   it("every combo field carries an optionsKey", () => {

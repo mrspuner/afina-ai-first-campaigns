@@ -23,36 +23,23 @@ type ParamRow = { label: string; value: string };
 const PARAM_RENDERERS: {
   [K in NodeParams["kind"]]: (p: Extract<NodeParams, { kind: K }>) => ParamRow[];
 } = {
+  // Block 7 §1 — каналы показывают только «Шаблон» (+ SMS «Время»); остальные
+  // компоненты сообщения живут внутри шаблона.
   sms: (p) => [
     { label: "Шаблон", value: p.text || "—" },
-    { label: "Alpha-name", value: p.alphaName || "—" },
     { label: "Время", value: p.scheduledAt === "immediate" ? "Сразу" : p.scheduledAt },
-    ...(p.link ? [{ label: "Ссылка", value: p.link }] : []),
     costRow("sms"),
   ],
   email: (p) => [
-    { label: "Тема", value: p.subject || "—" },
     { label: "Шаблон", value: p.body || "—" },
-    { label: "Отправитель", value: p.sender || "—" },
-    ...(p.link ? [{ label: "Ссылка", value: p.link }] : []),
     costRow("email"),
   ],
   push: (p) => [
     { label: "Шаблон", value: p.body || p.title || "—" },
-    ...(p.deeplink ? [{ label: "Deeplink", value: p.deeplink }] : []),
     costRow("push"),
   ],
   ivr: (p) => [
-    { label: "Сценарий", value: p.scenario || "—" },
-    {
-      label: "Голос",
-      value:
-        p.voiceType === "male"
-          ? "Мужской"
-          : p.voiceType === "female"
-            ? "Женский"
-            : "Нейтральный",
-    },
+    { label: "Текст", value: p.scenario || "—" },
     costRow("ivr"),
   ],
   wait: (p) => [

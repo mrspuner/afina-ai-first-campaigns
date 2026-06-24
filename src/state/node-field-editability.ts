@@ -35,28 +35,22 @@ export const NODE_FIELD_EDITABILITY: Record<
   NodeParams["kind"],
   Record<string, NodeFieldMeta>
 > = {
+  // Block 7 §1 — на ноде канала остаётся «Шаблон» (несёт все компоненты
+  // сообщения); alpha-name/тема/отправитель/ссылка/deeplink/голос ушли внутрь
+  // редактора шаблона. SMS дополнительно несёт «Время» (таймпикер отправки).
   sms: {
-    // Правка 10: свободный «Текст» убран — текст приходит из именованного шаблона.
     "Шаблон": { editability: "manual", paramKey: "text", control: "template" },
-    "Alpha-name": { editability: "ai", paramKey: "alphaName" },
-    "Время": { editability: "ai", paramKey: "scheduledAt" },
-    "Ссылка": { editability: "ai", paramKey: "link" },
+    "Время": { editability: "manual", paramKey: "scheduledAt", control: "combo", optionsKey: "smsTime" },
   },
   email: {
-    "Тема": { editability: "manual", paramKey: "subject", control: "combo", optionsKey: "emailSubject" },
-    // Правка 10: свободное тело письма убрано — заменено селектом шаблонов канала email.
     "Шаблон": { editability: "manual", paramKey: "body", control: "template" },
-    "Отправитель": { editability: "ai", paramKey: "sender" },
-    "Ссылка": { editability: "ai", paramKey: "link" },
   },
   push: {
-    // Правка 10: свободные «Заголовок»/«Текст» убраны — заменены селектом шаблонов.
     "Шаблон": { editability: "manual", paramKey: "body", control: "template" },
-    "Deeplink": { editability: "ai", paramKey: "deeplink" },
   },
   ivr: {
-    "Сценарий": { editability: "manual", paramKey: "scenario", control: "combo", optionsKey: "ivrScenario" },
-    "Голос": { editability: "ai", paramKey: "voiceType" },
+    // «Сценарий» — это текст для проговаривания (выбор текста + ИИ-пункт).
+    "Текст": { editability: "manual", paramKey: "scenario", control: "combo", optionsKey: "ivrScenario" },
   },
   wait: {
     "Режим": { editability: "readonly", paramKey: "mode" },
