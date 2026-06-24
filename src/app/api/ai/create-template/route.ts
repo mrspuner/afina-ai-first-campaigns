@@ -13,6 +13,7 @@ import {
   resolveModel,
 } from "@/lib/ai/provider";
 import { unstringifyJsonArgs } from "@/lib/ai/repair-tool-call";
+import { starterTemplateVariants } from "@/state/template-starters";
 
 const requestSchema = z.object({
   channel: z.enum(["sms", "email", "push", "ivr"]),
@@ -27,10 +28,6 @@ const CHANNEL_SYSTEM_HINTS: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
-  if (!providerKeyPresent(activeProviderId())) {
-    return Response.json({ error: "no-key" }, { status: 503 });
-  }
-
   let parsed;
   try {
     parsed = requestSchema.safeParse(await request.json());
@@ -41,6 +38,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid-request" }, { status: 400 });
   }
   const { channel, intent } = parsed.data;
+
+  // Block 7 §5 — без AI-ключа отдаём стартовые варианты из пресетов канала
+  // (осиротевшие тексты шаблонов), чтобы создание шаблона работало в прототипе.
+  if (!providerKeyPresent(activeProviderId())) {
+    return Response.json({ variants: starterTemplateVariants(channel) }, { status: 200 });
+  }
 
   const hint = CHANNEL_SYSTEM_HINTS[channel] ?? "";
   const system = [
@@ -88,16 +91,15 @@ export async function POST(request: Request) {
     });
 
     if (variants.length === 0) {
-      return Response.json({ error: "no-variants" }, { status: 502 });
+      // Block 7 §5 — пустой результат AI → стартовые варианты из пресетов.
+      return Response.json({ variants: starterTemplateVariants(channel) }, { status: 200 });
     }
     return Response.json({ variants }, { status: 200 });
   } catch (err) {
     const s = String(err).toLowerCase();
     const rateLimited = s.includes("429") || s.includes("rate") || s.includes("quota");
     console.error("[ai/create-template] LLM call failed:", rateLimited ? "rate-limited" : "ai-failed");
-    return Response.json(
-      { error: rateLimited ? "rate-limited" : "ai-failed" },
-      { status: 502 }
-    );
+    // Block 7 §5 — AI недоступен → стартовые варианты из пресетов канала.
+    return Response.json({ variants: starterTemplateVariants(channel) }, { status: 200 });
   }
 }
