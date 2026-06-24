@@ -11,8 +11,6 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
-import { useAppState, useAppDispatch } from "@/state/app-state-context";
-import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
@@ -120,21 +118,6 @@ export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
 type Mode = "recommended" | "custom";
 
 /**
- * Launch button label for the budget step: when the balance does not cover
- * the chosen budget we surface the top-up path, matching the payment screen
- * (campaign-payment-screen.tsx). Uses the same computeShortfall as the
- * payment screen so the threshold is identical.
- */
-export function launchButtonLabel(args: {
-  balance: number;
-  required: number;
-}): string {
-  return computeShortfall(args.balance, args.required) <= 0
-    ? "Запустить"
-    : "Пополнить и запустить";
-}
-
-/**
  * Optional ceiling line for the budget summary (aim #20). Display-only — it
  * does NOT alter the cost model. Returns null when unset so the row is
  * omitted entirely.
@@ -198,9 +181,6 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
 
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
-  const { balance } = useAppState();
-  const dispatch = useAppDispatch();
-  const [topUpOpen, setTopUpOpen] = useState(false);
 
   const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
   const [customValue, setCustomValue] = useState<string>(() => {
@@ -229,7 +209,6 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
     mode === "recommended" ? recommendedValue : customIsValid ? customParsed : 0;
   const canContinue =
     mode === "recommended" ? recommendedValue > 0 : customIsValid;
-  const enoughBalance = computeShortfall(balance, activeValue) <= 0;
 
   // In «Своя сумма» mode the forecast rows rescale proportionally to the chosen
   // budget (Итого = the custom sum); otherwise they show the recommended estimate.
@@ -290,23 +269,6 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
         ? { dailyBudget: estimate.dailyBudget }
         : {}),
     });
-  }
-
-  function handleContinue() {
-    // Mirror the payment screen: when the balance does not cover the chosen
-    // budget the button reads «Пополнить и запустить» and must open the
-    // top-up modal instead of advancing the wizard (aim #22).
-    if (!enoughBalance) {
-      setTopUpOpen(true);
-      return;
-    }
-    proceed();
-  }
-
-  function handleTopUpSuccess(amount: number) {
-    dispatch({ type: "balance_topup", amount });
-    setTopUpOpen(false);
-    proceed();
   }
 
   return (
@@ -523,20 +485,12 @@ export function StepBudget({ data, onNext, onBack }: StepProps) {
 
         <StepFooter
           onBack={onBack}
-          onContinue={handleContinue}
-          continueLabel={launchButtonLabel({ balance, required: activeValue })}
+          onContinue={proceed}
+          continueLabel="Далее"
           continueDisabled={!canContinue}
         />
       </div>
 
-      <TopUpModal
-        open={topUpOpen}
-        onOpenChange={setTopUpOpen}
-        balance={balance}
-        cost={activeValue}
-        entityLabel="Запуск кампании"
-        onPaymentSuccess={handleTopUpSuccess}
-      />
     </StepContent>
   );
 }

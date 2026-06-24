@@ -459,10 +459,11 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         campaigns: [...state.campaigns, newCampaign],
-        // Wizard finish now opens the campaign CARD (not the workflow editor).
+        // Wizard finish now opens the workflow graph editor (draft, not launched).
         view: {
-          kind: "campaign",
+          kind: "workflow",
           campaign: { id: newCampaign.id, name: newCampaign.name },
+          launched: false,
         },
         activeSection: null,
         campaignFilter: [],

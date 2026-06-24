@@ -154,13 +154,29 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
   });
 });
 
-describe("StepBudget — insufficient balance opens TopUpModal (aim #22)", () => {
+describe("StepBudget — footer button is «Далее» and always advances (group B #6)", () => {
   const SCENARIO = "base-first-deal"; // signalType "Первая сделка", cost > 0
 
-  it("clicking «Пополнить и запустить» opens the TopUpModal and does NOT advance", () => {
-    // Default app-state balance is 0; with a scenario + channels the
-    // recommended cost is > 0, so the footer button reads «Пополнить и
-    // запустить» and the balance is insufficient.
+  it("footer button label is «Далее» regardless of balance", () => {
+    // Default app-state balance is 0; cost > 0 — but button must still read «Далее».
+    renderStep(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "new",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Далее" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /пополнить/i })).toBeNull();
+    cleanup();
+  });
+
+  it("clicking «Далее» calls onNext (does NOT open a top-up modal)", () => {
     const onNext = vi.fn();
     renderStep(
       <StepBudget
@@ -174,12 +190,12 @@ describe("StepBudget — insufficient balance opens TopUpModal (aim #22)", () =>
         onBack={vi.fn()}
       />
     );
-    const button = screen.getByRole("button", { name: "Пополнить и запустить" });
+    const button = screen.getByRole("button", { name: "Далее" });
     fireEvent.click(button);
-    // TopUpModal is now open (its dialog title is rendered).
-    expect(screen.getByText("Пополнить баланс")).toBeTruthy();
-    // The wizard must NOT advance to the next step.
-    expect(onNext).not.toHaveBeenCalled();
+    // Wizard advances — no top-up gate.
+    expect(onNext).toHaveBeenCalledTimes(1);
+    // No TopUpModal dialog.
+    expect(screen.queryByText("Пополнить баланс")).toBeNull();
     cleanup();
   });
 });
