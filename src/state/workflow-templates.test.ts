@@ -295,3 +295,58 @@ describe("channel-aware template generation", () => {
     }
   });
 });
+
+// Bug 2a/2b — an EXPLICITLY empty channels array («без коммуникации») must
+// build a MINIMAL graph: only the signal path (entry + [scoring] + signal
+// result) and a success node. No communication nodes (email/sms/push/ivr) at
+// all, so the budget's communication line is zero. A campaign that simply never
+// passed channels (`undefined`) still falls back to the legacy template.
+describe("empty-channels «без коммуникации» minimal template (bug 2a/2b)", () => {
+  const COMM_TYPES = new Set(["email", "sms", "push", "ivr"]);
+
+  it("channels=[] (new) → only source+scoring+signal+success, ZERO comm nodes", () => {
+    const { nodes } = createTemplate("Регистрация", "new", []);
+    const types = nodes.map((n) => n.data.nodeType);
+    expect(types.filter((t) => COMM_TYPES.has(t))).toEqual([]);
+    expect(types).toContain("source");
+    expect(types).toContain("scoring");
+    expect(types).toContain("signal");
+    expect(types).toContain("success");
+    const allowed = new Set(["source", "scoring", "signal", "success"]);
+    expect(types.every((t) => allowed.has(t))).toBe(true);
+  });
+
+  it.each(SIGNAL_TYPES)("channels=[] has zero comm nodes for %s", (type) => {
+    const { nodes } = createTemplate(type, "new", []);
+    expect(nodes.filter((n) => COMM_TYPES.has(n.data.nodeType))).toEqual([]);
+  });
+
+  it("channels=[] own source → signal+success, no scoring, no comm nodes", () => {
+    const { nodes } = createTemplate("Регистрация", "own", []);
+    const types = nodes.map((n) => n.data.nodeType);
+    expect(types.filter((t) => COMM_TYPES.has(t))).toEqual([]);
+    expect(types).not.toContain("scoring");
+    expect(types).toContain("signal");
+    expect(types).toContain("success");
+  });
+
+  it("channels=[] template still validates ok with the signal bound", () => {
+    for (const st of ["new", "stream", "own"] as const) {
+      const t = createTemplate("Регистрация", st, []);
+      expect(validateWorkflow(t, true).ok).toBe(true);
+    }
+  });
+
+  it("NON-empty channels still include the expected comm nodes (normal path)", () => {
+    const { nodes } = createTemplate("Регистрация", "new", ["sms", "email"]);
+    const types = nodes.map((n) => n.data.nodeType);
+    expect(types).toContain("sms");
+    expect(types).toContain("email");
+  });
+
+  it("channels=undefined still falls back to legacy (comm nodes present)", () => {
+    const { nodes } = createTemplate("Регистрация", "new");
+    const types = nodes.map((n) => n.data.nodeType);
+    expect(types.some((t) => COMM_TYPES.has(t))).toBe(true);
+  });
+});

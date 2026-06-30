@@ -532,6 +532,46 @@ function buildSegmentedChannelTemplate(
 /** Segmented signal types */
 const SEGMENTED_TYPES = new Set<SignalType>(["Апсейл", "Удержание"]);
 
+/**
+ * «Без коммуникации» minimal template (bug 2a/2b): a campaign that explicitly
+ * selected NO channels gets a graph with only the signal path and a terminal
+ * success node — no communication nodes (email/sms/push/ivr). `withSignalPath`
+ * later inserts the [Скоринг →] Сигнал steps between the entry and success, so
+ * the final graph is Файл → [Скоринг →] Сигнал → Успех. Built off the legacy
+ * skeleton purely to pick up the entry's signal params and the success
+ * goal/label; every other (communication) node is dropped.
+ *
+ * This single shape fixes both the workflow graph (no comm nodes — bug 2b) and
+ * the budget forecast (the cost model only prices comm nodes, so communication
+ * collapses to 0 — bug 2a).
+ */
+function minimalTemplate(signalType: SignalType): Template {
+  const legacy = TEMPLATE_BY_TYPE[signalType]();
+  const signalNode = legacy.nodes[0]; // the source/entry node
+  const legacySuccess =
+    legacy.nodes.find((nd) => nd.data.isSuccess) ??
+    legacy.nodes[legacy.nodes.length - 1];
+
+  // success sits one STEP past where the inserted signal path will land — it is
+  // shifted right by `withSignalPath` along with every other non-entry node, so
+  // adjacent nodes stay ≥ STEP apart regardless of whether scoring is inserted.
+  const successNode = n(
+    "success",
+    legacySuccess.data.label,
+    "success",
+    STEP,
+    0,
+    legacySuccess.data.sublabel,
+    { isSuccess: true },
+    legacySuccess.data.params
+  );
+
+  return {
+    nodes: [{ ...signalNode, position: { x: 0, y: 0 } }, successNode],
+    edges: [e(signalNode.id, successNode.id)],
+  };
+}
+
 export function createTemplate(
   signalType: SignalType,
   sourceType: SourceType = "new",
@@ -546,8 +586,12 @@ export function createTemplate(
     } else {
       base = buildLinearChannelTemplate(signalType, channels);
     }
+  } else if (channels) {
+    // Explicitly empty channels[] — «без коммуникации» (bug 2a/2b): a minimal
+    // graph with no communication nodes (and thus no communication budget).
+    base = minimalTemplate(signalType);
   } else {
-    // Legacy path (no channels) — existing hardcoded templates
+    // No channels argument at all (undefined) — legacy hardcoded templates.
     base = TEMPLATE_BY_TYPE[signalType]();
   }
 

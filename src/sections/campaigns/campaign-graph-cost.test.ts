@@ -78,3 +78,25 @@ describe("graphCostFor with channels (aim #6 price convergence)", () => {
     expect(ivrOnly!.total).toBeGreaterThan(smsOnly!.total);
   });
 });
+
+// Bug 2a — a campaign with an EXPLICITLY empty channels array («без
+// коммуникации») has NO communication component: the graph carries no comm
+// nodes, so the cost model returns zero total and no cost lines. A normal
+// (non-empty channels) campaign still prices its communication.
+describe("graphCostFor — «без коммуникации» (empty channels) has no communication", () => {
+  it("channels=[] yields zero total and no cost lines", () => {
+    const cost = graphCostFor({ scenarioId: SCENARIO, sourceType: SOURCE, baseSize: BASE, channels: [] });
+    expect(cost).not.toBeNull();
+    expect(cost!.total).toBe(0);
+    expect(cost!.primary).toBe(0);
+    expect(cost!.repeat).toBe(0);
+    expect(cost!.lines).toEqual([]);
+  });
+
+  it("a normal campaign (non-empty channels) still has a communication component", () => {
+    const cost = graphCostFor({ scenarioId: SCENARIO, sourceType: SOURCE, baseSize: BASE, channels: ["sms"] });
+    expect(cost).not.toBeNull();
+    expect(cost!.total).toBeGreaterThan(0);
+    expect(cost!.lines.length).toBeGreaterThan(0);
+  });
+});
