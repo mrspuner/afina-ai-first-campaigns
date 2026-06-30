@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { dismissIntro } from "./helpers/seed-intro";
+
+test.beforeEach(async ({ page }) => {
+  await dismissIntro(page);
+});
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
@@ -11,7 +16,7 @@ async function openFirstDraftCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
   const draft = page
     .locator("[data-slot=card]")
-    .filter({ hasText: "Не запущено" })
+    .filter({ hasText: "Не запущена" })
     .first();
   await draft.click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
@@ -172,46 +177,9 @@ test.describe("Block C — Canvas header", () => {
     await expect(headerLaunchButton(page)).toBeVisible();
   });
 
-  test("scheduled → cancel-schedule reverts to draft matrix", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    await applyPreset(page, "mid");
-
-    // Open a scheduled campaign from the Campaigns section.
-    await page.getByRole("button", { name: "Кампании", exact: true }).click();
-    const scheduledCard = page
-      .locator("[data-slot=card]")
-      .filter({ hasText: "Запланированно" })
-      .first();
-    await scheduledCard.click();
-    await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
-
-    const cancelBtn = page.getByRole("button", {
-      name: "Отменить расписание",
-      exact: true,
-    });
-    await expect(cancelBtn).toBeVisible({ timeout: 5_000 });
-    await cancelBtn.click();
-
-    const confirmDialog = page.locator('[data-slot="dialog-content"]');
-    await expect(confirmDialog).toBeVisible();
-    await confirmDialog
-      .getByRole("button", { name: "Отменить расписание", exact: true })
-      .click();
-
-    // Draft matrix after cancellation.
-    await expect(
-      page.getByRole("button", { name: "Сохранить черновик" })
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(headerLaunchButton(page)).toBeVisible();
-
-    // Card view now shows "Не запущено".
-    await page.getByRole("button", { name: "Кампании", exact: true }).click();
-    // The original scheduled card should no longer be scheduled.
-    // (Cannot identify by id, so just verify there are still draft cards.)
-    await expect(
-      page.locator("[data-slot=card]").filter({ hasText: "Не запущено" }).first()
-    ).toBeVisible();
-  });
+  // NOTE: the former "scheduled → cancel-schedule reverts to draft matrix" test
+  // was removed — the "scheduled" campaign status (and the "Отменить расписание"
+  // action) no longer exist. `CampaignStatus` is now only
+  // draft | active | paused | completed, so this case has no current-behavior
+  // equivalent. The draft/active/paused matrices are covered by the tests above.
 });
