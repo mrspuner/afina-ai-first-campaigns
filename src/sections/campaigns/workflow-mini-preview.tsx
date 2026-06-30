@@ -17,10 +17,12 @@ interface WorkflowMiniPreviewProps {
   /** Selected communication channels — passed to createTemplate for accurate preview. */
   channels?: Channel[];
   /**
-   * When supplied, the mini preview is rendered as a real `<button>` and
-   * invokes this handler on click / Enter / Space. When omitted the preview
-   * stays non-interactive (used in places where the surrounding card already
-   * provides navigation).
+   * When supplied, the mini preview becomes a clickable `role="button"` element
+   * and invokes this handler on click / Enter / Space. It is intentionally NOT
+   * a native `<button>`: the preview embeds a react-flow graph whose zoom
+   * Controls are themselves `<button>`s, and a `<button>` may not contain a
+   * nested `<button>` (invalid HTML). When omitted the preview stays
+   * non-interactive (the surrounding card provides navigation).
    */
   onClick?: () => void;
 }
@@ -68,13 +70,20 @@ export function WorkflowMiniPreview({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       aria-label="Открыть workflow"
-      className="group block w-full rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 [&>div]:transition-colors [&:hover>div]:border-foreground/30"
+      className="group block w-full cursor-pointer rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 [&>div]:transition-colors [&:hover>div]:border-foreground/30"
     >
       {innerGraph}
-    </button>
+    </div>
   );
 }
