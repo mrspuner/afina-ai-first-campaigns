@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { dismissIntroOverlay } from "./helpers/seed-intro";
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
@@ -17,9 +17,17 @@ async function openWelcome(page: Page) {
   await dismissIntroOverlay(page);
 }
 
-// Поведение welcome унифицировано: клик по чипсе/вопрос открывает правый
-// drawer и пишет диалог туда (а не морфит сам экран). Чипса «Создать первый
-// сигнал →» убрана — запуск флоу живёт на кнопках героя.
+// Onboarding chips are now suggestion-bar items (`chat-submit`): clicking one
+// inserts its label into the composer; pressing Enter submits it (opens the
+// drawer + writes the answer). So a chip pick is click + Enter.
+async function pickChip(page: Page, scope: Locator, name: string) {
+  await scope.getByRole("button", { name }).click();
+  await page.keyboard.press("Enter");
+}
+
+// Поведение welcome: клик по чипсе открывает правый drawer и пишет диалог туда
+// (а не морфит сам экран). Чипса «Создать первый сигнал →» убрана — запуск флоу
+// живёт на кнопках героя / post-onboarding чипсах.
 test.describe("Welcome onboarding chat (empty preset)", () => {
   test("wave 0 → 1 → 2 → 3 navigation writes answers into the drawer", async ({
     page,
@@ -29,19 +37,15 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
       page.getByRole("heading", { name: "Добро пожаловать" })
     ).toBeVisible();
 
-    // Wave-0 chip lives under the collapsed bar; clicking opens the drawer.
-    await page
-      .getByRole("button", { name: "Что такое сигнал и кампания?" })
-      .click();
+    // Wave-0 chip lives in the bottom suggestion bar; submitting opens the drawer.
+    await pickChip(page, page, "Что такое сигнал и кампания?");
 
     const drawer = page.getByTestId("chat-drawer");
     await expect(drawer).toBeVisible();
 
     // Wave-1 answer lands in the drawer; wave-2 chips render in the drawer.
     await expect(drawer.getByText("Сигнал — это момент, когда")).toBeVisible();
-    await drawer
-      .getByRole("button", { name: "Какие сценарии кампаний бывают?" })
-      .click();
+    await pickChip(page, drawer, "Какие сценарии кампаний бывают?");
 
     // Wave-2 answer + the single wave-3 chip (terminal CTA removed).
     await expect(
@@ -61,9 +65,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
     page,
   }) => {
     await openWelcome(page);
-    await page
-      .getByRole("button", { name: "Откуда берутся мои данные?" })
-      .click();
+    await pickChip(page, page, "Откуда берутся мои данные?");
 
     const drawer = page.getByTestId("chat-drawer");
     await expect(drawer).toBeVisible();
@@ -72,13 +74,11 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
       page.getByRole("heading", { name: "Добро пожаловать" })
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Выберите тип сигнала" })
+      page.getByRole("heading", { name: /Выберите сценарий/ })
     ).toHaveCount(0);
 
     // Deep chips never expose a signal-flow CTA.
-    await drawer
-      .getByRole("button", { name: "Как это соотносится с требованиями 152-ФЗ?" })
-      .click();
+    await pickChip(page, drawer, "Как это соотносится с требованиями 152-ФЗ?");
     await expect(
       page.getByRole("button", { name: "Создать первый сигнал →" })
     ).toHaveCount(0);
@@ -88,19 +88,16 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
     page,
   }) => {
     await openWelcome(page);
-    await page
-      .getByRole("button", { name: "Что такое сигнал и кампания?" })
-      .click();
+    await pickChip(page, page, "Что такое сигнал и кампания?");
     const drawer = page.getByTestId("chat-drawer");
-    await drawer
-      .getByRole("button", { name: "Какие сценарии кампаний бывают?" })
-      .click();
+    await pickChip(page, drawer, "Какие сценарии кампаний бывают?");
 
-    const extra = drawer.getByRole("button", {
-      name: "Как платформа узнаёт об активности моих клиентов?",
-    });
-    await expect(extra).toBeVisible();
-    await extra.click();
+    await expect(
+      drawer.getByRole("button", {
+        name: "Как платформа узнаёт об активности моих клиентов?",
+      })
+    ).toBeVisible();
+    await pickChip(page, drawer, "Как платформа узнаёт об активности моих клиентов?");
 
     // Answer shown; the extra chip is consumed and no chips remain.
     await expect(
@@ -120,16 +117,14 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
     page,
   }) => {
     await openWelcome(page);
-    await page
-      .getByRole("button", { name: "Что я могу сделать со своей базой?" })
-      .click();
+    await pickChip(page, page, "Что я могу сделать со своей базой?");
     const drawer = page.getByTestId("chat-drawer");
     await expect(
       drawer.getByText("База клиентов — это ваша точка")
     ).toBeVisible();
 
-    // Leave to Сигналы, then back via the logo.
-    await page.getByRole("button", { name: "Сигналы" }).click();
+    // Leave to Кампании («Сигналы» section was removed), then back via the logo.
+    await page.getByRole("button", { name: "Кампании", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Добро пожаловать" })
     ).toHaveCount(0);
@@ -151,21 +146,21 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
     page,
   }) => {
     await openWelcome(page);
-    const input = page.getByRole("textbox").first();
+    const input = page.locator('[role="textbox"][contenteditable="true"]').first();
     await input.click();
     await input.fill("привет");
     await page.keyboard.press("Enter");
 
     const drawer = page.getByTestId("chat-drawer");
     await expect(drawer.getByText("привет", { exact: true })).toBeVisible();
-    await expect(
-      drawer.getByText("Пока умею отвечать только на подсказки")
-    ).toBeVisible();
+    // Free text isn't a recognised prompt → warm fallback that nudges to the
+    // suggestion chips (all variants mention «подсказк…»).
+    await expect(drawer.getByText(/подсказ/)).toBeVisible();
   });
 });
 
 test.describe("Welcome post-onboarding (full preset, campaign launched)", () => {
-  test("post-campaign welcome shows the done caption and interface chips", async ({
+  test("post-campaign welcome shows the done-state hero and interface chips", async ({
     page,
   }) => {
     await openWelcome(page);
@@ -175,12 +170,16 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
     await expect(
       page.getByRole("heading", { name: "Добро пожаловать" })
     ).toBeVisible();
-    await expect(page.getByText("Запустите ещё один сценарий")).toBeVisible();
+    // removed: «Запустите ещё один сценарий» done-caption assertion — that
+    // caption was removed in the redesign (no replacement).
+    // removed: «Получение сигнала» absence assertion — onboarding step cards
+    // (Сигналы / Коммуникации / Статистика) are now always rendered, so the
+    // old "step cards hidden in done state" premise no longer holds.
 
-    // Onboarding step cards are not rendered in the done state.
-    await expect(page.getByText("Получение сигнала")).toHaveCount(0);
-
-    // Post-onboarding chips visible.
+    // Done-state hero CTA + post-onboarding chips.
+    await expect(
+      page.getByRole("button", { name: "Создать кампанию" })
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Создать новый сигнал" })
     ).toBeVisible();
@@ -193,7 +192,7 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
     await openWelcome(page);
     await applyPreset(page, "full");
 
-    await page.getByRole("button", { name: "Создать новую кампанию" }).click();
+    await pickChip(page, page, "Создать новую кампанию");
 
     const drawer = page.getByTestId("chat-drawer");
     await expect(
@@ -207,17 +206,19 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
     ).toBeVisible();
   });
 
-  test("'Создать новый сигнал' starts the guided signal flow", async ({
+  test("'Создать новый сигнал' starts the guided creation flow", async ({
     page,
   }) => {
     await openWelcome(page);
     await applyPreset(page, "full");
 
-    await page.getByRole("button", { name: "Создать новый сигнал" }).click();
+    await pickChip(page, page, "Создать новый сигнал");
 
-    // start_signal_flow входит в визард с первого шага (ссылка на сайт).
+    // start_campaign_flow enters creation. With the full preset the user already
+    // has campaigns, so the survey gate is skipped and the wizard opens directly
+    // on its first step.
     await expect(
-      page.getByRole("heading", { name: /С чего начнём/ })
+      page.getByRole("heading", { name: /Выберите сценарий/ })
     ).toBeVisible();
   });
 });
