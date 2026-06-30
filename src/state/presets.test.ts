@@ -69,6 +69,25 @@ describe("PRESETS.full", () => {
   });
 });
 
+describe("artifact base-size / matched invariant", () => {
+  // «Номера» = baseSize (загруженная база), «Сигналы» = count (сматчилось).
+  // Инвариант продукта: сигналы ≤ номера для каждого артефакта.
+  for (const key of ["mid", "full"] as const) {
+    it(`${key}: every artifact has positive integer baseSize ≥ count`, () => {
+      const arts = PRESETS[key].artifacts;
+      expect(arts.length).toBeGreaterThan(0);
+      for (const a of arts) {
+        expect(Number.isInteger(a.count)).toBe(true);
+        expect(Number.isInteger(a.baseSize)).toBe(true);
+        expect(a.count).toBeGreaterThan(0);
+        expect(a.baseSize).toBeGreaterThan(0);
+        // сигналы ≤ номера
+        expect(a.count).toBeLessThanOrEqual(a.baseSize);
+      }
+    });
+  }
+});
+
 describe("generateCampaigns", () => {
   it("sets launchedAt + communicating phase for active campaigns, no signalId", () => {
     const campaigns = generateCampaigns({
