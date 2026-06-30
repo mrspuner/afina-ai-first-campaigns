@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import path from "node:path";
 import { dismissIntro } from "./helpers/seed-intro";
 
 test.beforeEach(async ({ page }) => {
@@ -14,19 +15,105 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
 
 async function openAnyDraftCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  const draft = page
+  await page
     .locator("[data-slot=card]")
     .filter({ hasText: "Не запущена" })
-    .first();
-  await draft.click();
-  // Clicking a campaign card opens its detail screen; the workflow editor is
-  // entered from there via the clickable mini-preview ("Открыть workflow").
+    .first()
+    .click();
+  // Card → detail → workflow editor.
   await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
+// The prompt composer is a contenteditable [role=textbox]; a selected node's
+// reference is a span[data-chip-id] chip inside it (label = node label, no «@»).
+function promptEditor(page: Page) {
+  return page.locator('[role="textbox"][contenteditable="true"]').first();
+}
+
+function promptChips(page: Page) {
+  return promptEditor(page).locator("[data-chip-id]");
+}
+
+// Place the caret at the very end of the editor (after the chip + its trailing
+// space) and type — this appends a command without clobbering the chip (fill()
+// would wipe it).
+async function appendToPrompt(page: Page, text: string) {
+  await promptEditor(page).evaluate((el) => {
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  });
+  await page.keyboard.type(text);
+}
+
+// Click an empty pane area (deselect). Compute a point in the fit-view padding
+// above the topmost node and at horizontal centre, clear of the top-left
+// «Добавить файл» control.
+async function clickEmptyPane(page: Page) {
+  const point = await page.evaluate(() => {
+    const pane = document
+      .querySelector(".react-flow__pane")!
+      .getBoundingClientRect();
+    const nodes = Array.from(
+      document.querySelectorAll("[data-node-type]")
+    ).map((n) => n.getBoundingClientRect());
+    const minTop = Math.min(...nodes.map((r) => r.top));
+    return {
+      x: pane.left + pane.width / 2,
+      y: Math.max(pane.top + 8, (pane.top + minTop) / 2),
+    };
+  });
+  await page.mouse.click(point.x, point.y);
+}
+
+// Drives the wizard to the editor with a known channel set (so a specific
+// channel node — and the comm-unit Wait node — are guaranteed to exist).
+async function createCampaignViaWizard(page: Page, channel: "sms") {
+  await page.goto("/");
+  await page.keyboard.press("Control+Shift+KeyE");
+  await page
+    .getByRole("switch", { name: "Переключить статус анкеты" })
+    .click();
+  await page.keyboard.press("Control+Shift+KeyE");
+  await page.getByRole("button", { name: "Создать кампанию" }).click();
+  await page.getByRole("button", { name: "Спящий клиент" }).click();
+  await expect(
+    page.getByRole("heading", { name: /Откуда берём аудиторию/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+  await expect(
+    page.getByRole("heading", { name: /Какие интересы и триггеры/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Продолжить" }).last().click();
+  await expect(
+    page.getByRole("heading", { name: "Загрузите вашу базу" })
+  ).toBeVisible();
+  await page
+    .locator('input[type="file"][accept*="csv"]')
+    .first()
+    .setInputFiles(path.resolve(__dirname, "fixtures/test-base.csv"));
+  await expect(page.getByText("test-base.csv")).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+  await expect(
+    page.getByRole("heading", { name: /Как будем общаться/ })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("checkbox", { name: new RegExp(channel, "i") }).click();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+  await expect(
+    page.getByRole("heading", { name: /Прогноз бюджета/ })
+  ).toBeVisible();
+  await expect(page.getByText("Рекомендуемая")).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 8_000 });
+}
+
 test.describe("Block E — Node control + AI cycle", () => {
-  test("click node opens control panel and injects @tag", async ({ page }) => {
+  test("click node opens control panel and adds a node chip", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
     await openAnyDraftCampaign(page);
@@ -35,9 +122,10 @@ test.describe("Block E — Node control + AI cycle", () => {
     await signalNode.click();
 
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
-    // textarea автоматически префиксуется @Сигнал
-    const textarea = page.getByRole("textbox").first();
-    await expect(textarea).toHaveValue(/^@/);
+    // The composer now gets a node-reference CHIP (label = node label), not an
+    // «@»-prefixed text tag.
+    await expect(promptChips(page)).toHaveCount(1);
+    await expect(promptChips(page)).toContainText("Сигнал");
   });
 
   test("submit prompt fires AI cycle and shows AI reply", async ({ page }) => {
@@ -45,21 +133,20 @@ test.describe("Block E — Node control + AI cycle", () => {
     await applyPreset(page, "mid");
     await openAnyDraftCampaign(page);
 
-    // выбираем первый коммуникационный канал из текущего шаблона
     const comms = page.locator(
       '[data-node-type="email"], [data-node-type="sms"], [data-node-type="push"], [data-node-type="ivr"]'
     );
     await comms.first().click();
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
+    await expect(promptChips(page)).toHaveCount(1);
 
-    const textarea = page.getByRole("textbox").first();
-    // Wait for auto-inserted @tag then append instruction (preserve the real label).
-    await expect(textarea).toHaveValue(/^@/);
-    const tagValue = await textarea.inputValue();
-    await textarea.fill(`${tagValue}обнови контент`);
-    await textarea.press("Enter");
+    // Type a command after the chip, then submit.
+    await appendToPrompt(page, "обнови контент");
+    await page.keyboard.press("Enter");
 
-    await expect(page.getByText(/Готово, обновил ноду/)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/Готово, обновил ноду/)).toBeVisible({
+      timeout: 8_000,
+    });
   });
 
   test("pane click closes the control panel", async ({ page }) => {
@@ -70,46 +157,40 @@ test.describe("Block E — Node control + AI cycle", () => {
     await page.locator('[data-node-type="signal"]').first().click();
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
 
-    // клик по заднику канваса (ReactFlow viewport)
-    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    await clickEmptyPane(page);
     await expect(page.getByTestId("node-control-panel")).toBeHidden();
   });
 
-  test("A2 — pane click does NOT clear textarea (only deselects)", async ({ page }) => {
+  test("A2 — pane click does NOT clear the composer (only deselects)", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
     await openAnyDraftCampaign(page);
 
     await page.locator('[data-node-type="signal"]').first().click();
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
+    await expect(promptChips(page)).toHaveCount(1);
+    await appendToPrompt(page, "обнови");
 
-    const textarea = page.getByRole("textbox").first();
-    // Wait for the textarea to be populated with the @tag (auto-retry).
-    await expect(textarea).toHaveValue(/^@/);
-    const before = await textarea.inputValue();
-
-    // deselect
-    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    // Deselect via pane click.
+    await clickEmptyPane(page);
     await expect(page.getByTestId("node-control-panel")).toBeHidden();
 
-    // textarea value preserved (не очищается на deselect).
-    await expect(textarea).toHaveValue(before);
+    // Composer is preserved on deselect: chip + typed text remain.
+    await expect(promptChips(page)).toHaveCount(1);
+    await expect(promptEditor(page)).toContainText("обнови");
   });
 
-  test("A2 — switching selected node strips stale empty @tag", async ({ page }) => {
+  test("A2 — switching selected node replaces the stale empty chip", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
     await openAnyDraftCampaign(page);
 
-    const signal = page.locator('[data-node-type="signal"]').first();
-    await signal.click();
+    await page.locator('[data-node-type="signal"]').first().click();
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
+    await expect(promptChips(page)).toHaveCount(1);
 
-    const textarea = page.getByRole("textbox").first();
-    // Wait for first @tag to appear.
-    await expect(textarea).toHaveValue(/^@\S+\s*$/);
-
-    // Select another node — первый пустой тег должен быть замещён новым.
+    // Switch to another node WITHOUT typing — the stale empty chip is discarded
+    // and replaced (the composer keeps exactly one active tag).
     const comms = page
       .locator(
         '[data-node-type="email"], [data-node-type="sms"], [data-node-type="push"], [data-node-type="ivr"], [data-node-type="split"], [data-node-type="wait"]'
@@ -117,80 +198,55 @@ test.describe("Block E — Node control + AI cycle", () => {
       .first();
     await comms.click();
     await expect(page.getByTestId("node-control-panel")).toBeVisible();
-
-    // After switching, textarea should contain exactly one @tag (stale one stripped).
-    await expect(textarea).toHaveValue(/^@\S+\s*$/);
-    const secondValue = await textarea.inputValue();
-    const atCount = (secondValue.match(/@/g) ?? []).length;
-    expect(atCount).toBe(1);
+    await expect(promptChips(page)).toHaveCount(1);
   });
 
-  test("G.4 — node-command: текст СМС обновляется в params-секции", async ({ page }) => {
-    await page.goto("/");
-    await applyPreset(page, "mid");
-    await openAnyDraftCampaign(page);
+  test("G.4 — node-command edits the SMS content (params section marks it dirty)", async ({ page }) => {
+    // Build a campaign with the SMS channel so the SMS node is guaranteed.
+    await createCampaignViaWizard(page, "sms");
 
     const smsNode = page.locator('[data-node-type="sms"]').first();
-    if ((await smsNode.count()) === 0) {
-      test.skip(true, "SMS-нода отсутствует в первой кампании");
-    }
     await smsNode.click();
+    await expect(page.getByTestId("node-control-panel")).toBeVisible();
+    await expect(promptChips(page)).toHaveCount(1);
 
+    await appendToPrompt(page, "текст: новое сообщение");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText(/Готово, обновил ноду/)).toBeVisible({
+      timeout: 8_000,
+    });
+
+    // The SMS content is now managed via a template selector («Шаблон»), so the
+    // raw text no longer renders as a «Текст» row. The faithful current signal
+    // that the AI command edited the content param is the params section's
+    // "edited" marker (yellow dot, title «Параметр изменён») on the content
+    // field — re-open the node and assert it.
+    await page.locator('[data-node-type="sms"]').first().click();
     const panel = page.getByTestId("node-control-panel");
     await expect(panel).toBeVisible();
-    await expect(panel.getByText("Текст", { exact: true }).first()).toBeVisible();
-
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill("@СМС текст: новое сообщение");
-    await textarea.press("Enter");
-
-    // Submit clears selection → panel closes. Wait for AI-cycle and re-open.
-    await expect(panel).toBeHidden({ timeout: 7_000 });
-    await page.waitForTimeout(4500);
-    await smsNode.click();
-    await expect(panel).toContainText("новое сообщение", { timeout: 7_000 });
+    await expect(
+      panel.locator('[title="Параметр изменён"]').first()
+    ).toBeVisible({ timeout: 7_000 });
   });
 
-  test("G.4 — node-command: задержка 2 часа обновляет Wait-ноду", async ({ page }) => {
-    await page.goto("/");
-    // full preset — больше драфтов, высокая вероятность найти шаблон с Wait.
-    await applyPreset(page, "full");
-
-    // Открываем Кампании и ищем драфт с Wait-нодой.
-    await page.getByRole("button", { name: "Кампании", exact: true }).click();
-    const drafts = page
-      .locator("[data-slot=card]")
-      .filter({ hasText: "Не запущено" });
-    const draftCount = await drafts.count();
-    let opened = false;
-    for (let i = 0; i < draftCount; i++) {
-      await drafts.nth(i).click();
-      await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
-      const waitNode = page.locator('[data-node-type="wait"]').first();
-      if ((await waitNode.count()) > 0) {
-        opened = true;
-        break;
-      }
-      // Close workflow: click Кампании again
-      await page.getByRole("button", { name: "Кампании", exact: true }).click();
-    }
-    if (!opened) {
-      test.skip(true, "Ни в одном draft нет Wait-ноды");
-    }
+  test("G.4 — node-command sets a 2-hour Wait delay", async ({ page }) => {
+    // Any channel produces a comm unit that contains a Wait node.
+    await createCampaignViaWizard(page, "sms");
 
     const waitNode = page.locator('[data-node-type="wait"]').first();
     await waitNode.click();
-    const panel = page.getByTestId("node-control-panel");
-    await expect(panel).toBeVisible();
+    await expect(page.getByTestId("node-control-panel")).toBeVisible();
+    await expect(promptChips(page)).toHaveCount(1);
 
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill("@Задержка задержка 2 часа");
-    await textarea.press("Enter");
+    await appendToPrompt(page, "задержка 2 часа");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText(/Готово, обновил ноду/)).toBeVisible({
+      timeout: 8_000,
+    });
 
-    // Submit clears selection → panel closes. Wait and re-open.
-    await expect(panel).toBeHidden({ timeout: 7_000 });
-    await page.waitForTimeout(4500);
-    await waitNode.click();
-    await expect(panel).toContainText("2 ч", { timeout: 7_000 });
+    await page.locator('[data-node-type="wait"]').first().click();
+    await expect(page.getByTestId("node-control-panel")).toContainText("2 ч", {
+      timeout: 7_000,
+    });
   });
 });
