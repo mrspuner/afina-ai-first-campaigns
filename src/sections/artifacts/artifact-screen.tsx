@@ -83,7 +83,7 @@ export function ArtifactScreenView({
         <div className="flex flex-wrap items-start gap-x-12 gap-y-4">
           <div>
             <p className="text-xs font-medium text-muted-foreground">Сигналы</p>
-            <p className="mt-1 text-4xl font-bold tabular-nums text-brand">
+            <p className="mt-1 text-4xl font-bold tabular-nums text-foreground">
               {formatNumber(artifact.count)}
             </p>
           </div>
