@@ -32,6 +32,7 @@ import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
 import { StatisticsSection } from "@/sections/statistics/statistics-section";
 import { SettingsSection } from "@/sections/settings/settings-section";
 import { DevPanel } from "@/components/dev/dev-panel";
+import { useSeedFromWindow } from "@/components/dev/use-seed-from-window";
 
 const SHELL_EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -62,6 +63,9 @@ export default function Home() {
   const state = useAppState();
   const { view, launchFlyoutOpen } = state;
   const dispatch = useAppDispatch();
+
+  // Dev/test-only: apply a Playwright-injected state seed (no-op in production).
+  useSeedFromWindow(dispatch);
 
   const isFullscreen = view.kind === "survey";
 

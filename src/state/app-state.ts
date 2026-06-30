@@ -259,6 +259,14 @@ export type AppState = {
   workflowReplyId: string | null;
   /** True once a rebuild/structural command has been applied — enables the undo action. */
   aiUndoAvailable: boolean;
+  /**
+   * Dev/test-only: lets the screen-regression harness open the campaign wizard
+   * at an arbitrary step with pre-seeded StepData. `null`/absent in every normal
+   * flow — only the `__dev_seed__` action (injected by Playwright) ever sets it.
+   * GuidedCampaignSection forwards it to CampaignWorkspace as
+   * `initialStep` + `initialStepDataOverride`.
+   */
+  wizardSeed?: { step: number; stepData: StepData } | null;
 };
 
 export type Action =
@@ -334,7 +342,12 @@ export type Action =
   | { type: "workflow_ai_undo_handled" }
   | { type: "workflow_ai_undo_availability"; available: boolean }
   | { type: "template_added"; template: MessageTemplate }
-  | { type: "template_renamed"; id: string; name: string };
+  | { type: "template_renamed"; id: string; name: string }
+  // Dev/test-only: shallow-merge an arbitrary state slice. Used by the screen
+  // regression harness (Playwright `addInitScript` → window seed). No-op in
+  // production — the only dispatcher is `useSeedFromWindow`, which bails when
+  // `NODE_ENV === "production"`.
+  | { type: "__dev_seed__"; partial: Partial<AppState> };
 // PARALLEL-WORKTREE INSERTION POINT — survey actions (B), billing/signal-status actions (E).
 // Each worktree appends its own action variants to the union above; resolve merges by
 // keeping every appended line and adding the matching reducer case at the end of appReducer.
@@ -1091,6 +1104,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         ),
       };
     }
+    case "__dev_seed__":
+      return { ...state, ...action.partial };
     // PARALLEL-WORTREE INSERTION POINT — append survey/billing/signal-status cases
     // immediately above this comment to keep merges trivial.
   }

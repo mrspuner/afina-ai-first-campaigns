@@ -14,7 +14,7 @@ import { shouldShowSurveyGate } from "@/state/survey-gate";
  * downstream in the campaign card → campaign-payment-screen.
  */
 export function GuidedCampaignSection() {
-  const { view, surveyStatus, wizardSessionId } = useAppState();
+  const { view, surveyStatus, wizardSessionId, wizardSeed } = useAppState();
   const dispatch = useAppDispatch();
   const initial = view.kind === "guided-campaign" ? view.initialScenario : undefined;
   const [gatePassed, setGatePassed] = useState(surveyStatus === "completed");
@@ -41,6 +41,8 @@ export function GuidedCampaignSection() {
       key={`session-${wizardSessionId}`}
       onLaunchRequested={handleLaunch}
       initialScenario={initial}
+      initialStep={wizardSeed?.step}
+      initialStepDataOverride={wizardSeed?.stepData}
     />
   );
 }
