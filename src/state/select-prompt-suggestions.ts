@@ -8,9 +8,9 @@
  *  1. начал печатать после тега → hidden;
  *  2. активный тег → node-context;
  *  3. непустая очередь черновиков → draft-queue;
- *  4. дальше — по View: welcome → welcome-wave, guided-signal → wizard-step,
- *     awaiting-campaign / campaign-select / campaign / workflow → views,
- *     section → section.sub.
+ *  4. дальше — по View: welcome → welcome-wave, guided-campaign → hints,
+ *     которые активный экран wizard'а опубликовал через `useScreenHints`
+ *     (`state.screenHints`); campaign / workflow → views; section → section.sub.
  *  5. иначе → hidden.
  *
  * Под-состояния (фильтры, период, статусы сигналов, шаг wizard'а, статус
@@ -25,7 +25,7 @@ import {
 } from "@/state/prompt-chips-context";
 import type { Chip as WelcomeChip } from "@/sections/welcome/onboarding-chat";
 import type { WorkflowNodeType } from "@/types/workflow";
-import type { Scope, SuggestionItem, WizardSub } from "@/state/suggestion-registry";
+import type { Scope, SuggestionItem } from "@/state/suggestion-registry";
 import { resolveSuggestions } from "@/state/suggestion-registry";
 
 export interface PromptBarContext {
@@ -37,51 +37,24 @@ export interface PromptBarContext {
   queueLength: number;
   /** Чипы текущей welcome-волны (из useOnboardingChat). */
   welcomeChips: readonly WelcomeChip[];
-  /**
-   * Опциональный снимок wizard'а — wizard живёт в локальном state компонента
-   * guided-campaign-section, в AppState протекает только current step. Если
-   * этот объект не передан, реестр трактует поля как `false` (≈ «пусто»),
-   * что даёт стартовые подсказки на шагах 2/6.
-   */
-  wizard?: WizardSnapshot;
 }
 
-export interface WizardSnapshot {
-  hasInterests?: boolean;
-  hasDomains?: boolean;
-  signalNameSet?: boolean;
-}
+/**
+ * Animation/key discriminant for hints the active wizard screen declared via
+ * `useScreenHints` (the items live in `state.screenHints`, not the registry).
+ * Kept out of the registry's `Scope` so `resolveSuggestions` stays a pure
+ * Scope→items map; the selector serves these items straight from state.
+ */
+type ScreenScope = { kind: "wizard-screen" };
 
 export type SuggestionResolution =
   | { kind: "hidden" }
-  | { kind: "items"; scope: Scope; items: SuggestionItem[] };
+  | { kind: "items"; scope: Scope | ScreenScope; items: SuggestionItem[] };
 
 function resolved(scope: Scope): SuggestionResolution {
   const items = resolveSuggestions(scope);
   if (items.length === 0) return { kind: "hidden" };
   return { kind: "items", scope, items };
-}
-
-function wizardSubFor(
-  step: number,
-  snapshot: WizardSnapshot | undefined
-): WizardSub | null {
-  switch (step) {
-    case 1: return { step: 1 };
-    case 2:
-      return {
-        step: 2,
-        hasInterests: snapshot?.hasInterests ?? false,
-        hasDomains: snapshot?.hasDomains ?? false,
-      };
-    case 3: return { step: 3 };
-    case 4: return { step: 4 };
-    case 5: return { step: 5 };
-    case 6: return { step: 6, nameSet: snapshot?.signalNameSet ?? false };
-    case 7: return { step: 7 };
-    case 8: return { step: 8 };
-    default: return null;
-  }
 }
 
 function feedStatusForCampaign(
@@ -157,11 +130,11 @@ export function selectPromptSuggestions(
       // The artifact card is also a fullscreen entity view with no prompt suggestions.
       return { kind: "hidden" };
     case "guided-campaign": {
-      const step = state.wizardCurrentStep;
-      if (step === null) return { kind: "hidden" };
-      const sub = wizardSubFor(step, ctx.wizard);
-      if (sub === null) return { kind: "hidden" };
-      return resolved({ kind: "wizard-step", sub });
+      // Co-located hints: the active wizard step publishes its own set into
+      // `state.screenHints` via `useScreenHints`. We render exactly that — no
+      // central step→hints map, so the questions can't drift from the screen.
+      if (state.screenHints.length === 0) return { kind: "hidden" };
+      return { kind: "items", scope: { kind: "wizard-screen" }, items: state.screenHints };
     }
     case "workflow": {
       // Запущенный (read-only) workflow → лента кампании по её статусу.

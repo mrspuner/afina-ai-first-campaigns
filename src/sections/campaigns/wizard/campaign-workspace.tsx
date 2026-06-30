@@ -195,7 +195,9 @@ function WorkspaceInner({
   const steps = stepsForSource(stepData.sourceType);
 
   function renderStepContent(step: number) {
-    const props = { data: stepData, onNext: handleNext };
+    // `active` lets each step publish its own PromptBar hints only while it is
+    // the current step (all reached steps stay mounted in the scroll column).
+    const props = { data: stepData, onNext: handleNext, active: step === currentStep };
     // «Назад» возвращает на предыдущий шаг (плавный скролл к нему). Шаг 1
     // автопереходит по выбору сценария и футера не имеет, поэтому начинаем
     // прокидывать onBack со 2-го.

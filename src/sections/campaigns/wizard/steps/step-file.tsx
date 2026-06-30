@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StepData, StepProps } from "@/types/campaign";
+import { useScreenHints } from "@/hooks/use-screen-hints";
+import { FILE_SCREEN_HINTS } from "./screen-hints";
 import { SIGNAL_TYPES, type SignalType } from "@/state/app-state";
 import { rngFor, seededInt } from "@/state/metrics";
 
@@ -92,7 +94,8 @@ function OwnSignalTypeSelector({
   );
 }
 
-export function StepFile({ data, onNext, onBack }: StepProps) {
+export function StepFile({ data, onNext, onBack, active }: StepProps) {
+  useScreenHints(active ? FILE_SCREEN_HINTS : null);
   // One or more bases (Block 4b). Seeded from the wizard's `files`, so revisits
   // keep the uploaded set and skip re-hashing unless the user changes it.
   const seededFiles = data.files;

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup, within } from "@testing-library/rea
 import { Step1Scenario, groupScenariosByCategory } from "./step-1-scenario";
 import { SCENARIO_CATEGORIES, SCENARIOS } from "@/data/scenarios";
 import { initialStepData } from "@/types/campaign";
+import { AppStateProvider } from "@/state/app-state-context";
 
 // StepContent runs a typewriter animation and only mounts its children once it
 // finishes. Stub it to render the step body synchronously so the catalog UI is
@@ -62,7 +63,12 @@ describe("Step1Scenario — фильтры всегда сверху + «Пок�
   const curated = SCENARIOS.filter((s) => s.isCurated);
 
   function renderStep(onNext = vi.fn()) {
-    return render(<Step1Scenario data={initialStepData} onNext={onNext} />);
+    // Step1Scenario publishes its hints via useScreenHints → needs the provider.
+    return render(
+      <AppStateProvider>
+        <Step1Scenario data={initialStepData} onNext={onNext} />
+      </AppStateProvider>
+    );
   }
 
   it("дефолт: блок подборки, поиск и чипсы видны, «Показать все», без чипа источника", () => {

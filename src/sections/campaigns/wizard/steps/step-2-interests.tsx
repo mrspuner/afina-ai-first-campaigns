@@ -29,6 +29,8 @@ import { usePromptChips } from "@/state/prompt-chips-context";
 import { usePromptInputController } from "@/components/ai-elements/prompt-input";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
+import { useScreenHints } from "@/hooks/use-screen-hints";
+import { interestsScreenHints } from "./screen-hints";
 import { cn } from "@/lib/utils";
 
 /** Return a copy of `obj` without the given key. Avoids the
@@ -417,7 +419,7 @@ function TriggerCard({
   );
 }
 
-export function Step2Interests({ data, onNext }: StepProps) {
+export function Step2Interests({ data, onNext, active }: StepProps) {
   const { clientDirection, wizardRemixToken } = useAppState();
   const dispatch = useAppDispatch();
   const { pushChip, clearChips, removeChip } = usePromptChips();
@@ -773,6 +775,19 @@ export function Step2Interests({ data, onNext }: StepProps) {
 
   const hasInterest = selectedInterests.length > 0;
   const canContinue = hasInterest || selectedTriggers.length > 0;
+
+  // Co-located PromptBar questions: the branch tracks what's actually selected
+  // on THIS screen (hasDomains ≈ has triggers — triggers carry the domains),
+  // computed live from local state — this is exactly the drift the old central
+  // map could not see. Only the active step publishes.
+  useScreenHints(
+    active
+      ? interestsScreenHints({
+          hasInterests: hasInterest,
+          hasDomains: selectedTriggers.length > 0,
+        })
+      : null
+  );
 
   function handleContinue() {
     // Persist deltas back into the legacy StepData shape so downstream steps

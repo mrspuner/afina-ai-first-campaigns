@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
 import { StepProps } from "@/types/campaign";
+import { useScreenHints } from "@/hooks/use-screen-hints";
+import { BUDGET_SCREEN_HINTS } from "./screen-hints";
 import {
   estimateCampaignBudget,
   STREAM_DAYS,
@@ -141,7 +143,8 @@ function RadioDot({ active }: { active: boolean }) {
   );
 }
 
-export function StepBudget({ data, onNext, onBack }: StepProps) {
+export function StepBudget({ data, onNext, onBack, active }: StepProps) {
+  useScreenHints(active ? BUDGET_SCREEN_HINTS : null);
   const forecastInput: BudgetForecastInput = {
     scenarioId: data.scenario,
     sourceType: data.sourceType,

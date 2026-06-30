@@ -3,6 +3,13 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { StepFile, fileCopy } from "./step-file";
 import { initialStepData, type StepData } from "@/types/campaign";
 import { SIGNAL_TYPES } from "@/state/app-state";
+import { AppStateProvider } from "@/state/app-state-context";
+
+// StepFile publishes its PromptBar hints via useScreenHints, which needs the
+// app-state dispatch context — wrap every render in the provider.
+function renderWithState(ui: React.ReactElement) {
+  return render(<AppStateProvider>{ui}</AppStateProvider>);
+}
 
 // StepContent gates its children behind a typewriter animation that only mounts
 // them once the title/subtitle finish typing. Stub it so the upload body +
@@ -16,7 +23,7 @@ vi.mock("@/sections/campaigns/wizard/steps/step-content", () => ({
 const ownData: StepData = { ...initialStepData, sourceType: "own", scenario: null };
 
 function renderOwn(onNext = vi.fn(), data: Partial<StepData> = {}) {
-  return render(
+  return renderWithState(
     <StepFile data={{ ...ownData, ...data }} onNext={onNext} onBack={vi.fn()} />
   );
 }
@@ -53,7 +60,7 @@ describe("StepFile — own-source signal-type dropdown", () => {
   });
 
   it("does NOT render the signal-type dropdown for non-own sources", () => {
-    render(
+    renderWithState(
       <StepFile
         data={{ ...initialStepData, sourceType: "new" }}
         onNext={vi.fn()}
@@ -106,7 +113,7 @@ describe("StepFile — multiple bases (group B #4)", () => {
 
   it("«Загрузить ещё одну базу» reveals an extra empty upload slot", () => {
     const file = new File(["a"], "base-1.csv", { type: "text/csv" });
-    render(
+    renderWithState(
       <StepFile
         data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
         onNext={vi.fn()}
@@ -126,7 +133,7 @@ describe("StepFile — multiple bases (group B #4)", () => {
 
   it("each uploaded base carries a remove control", () => {
     const file = new File(["a"], "base-1.csv", { type: "text/csv" });
-    render(
+    renderWithState(
       <StepFile
         data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
         onNext={vi.fn()}

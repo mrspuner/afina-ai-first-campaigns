@@ -67,4 +67,10 @@ export interface StepProps {
   onNext: (partial: Partial<StepData>) => void;
   onBack?: () => void;
   onGoToStep?: (step: number) => void;
+  /**
+   * True when this step is the one the user is currently on. Several steps are
+   * mounted at once (the wizard renders all reached steps in a scroll column),
+   * so only the active step publishes its PromptBar hints via `useScreenHints`.
+   */
+  active?: boolean;
 }

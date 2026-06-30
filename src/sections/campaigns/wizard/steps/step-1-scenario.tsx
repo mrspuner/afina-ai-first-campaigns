@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { Search } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
+import { useScreenHints } from "@/hooks/use-screen-hints";
+import { SCENARIO_SCREEN_HINTS } from "./screen-hints";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -60,7 +62,8 @@ const collapseMotion = {
   className: "overflow-hidden",
 };
 
-export function Step1Scenario({ data, onNext }: StepProps) {
+export function Step1Scenario({ data, onNext, active }: StepProps) {
+  useScreenHints(active ? SCENARIO_SCREEN_HINTS : null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategories, setActiveCategories] = useState<Set<ScenarioCategory>>(

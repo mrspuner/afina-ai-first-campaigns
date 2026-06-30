@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { selectPromptSuggestions, type PromptBarContext } from "./select-prompt-suggestions";
 import { initialState, type AppState, type CampaignStatus } from "./app-state";
 import type { PromptChip, NodeTagPayload } from "./prompt-chips-context";
+import type { SuggestionItem } from "@/state/suggestion-registry";
 
 function nodeChip(nodeType: string, paramLabel?: string): PromptChip {
   const payload: NodeTagPayload = { nodeId: "n1", nodeType, color: "#fff", paramLabel };
@@ -132,60 +133,51 @@ describe("selectPromptSuggestions — section.settings", () => {
   });
 });
 
-describe("selectPromptSuggestions — wizard", () => {
-  it("step null → hidden", () => {
+describe("selectPromptSuggestions — guided-campaign reads screenHints", () => {
+  // The wizard branch no longer maps a numeric step → hints. Each active wizard
+  // screen publishes its own set into `state.screenHints` (via useScreenHints);
+  // the selector renders exactly that. The CONTENT of each screen's set lives
+  // in (and is covered by) steps/screen-hints.test.ts.
+  const sampleHints: SuggestionItem[] = [
+    { id: "wiz-x-a", label: "A?", action: { kind: "ask", prompt: "a?" } },
+    { id: "wiz-x-b", label: "B?", action: { kind: "ask", prompt: "b?" } },
+  ];
+
+  it("no published hints → hidden", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: null }),
+      withView({ kind: "guided-campaign" }, { screenHints: [] }),
       ctx()
     );
     expect(r.kind).toBe("hidden");
   });
 
-  it("step 1 → 2 ask-вопроса", () => {
+  it("returns exactly the active screen's declared hints under a wizard-screen scope", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 1 }),
+      withView({ kind: "guided-campaign" }, { screenHints: sampleHints }),
       ctx()
     );
     if (r.kind !== "items") throw new Error();
-    expect(r.items).toHaveLength(2);
-    expect(r.items.every((i) => i.action.kind === "ask")).toBe(true);
+    expect(r.scope.kind).toBe("wizard-screen");
+    expect(r.items).toEqual(sampleHints);
   });
 
-  it("step 2 без snapshot → стартовые вопросы", () => {
+  it("ignores wizardCurrentStep entirely (no central step→hints map)", () => {
+    // A non-null step with no published hints is still hidden — proving the old
+    // index-based mapping is gone and can't resurface wrong/empty hints.
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 2 }),
+      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 2, screenHints: [] }),
       ctx()
     );
-    if (r.kind !== "items") throw new Error();
-    expect(r.items.some((i) => i.id === "wiz-2-where-start")).toBe(true);
+    expect(r.kind).toBe("hidden");
   });
 
-  it("step 2 с snapshot.hasInterests → ветка 'есть интересы'", () => {
+  it("input-driven overrides still win over screen hints (active node tag)", () => {
     const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 2 }),
-      ctx({ wizard: { hasInterests: true, hasDomains: false } })
+      withView({ kind: "guided-campaign" }, { screenHints: sampleHints }),
+      ctx({ activeTag: nodeChip("sms", "Текст") })
     );
     if (r.kind !== "items") throw new Error();
-    expect(r.items.some((i) => i.id === "wiz-2-need-trigger")).toBe(true);
-  });
-
-  it("step 5 → 3 вопроса про бюджет (без dispatch)", () => {
-    const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 5 }),
-      ctx()
-    );
-    if (r.kind !== "items") throw new Error();
-    expect(r.items.every((i) => i.action.kind === "ask")).toBe(true);
-    expect(r.items.some((i) => i.id === "wiz-5-budget-why")).toBe(true);
-  });
-
-  it("step 6 snapshot.signalNameSet → 'Поменять название?'", () => {
-    const r = selectPromptSuggestions(
-      withView({ kind: "guided-campaign" }, { wizardCurrentStep: 6 }),
-      ctx({ wizard: { signalNameSet: true } })
-    );
-    if (r.kind !== "items") throw new Error();
-    expect(r.items.some((i) => i.id === "wiz-6-rename-q")).toBe(true);
+    expect(r.scope.kind).toBe("node-context");
   });
 });
 
