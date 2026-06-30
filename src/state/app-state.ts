@@ -5,6 +5,7 @@ import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
+import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
 import { estimateArtifactCount, artifactKindForCampaign, estimateBaseSize } from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
@@ -270,6 +271,23 @@ export type AppState = {
   /** True once a rebuild/structural command has been applied — enables the undo action. */
   aiUndoAvailable: boolean;
   /**
+   * PromptBar suggestion hints declared by the currently-active screen,
+   * co-located via {@link useScreenHints}. The wizard branch of the suggestion
+   * selector renders exactly this set, so hints travel with the screen and can
+   * no longer drift from a lost wizard snapshot. Empty when no screen has
+   * published (the selector then returns `hidden`).
+   */
+  screenHints: SuggestionItem[];
+  /**
+   * Stable id of the hook instance that currently owns {@link screenHints}.
+   * Several screens can be mounted at once (e.g. the wizard's vertical
+   * scroll-column), so only the active one owns the slice: switching active
+   * screens reassigns the owner, and a deactivating/unmounting screen clears
+   * the slice ONLY if it is still the owner — making publish/clear
+   * order-independent (no flicker). `null` when nothing is published.
+   */
+  screenHintsOwner: string | null;
+  /**
    * Dev/test-only: lets the screen-regression harness open the campaign wizard
    * at an arbitrary step with pre-seeded StepData. `null`/absent in every normal
    * flow — only the `__dev_seed__` action (injected by Playwright) ever sets it.
@@ -353,6 +371,11 @@ export type Action =
   | { type: "workflow_ai_undo_availability"; available: boolean }
   | { type: "template_added"; template: MessageTemplate }
   | { type: "template_renamed"; id: string; name: string }
+  // Co-located PromptBar hints: the active screen publishes its suggestion set
+  // (set) and relinquishes it on deactivate/unmount (clear). Clear is
+  // owner-guarded — see `screenHintsOwner`.
+  | { type: "screen_hints_set"; owner: string; items: SuggestionItem[] }
+  | { type: "screen_hints_clear"; owner: string }
   // Dev/test-only: shallow-merge an arbitrary state slice. Used by the screen
   // regression harness (Playwright `addInitScript` → window seed). No-op in
   // production — the only dispatcher is `useSeedFromWindow`, which bails when
@@ -393,6 +416,8 @@ export const initialState: AppState = {
   workflowAiUndoRequested: false,
   workflowReplyId: null,
   aiUndoAvailable: false,
+  screenHints: [],
+  screenHintsOwner: null,
 };
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -939,6 +964,18 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case "wizard_random_remix":
       return { ...state, wizardRemixToken: state.wizardRemixToken + 1 };
+
+    case "screen_hints_set":
+      return { ...state, screenHints: action.items, screenHintsOwner: action.owner };
+
+    case "screen_hints_clear":
+      // Owner-guarded: a screen only clears the slice if it still owns it.
+      // After another screen took ownership, a late clear from the previous
+      // owner is a no-op — so publish/clear ordering across mounted siblings
+      // never wipes the active screen's hints.
+      return state.screenHintsOwner === action.owner
+        ? { ...state, screenHints: [], screenHintsOwner: null }
+        : state;
 
     case "settings_updated":
       return {
