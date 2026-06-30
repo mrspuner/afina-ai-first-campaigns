@@ -13,26 +13,27 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
 }
 
 // Clicking a campaign card opens its detail screen; the workflow editor is
-// entered from there via the clickable mini-preview ("Открыть workflow").
+// entered from there via «Открыть workflow».
 async function openFirstCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  // A draft opens the editable editor (node control panel lives there).
-  const card = page
+  // A draft opens the editable editor (node selection / control panel lives there).
+  await page
     .locator("[data-slot=card]")
     .filter({ hasText: "Не запущена" })
-    .first();
-  await card.click();
+    .first()
+    .click();
   await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
 async function openFirstActiveCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  const card = page
+  // Match the exact «Запущена» badge so drafts («Не запущена») are excluded.
+  await page
     .locator("[data-slot=card]")
-    .filter({ hasText: "Запущена" })
-    .first();
-  await card.click();
+    .filter({ has: page.getByText("Запущена", { exact: true }) })
+    .first()
+    .click();
   await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
@@ -88,8 +89,8 @@ test.describe("Block B1 — PromptBar pinned + canvas overlay", () => {
   });
 });
 
-test.describe("Block B2 — NodeControlPanel slide-up", () => {
-  test("panel attaches to PromptBar top edge when node is selected", async ({
+test.describe("Block B2 — NodeControlPanel (expanded node card)", () => {
+  test("selecting a node opens a canvas-anchored control panel", async ({
     page,
   }) => {
     await page.goto("/");
@@ -100,28 +101,26 @@ test.describe("Block B2 — NodeControlPanel slide-up", () => {
     const panel = page.locator('[data-testid="node-control-panel"]');
     await expect(panel).toBeVisible();
 
+    // The control panel IS the expanded node card on the canvas — it carries the
+    // node's editable body, including a close control.
+    await expect(
+      panel.getByRole("button", { name: "Закрыть карточку ноды" })
+    ).toBeVisible();
+
+    // The old "panel docks to the PromptBar top edge" contract was removed: the
+    // panel is anchored to the node on the canvas, well clear of the prompt bar
+    // (a real gap, not a ≤40px dock).
     const panelBox = await panel.boundingBox();
     const promptBar = await promptBarLocator(page).boundingBox();
-
     expect(panelBox).not.toBeNull();
     expect(promptBar).not.toBeNull();
     if (panelBox && promptBar) {
-      // bottom of panel ≈ top of promptbar (±10px tolerance)
-      expect(
-        Math.abs(panelBox.y + panelBox.height - promptBar.y)
-      ).toBeLessThan(40);
-      // same horizontal centre (±20px tolerance)
-      expect(
-        Math.abs(
-          panelBox.x + panelBox.width / 2 - (promptBar.x + promptBar.width / 2)
-        )
-      ).toBeLessThan(20);
+      const gap = promptBar.y - (panelBox.y + panelBox.height);
+      expect(gap).toBeGreaterThan(40);
     }
   });
 
-  test("panel slide-up animates on node deselect (pane click closes it)", async ({
-    page,
-  }) => {
+  test("pane click closes the control panel", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
     await openFirstCampaign(page);
@@ -131,9 +130,24 @@ test.describe("Block B2 — NodeControlPanel slide-up", () => {
       page.locator('[data-testid="node-control-panel"]')
     ).toBeVisible();
 
-    await page
-      .locator(".react-flow__pane")
-      .click({ position: { x: 20, y: 20 } });
+    // Click an empty pane area to deselect. Compute a point in the fit-view
+    // padding ABOVE the topmost node (and at horizontal centre, clear of the
+    // top-left «Добавить файл» control) so the click never lands on a node.
+    const point = await page.evaluate(() => {
+      const pane = document
+        .querySelector(".react-flow__pane")!
+        .getBoundingClientRect();
+      const nodes = Array.from(
+        document.querySelectorAll("[data-node-type]")
+      ).map((n) => n.getBoundingClientRect());
+      const minTop = Math.min(...nodes.map((r) => r.top));
+      return {
+        x: pane.left + pane.width / 2,
+        y: Math.max(pane.top + 8, (pane.top + minTop) / 2),
+      };
+    });
+    await page.mouse.click(point.x, point.y);
+
     await expect(
       page.locator('[data-testid="node-control-panel"]')
     ).toBeHidden({ timeout: 1500 });
