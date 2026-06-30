@@ -24,6 +24,7 @@ const artifacts: Artifact[] = [
     campaignId: "cmp_1",
     kind: "signals",
     count: 100,
+    baseSize: 250,
     createdAt: "2026-06-05T00:00:00.000Z",
   },
   {
@@ -31,6 +32,7 @@ const artifacts: Artifact[] = [
     campaignId: "cmp_2",
     kind: "signals_conversions",
     count: 200,
+    baseSize: 500,
     createdAt: "2026-06-12T00:00:00.000Z",
   },
 ];
@@ -61,8 +63,12 @@ describe("SignalsTabView", () => {
         onDelete={vi.fn()}
       />,
     );
-    expect(screen.getByText("Сигналы")).toBeInTheDocument();
+    // «Сигналы» appears both as the signals-kind label and as the new
+    // «Сигналы» numeric column header — so there are several occurrences.
+    expect(screen.getAllByText("Сигналы").length).toBeGreaterThan(0);
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
+    // Both numeric columns are present.
+    expect(screen.getAllByText("Номера").length).toBe(2);
   });
 
   it("calls onOpenCampaign with the campaign id when the campaign link button is clicked", () => {

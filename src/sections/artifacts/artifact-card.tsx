@@ -25,6 +25,18 @@ import { cn } from "@/lib/utils";
 function formatDate(iso: string): string { return new Date(iso).toLocaleDateString("ru-RU"); }
 function formatNumber(n: number): string { return n.toLocaleString("ru-RU"); }
 
+/** Compact, right-aligned numeric column («Номера» / «Сигналы»). */
+function ArtifactStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="text-right">
+      <p className="text-[11px] leading-none text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold tabular-nums tracking-tight text-foreground">
+        {formatNumber(value)}
+      </p>
+    </div>
+  );
+}
+
 interface ArtifactCardProps {
   artifact: Artifact;
   campaignName: string;
@@ -38,7 +50,7 @@ interface ArtifactCardProps {
 export function ArtifactCard({
   artifact, campaignName, onOpen, onOpenCampaign, onDownload, onDelete, index = 0,
 }: ArtifactCardProps) {
-  const { id, kind, count, createdAt, campaignId } = artifact;
+  const { id, kind, count, baseSize, createdAt, campaignId } = artifact;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
@@ -54,14 +66,17 @@ export function ArtifactCard({
         )}
         style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
       >
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="flex items-baseline gap-2 text-sm font-semibold text-foreground">
-              <span>{ARTIFACT_KIND_LABEL[kind]}</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="tabular-nums">{formatNumber(count)}</span>
+            <p className="truncate text-sm font-semibold text-foreground">
+              {ARTIFACT_KIND_LABEL[kind]}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">{formatDate(createdAt)}</p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-5 sm:gap-7">
+            <ArtifactStat label="Номера" value={baseSize} />
+            <ArtifactStat label="Сигналы" value={count} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>

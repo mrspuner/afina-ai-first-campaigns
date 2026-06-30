@@ -8,6 +8,7 @@ const artifact: Artifact = {
   campaignId: "cmp_1",
   kind: "signals_conversions",
   count: 12345,
+  baseSize: 28000,
   createdAt: "2026-06-18T00:00:00.000Z",
 };
 
@@ -25,7 +26,11 @@ describe("ArtifactCard", () => {
       />,
     );
     expect(screen.getByText("Сигналы и конверсии")).toBeInTheDocument();
+    // «Сигналы» column = matched count; «Номера» column = loaded base size.
+    expect(screen.getByText("Сигналы")).toBeInTheDocument();
+    expect(screen.getByText("Номера")).toBeInTheDocument();
     expect(screen.getByText(/12\s?345/)).toBeInTheDocument();
+    expect(screen.getByText(/28\s?000/)).toBeInTheDocument();
     // date renders under the title
     expect(screen.getByText(/18\.06\.2026/)).toBeInTheDocument();
     // The campaign link is a <button> inside the card; use getAllByRole and find the one
