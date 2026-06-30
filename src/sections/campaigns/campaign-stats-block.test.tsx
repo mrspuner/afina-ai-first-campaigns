@@ -22,6 +22,7 @@ describe("buildCampaignStats", () => {
       campaignId: "c1",
       kind: "signals",
       count: 8000,
+      baseSize: 18000,
       createdAt: new Date(2024, 0, 1).toISOString(),
     };
     const s = buildCampaignStats(

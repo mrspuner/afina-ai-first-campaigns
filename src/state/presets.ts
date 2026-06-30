@@ -11,6 +11,7 @@ import { makeRng } from "./metrics";
 import {
   artifactKindForCampaign,
   estimateArtifactCount,
+  estimateBaseSize,
 } from "./artifact-metrics";
 import { campaignBaseRows } from "@/sections/campaigns/campaign-metrics";
 
@@ -175,6 +176,7 @@ export function generateArtifacts(opts: GenerateArtifactsOpts): Artifact[] {
       campaignId: campaign.id,
       kind: artifactKindForCampaign(campaign),
       count,
+      baseSize: estimateBaseSize(count, campaign.id),
       createdAt: campaign.launchedAt ?? campaign.createdAt,
     });
     idx++;

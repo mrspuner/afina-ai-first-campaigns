@@ -48,11 +48,11 @@ describe("buildStatsLines", () => {
   const artifacts = [
     {
       id: "a1", campaignId: "c1", kind: "signals" as const,
-      count: 1200, createdAt: "2026-01-12",
+      count: 1200, baseSize: 2600, createdAt: "2026-01-12",
     },
     {
       id: "a2", campaignId: "c2", kind: "signals" as const,
-      count: 800, createdAt: "2026-02-05",
+      count: 800, baseSize: 1900, createdAt: "2026-02-05",
     },
   ];
 

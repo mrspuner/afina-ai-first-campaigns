@@ -8,6 +8,7 @@ describe("artifact + template contracts", () => {
       campaignId: "cmp_1",
       kind: "signals",
       count: 100,
+      baseSize: 240,
       createdAt: "2026-06-18T00:00:00.000Z",
     };
     expect(a.kind).toBe("signals");
