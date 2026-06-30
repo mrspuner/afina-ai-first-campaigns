@@ -12,36 +12,61 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
 }
 
-async function openFirstDraftCampaign(page: Page) {
+// A campaign card opens its detail screen; the canvas editor is entered from
+// there via «Открыть workflow». A draft opens the editable editor.
+async function openFirstDraftEditor(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  const draft = page
+  await page
     .locator("[data-slot=card]")
     .filter({ hasText: "Не запущена" })
-    .first();
-  await draft.click();
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
-function headerLaunchButton(page: Page) {
-  return page.locator('[data-slot="button"]').filter({ hasText: /^Запустить$/ });
+// Opens the detail screen of the first ACTIVE campaign (badge «Запущена», not
+// «Не запущена» — match the exact badge text so drafts are excluded).
+async function openFirstActiveDetail(page: Page) {
+  await page.getByRole("button", { name: "Кампании", exact: true }).click();
+  await page
+    .locator("[data-slot=card]")
+    .filter({ has: page.getByText("Запущена", { exact: true }) })
+    .first()
+    .click();
+  await expect(page.getByRole("button", { name: "К кампаниям" })).toBeVisible();
 }
 
-test.describe("Block C — Canvas header", () => {
-  test("renders name, signal line, and action buttons", async ({ page }) => {
+function headerLaunchButton(page: Page) {
+  // base-ui's Tooltip wraps the trigger, so the editor exposes two matching
+  // «Запустить» buttons — take the first (the actionable, visible one).
+  return page
+    .locator('[data-slot="button"]')
+    .filter({ hasText: /^Запустить$/ })
+    .first();
+}
+
+test.describe("Block C — Canvas header (editor)", () => {
+  test("renders name, autosave indicator, and launch button", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
+    await openFirstDraftEditor(page);
 
-    await expect(page.getByRole("button", { name: "Сохранить черновик" })).toBeVisible();
+    // «Сохранить черновик» is gone — auto-save shows «Изменения сохранены».
+    await expect(
+      page.getByRole("button", { name: "Сохранить черновик" })
+    ).toHaveCount(0);
+    await expect(page.getByText("Изменения сохранены")).toBeVisible();
     await expect(headerLaunchButton(page)).toBeVisible();
-    // Signal line matches "Тип · count · от dd.MM"
-    await expect(page.getByText(/·\s+от\s+\d{2}\.\d{2}/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Переименовать кампанию" })
+    ).toBeVisible();
   });
 
   test("rename persists and propagates to campaign list", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
+    await openFirstDraftEditor(page);
 
     await page
       .getByRole("button", { name: "Переименовать кампанию" })
@@ -57,129 +82,91 @@ test.describe("Block C — Canvas header", () => {
     await expect(page.getByText("Переименованная кампания")).toBeVisible();
   });
 
-  test("launch transitions campaign to active status and updates header", async ({ page }) => {
+  test("launch from the editor routes to the payment screen", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
+    await openFirstDraftEditor(page);
 
+    // The canvas «Запустить» is now a routing hop: it validates the graph and
+    // opens the dedicated payment screen (launch itself happens there).
     await headerLaunchButton(page).click();
-    await expect(
-      page.getByRole("button", { name: "Посмотреть статистику", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Оплата запуска кампании")).toBeVisible({
+      timeout: 5_000,
+    });
   });
 
-  test("save-draft button shows info toast", async ({ page }) => {
+  // removed: "save-draft button shows info toast" — «Сохранить черновик» was
+  // removed; the editor auto-saves and shows «Изменения сохранены» instead
+  // (covered above). No toast equivalent.
+});
+
+test.describe("Block C — Detail-screen action matrix", () => {
+  // The launch/stop/duplicate/stats matrix moved from the canvas header to the
+  // campaign detail screen, with new labels: «Остановить» (not «Приостановить»),
+  // «Статистика» (not «Посмотреть статистику»), and stop has NO confirm dialog
+  // here (the editor's «Приостановить» still confirms).
+  test("active campaign exposes stats / duplicate / stop actions", async ({ page }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
+    await openFirstActiveDetail(page);
 
-    await page.getByRole("button", { name: "Сохранить черновик" }).click();
-    await expect(page.getByText("Черновик сохранён")).toBeVisible();
-  });
-
-  test("draft → launch reveals active-state action matrix", async ({ page }) => {
-    await page.goto("/");
-    await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
-
-    await headerLaunchButton(page).click();
-
+    // «Статистика» also matches the sidebar nav button — scope to the last
+    // (detail action renders after the sidebar in the DOM).
     await expect(
-      page.getByRole("button", { name: "Посмотреть статистику", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(
-      page.getByRole("button", { name: "Приостановить", exact: true })
+      page.getByRole("button", { name: "Статистика", exact: true }).last()
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Дублировать", exact: true })
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Остановить", exact: true })
+    ).toBeVisible();
   });
 
-  test("pause → confirm flips to paused matrix, resume returns to active", async ({
+  test("stop flips to the paused matrix, resume returns to active", async ({ page }) => {
+    await page.goto("/");
+    await applyPreset(page, "mid");
+    await openFirstActiveDetail(page);
+
+    // Stop — no confirm dialog on the detail screen.
+    await page.getByRole("button", { name: "Остановить", exact: true }).click();
+
+    // Paused: badge «Остановлена», a resume CTA «Запустить» appears, «Остановить»
+    // is gone.
+    await expect(page.getByText("Остановлена").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Запустить" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Остановить", exact: true })
+    ).toHaveCount(0);
+
+    // Resume (paused «Запустить» reactivates directly, no payment) → active.
+    await page.getByRole("button", { name: "Запустить" }).click();
+    await expect(
+      page.getByRole("button", { name: "Остановить", exact: true })
+    ).toBeVisible({ timeout: 5_000 });
+  });
+
+  test("duplicate opens a new draft named 'Копия — …' in the editor", async ({
     page,
   }) => {
     await page.goto("/");
     await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
+    await openFirstActiveDetail(page);
 
-    await headerLaunchButton(page).click();
-    await expect(
-      page.getByRole("button", { name: "Приостановить", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
+    const originalName = (await page.locator("h1").first().innerText()).trim();
 
-    await page
-      .getByRole("button", { name: "Приостановить", exact: true })
-      .click();
-
-    // Confirm dialog — press the primary confirm button inside the dialog.
-    const confirmDialog = page.locator('[data-slot="dialog-content"]');
-    await expect(confirmDialog).toBeVisible();
-    await confirmDialog
-      .getByRole("button", { name: "Приостановить", exact: true })
-      .click();
-
-    // Paused matrix
-    await expect(
-      page.getByRole("button", { name: "Возобновить", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(
-      page.getByRole("button", { name: "Посмотреть статистику", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Дублировать", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Приостановить", exact: true })
-    ).toHaveCount(0);
-
-    // Resume (no confirm)
-    await page.getByRole("button", { name: "Возобновить", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "Приостановить", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(
-      page.getByRole("button", { name: "Возобновить", exact: true })
-    ).toHaveCount(0);
-  });
-
-  test("duplicate → confirm opens a new campaign named 'Копия — …'", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    await applyPreset(page, "mid");
-    await openFirstDraftCampaign(page);
-
-    // First launch so we get a Duplicate button in the active matrix.
-    await headerLaunchButton(page).click();
-    await expect(
-      page.getByRole("button", { name: "Дублировать", exact: true })
-    ).toBeVisible({ timeout: 5_000 });
-
-    const originalName = await page
-      .getByRole("button", { name: "Переименовать кампанию" })
-      .innerText();
-
+    // Duplicate — no confirm; lands in the new draft's workflow editor.
     await page.getByRole("button", { name: "Дублировать", exact: true }).click();
-    const confirmDialog = page.locator('[data-slot="dialog-content"]');
-    await expect(confirmDialog).toBeVisible();
-    await confirmDialog
-      .getByRole("button", { name: "Дублировать", exact: true })
-      .click();
-
+    await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
     await expect(
       page.getByRole("button", { name: "Переименовать кампанию" })
     ).toContainText(`Копия — ${originalName}`, { timeout: 5_000 });
 
-    // Draft matrix on the new copy.
-    await expect(
-      page.getByRole("button", { name: "Сохранить черновик" })
-    ).toBeVisible();
+    // The copy is a draft → launch button present (it is editable).
     await expect(headerLaunchButton(page)).toBeVisible();
   });
 
-  // NOTE: the former "scheduled → cancel-schedule reverts to draft matrix" test
-  // was removed — the "scheduled" campaign status (and the "Отменить расписание"
-  // action) no longer exist. `CampaignStatus` is now only
-  // draft | active | paused | completed, so this case has no current-behavior
-  // equivalent. The draft/active/paused matrices are covered by the tests above.
+  // NOTE: the former "scheduled → cancel-schedule" case stays removed — the
+  // "scheduled" campaign status no longer exists (CampaignStatus is
+  // draft | active | paused | completed).
 });
