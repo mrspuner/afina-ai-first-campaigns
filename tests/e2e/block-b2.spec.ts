@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { dismissIntro } from "./helpers/seed-intro";
+
+test.beforeEach(async ({ page }) => {
+  await dismissIntro(page);
+});
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
@@ -7,10 +12,17 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
 }
 
+// Clicking a campaign card opens its detail screen; the workflow editor is
+// entered from there via the clickable mini-preview ("Открыть workflow").
 async function openFirstCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  const card = page.locator("[data-slot=card]").first();
+  // A draft opens the editable editor (node control panel lives there).
+  const card = page
+    .locator("[data-slot=card]")
+    .filter({ hasText: "Не запущена" })
+    .first();
   await card.click();
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
@@ -18,16 +30,18 @@ async function openFirstActiveCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
   const card = page
     .locator("[data-slot=card]")
-    .filter({ hasText: "Активно" })
+    .filter({ hasText: "Запущена" })
     .first();
   await card.click();
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
 function promptBarLocator(page: Page) {
+  // The composer input is now a contenteditable [role=textbox], not a <textarea>.
   return page
     .locator("form")
-    .filter({ has: page.locator("textarea") })
+    .filter({ has: page.locator("[contenteditable]") })
     .first();
 }
 

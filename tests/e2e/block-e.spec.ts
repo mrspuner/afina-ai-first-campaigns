@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { dismissIntro } from "./helpers/seed-intro";
+
+test.beforeEach(async ({ page }) => {
+  await dismissIntro(page);
+});
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
@@ -11,9 +16,12 @@ async function openAnyDraftCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
   const draft = page
     .locator("[data-slot=card]")
-    .filter({ hasText: "Не запущено" })
+    .filter({ hasText: "Не запущена" })
     .first();
   await draft.click();
+  // Clicking a campaign card opens its detail screen; the workflow editor is
+  // entered from there via the clickable mini-preview ("Открыть workflow").
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
 }
 
