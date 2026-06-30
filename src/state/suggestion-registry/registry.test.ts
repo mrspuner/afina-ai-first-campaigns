@@ -176,70 +176,15 @@ describe("registry — section.settings", () => {
   });
 });
 
-describe("registry — wizard sub-states", () => {
-  it("step 1 → 2 ask-вопроса (разница + что выбрать)", () => {
-    const items = resolveSuggestions({ kind: "wizard-step", sub: { step: 1 } });
-    expect(items).toHaveLength(2);
-    expect(items.every((i) => i.action.kind === "ask")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-1-diff")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-1-which")).toBe(true);
-  });
-
-  it("step 2 пусто-пусто → 3 стартовых вопроса, без проверки доменов", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step",
-      sub: { step: 2, hasInterests: false, hasDomains: false },
-    });
-    expect(items.every((i) => i.action.kind === "ask")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-2-where-start")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-2-check-domains")).toBe(false);
-  });
-
-  it("step 2 интересы+домены → вопросы про сужение/расширение, без проверки доменов", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step",
-      sub: { step: 2, hasInterests: true, hasDomains: true },
-    });
-    expect(items.some((i) => i.id === "wiz-2-narrow-q")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-2-widen-q")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-2-check-domains")).toBe(false);
-  });
-
+describe("registry — trigger context", () => {
+  // Wizard step questions moved to co-located useScreenHints (see
+  // steps/screen-hints.ts + screen-hints.test.ts). The registry keeps only the
+  // active-trigger-tag chip, which depends on the bar's input, not the screen.
   it("trigger-context → только чип проверки доменов", () => {
     const items = resolveSuggestions({ kind: "trigger-context" });
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("wiz-2-check-domains");
     expect(items[0].action.kind).toBe("submit");
-  });
-
-  it("step 2 только интересы → 'Зачем триггеры?'", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step",
-      sub: { step: 2, hasInterests: true, hasDomains: false },
-    });
-    expect(items.some((i) => i.id === "wiz-2-need-trigger")).toBe(true);
-  });
-
-  it("step 5 → 3 вопроса про бюджет (без dispatch)", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step", sub: { step: 5 },
-    });
-    expect(items.every((i) => i.action.kind === "ask")).toBe(true);
-    expect(items.some((i) => i.id === "wiz-5-budget-why")).toBe(true);
-  });
-
-  it("step 6 nameSet=true → 'Поменять название?'", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step", sub: { step: 6, nameSet: true },
-    });
-    expect(items.some((i) => i.id === "wiz-6-rename-q")).toBe(true);
-  });
-
-  it("step 6 nameSet=false → 'Как назвать сигнал?'", () => {
-    const items = resolveSuggestions({
-      kind: "wizard-step", sub: { step: 6, nameSet: false },
-    });
-    expect(items.some((i) => i.id === "wiz-6-name-q")).toBe(true);
   });
 });
 
@@ -294,9 +239,6 @@ describe("registry — глобальная уникальность id", () => 
       { kind: "section", sub: { kind: "statistics", period: "this-month", rowKind: "campaigns" } },
       { kind: "section", sub: { kind: "signals" } },
       { kind: "section", sub: { kind: "settings", hasIntegrations: true, isBasicTariff: false } },
-      { kind: "wizard-step", sub: { step: 1 } },
-      { kind: "wizard-step", sub: { step: 2, hasInterests: false, hasDomains: false } },
-      { kind: "wizard-step", sub: { step: 5 } },
       { kind: "awaiting-campaign" },
       { kind: "campaign-select" },
       { kind: "campaign-feed", status: "active" },

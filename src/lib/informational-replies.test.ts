@@ -6,34 +6,34 @@ import {
   allReplyEntries,
   normalize,
 } from "./informational-replies";
-import { resolveWizardStep } from "@/state/suggestion-registry/wizard";
 import { resolveSection } from "@/state/suggestion-registry/sections";
 import {
   resolveAwaitingCampaign,
   resolveCampaignSelect,
 } from "@/state/suggestion-registry/views";
-import type { SuggestionItem, WizardSub } from "@/state/suggestion-registry/types";
+import {
+  SCENARIO_SCREEN_HINTS,
+  FILE_SCREEN_HINTS,
+  BUDGET_SCREEN_HINTS,
+  interestsScreenHints,
+} from "@/sections/campaigns/wizard/steps/screen-hints";
+import type { SuggestionItem } from "@/state/suggestion-registry/types";
 
 // Собираем все ask-подсказки из реестра, которые проходят через chatSubmit и
 // которые мы покрываем (разделы инфо, визард, awaiting/campaign-select).
 function collectRegistryAsks(): SuggestionItem[] {
   const items: SuggestionItem[] = [];
 
-  const wizardSubs: WizardSub[] = [
-    { step: 1 },
-    { step: 2, hasInterests: false, hasDomains: false },
-    { step: 2, hasInterests: true, hasDomains: true },
-    { step: 2, hasInterests: true, hasDomains: false },
-    { step: 2, hasInterests: false, hasDomains: true },
-    { step: 3 },
-    { step: 4 },
-    { step: 5 },
-    { step: 6, nameSet: false },
-    { step: 6, nameSet: true },
-    { step: 7 },
-    { step: 8 },
-  ];
-  for (const sub of wizardSubs) items.push(...resolveWizardStep(sub));
+  // Wizard questions are now co-located per screen (useScreenHints). Collect
+  // every screen's set — all interests branches included — so the cross-check
+  // still guards chip-prompt ↔ reply-entry drift for the live wizard chips.
+  items.push(...SCENARIO_SCREEN_HINTS);
+  items.push(...interestsScreenHints({ hasInterests: false, hasDomains: false }));
+  items.push(...interestsScreenHints({ hasInterests: true, hasDomains: true }));
+  items.push(...interestsScreenHints({ hasInterests: true, hasDomains: false }));
+  items.push(...interestsScreenHints({ hasInterests: false, hasDomains: true }));
+  items.push(...FILE_SCREEN_HINTS);
+  items.push(...BUDGET_SCREEN_HINTS);
 
   // Разделы: эмпти-варианты + полные фильтры.
   items.push(...resolveSection({ kind: "campaigns", hasCampaigns: false, activeFilter: [], sort: "default" }));

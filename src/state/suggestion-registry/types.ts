@@ -76,24 +76,6 @@ export type SettingsSub = {
 
 export type SectionSub = CampaignsSub | StatisticsSub | SignalsSub | SettingsSub;
 
-export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-/**
- * Под-состояния шагов wizard'а. В новой модели «wizard = только вопросы»
- * ветви меняют **формулировку** вопроса, не само действие — все чипы wizard
- * имеют `action.kind = "ask"`. Step 5 потерял ветку `budgetHelpShown` — нет
- * dispatch на маскота, вопрос идёт через общий ask-pipeline.
- */
-export type WizardSub =
-  | { step: 1 }
-  | { step: 2; hasInterests: boolean; hasDomains: boolean }
-  | { step: 3 }
-  | { step: 4 }
-  | { step: 5 }
-  | { step: 6; nameSet: boolean }
-  | { step: 7 }
-  | { step: 8 };
-
 /**
  * Текущее «место» пользователя — ось, по которой реестр индексирует чипы.
  * Селектор {@link selectPromptSuggestions} строит scope из AppState и контекста
@@ -106,7 +88,6 @@ export type Scope =
   | { kind: "draft-queue" }
   | { kind: "welcome-wave"; chips: readonly WelcomeChip[] }
   | { kind: "section"; sub: SectionSub }
-  | { kind: "wizard-step"; sub: WizardSub }
   | { kind: "awaiting-campaign" }
   | { kind: "campaign-select" }
   /**

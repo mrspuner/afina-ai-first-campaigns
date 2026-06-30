@@ -9,7 +9,7 @@
 import type { Scope, SuggestionItem } from "./types";
 import { resolveNodeContext } from "./node-context";
 import { resolveSection } from "./sections";
-import { resolveWizardStep, resolveTriggerContext } from "./wizard";
+import { resolveTriggerContext } from "./wizard";
 import {
   resolveCampaignFeed,
   resolveAwaitingCampaign,
@@ -32,8 +32,6 @@ export function resolveSuggestions(scope: Scope): SuggestionItem[] {
       return resolveWelcomeWave(scope.chips);
     case "section":
       return resolveSection(scope.sub);
-    case "wizard-step":
-      return resolveWizardStep(scope.sub);
     case "awaiting-campaign":
       return resolveAwaitingCampaign();
     case "campaign-select":
