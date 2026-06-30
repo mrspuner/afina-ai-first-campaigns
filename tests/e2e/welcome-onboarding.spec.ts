@@ -20,7 +20,7 @@ async function openWelcome(page: Page) {
 // Onboarding chips are now suggestion-bar items (`chat-submit`): clicking one
 // inserts its label into the composer; pressing Enter submits it (opens the
 // drawer + writes the answer). So a chip pick is click + Enter.
-async function pickChip(page: Page, scope: Locator, name: string) {
+async function pickChip(page: Page, scope: Page | Locator, name: string) {
   await scope.getByRole("button", { name }).click();
   await page.keyboard.press("Enter");
 }
