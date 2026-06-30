@@ -5,13 +5,19 @@ export default defineConfig({
   fullyParallel: false,
   reporter: "list",
   timeout: 60_000,
+  expect: {
+    toHaveScreenshot: { animations: "disabled", scale: "css", maxDiffPixelRatio: 0.01 },
+  },
   use: {
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
     actionTimeout: 10_000,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+    },
   ],
   webServer: {
     command: "npm run dev",
