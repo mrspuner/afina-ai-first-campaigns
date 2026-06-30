@@ -6,95 +6,121 @@ test.beforeEach(async ({ page }) => {
   await dismissIntro(page);
 });
 
-test("happy path: welcome → guided signal → campaign type → launch → stats", async ({ page }) => {
+// End-to-end smoke of the redesigned creation flow:
+// welcome → guided-campaign wizard → workflow editor → payment → active → stats.
+// (The old "guided signal → campaign type" split is gone: the wizard now creates
+// the campaign directly and drops the user into the workflow editor; launch +
+// payment happen on the dedicated CampaignPaymentScreen.)
+test("happy path: welcome → guided campaign → editor → launch → stats", async ({
+  page,
+}) => {
   await page.goto("/");
 
   // 1. Welcome
-  await expect(page.getByRole("heading", { name: "Добро пожаловать" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Добро пожаловать" })
+  ).toBeVisible();
 
-  // Bypass the survey gate via dev panel — the wizard otherwise renders
-  // the registration anketa first. Topping up the balance here also keeps
-  // the launch step from opening the top-up modal further down the flow.
-  await page.keyboard.press("Meta+Shift+E");
+  // Mark the survey as completed via the dev panel — this both surfaces the
+  // hero's «Создать кампанию» CTA and lets the wizard skip the survey gate.
+  // Top up the balance so the launch step doesn't open the top-up modal.
+  await page.keyboard.press("Control+Shift+KeyE");
   await page
     .getByRole("switch", { name: "Переключить статус анкеты" })
     .click();
   await page.getByRole("button", { name: "+ ₽ 10 000" }).click();
-  await page.keyboard.press("Meta+Shift+E");
+  await page.keyboard.press("Control+Shift+KeyE");
 
-  // 2. Click "Создать сигнал" CTA → guided signal flow
-  await page.getByRole("button", { name: "Создать сигнал" }).click();
+  // 2. Start the guided campaign wizard.
+  await page.getByRole("button", { name: "Создать кампанию" }).click();
 
-  // 3. Step 1: pick scenario (auto-advances on click)
-  await expect(page.getByRole("heading", { name: "Выберите тип сигнала" })).toBeVisible();
-  await page.getByRole("button", { name: /Регистрация/ }).first().click();
+  // 3. Step «Сценарий» — auto-advances on selecting a curated scenario card.
+  await expect(
+    page.getByRole("heading", { name: /Выберите сценарий/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Спящий клиент" }).click();
 
-  // 4. Step 2: pick one interest tag + Продолжить (default direction → finance vertical)
-  await expect(page.getByRole("heading", { name: /Какие интересы и триггеры/ })).toBeVisible();
-  await page.getByRole("button", { name: "Кредитование" }).click();
+  // 4. Step «Источник» — keep the default «Новая база номеров», continue.
+  await expect(
+    page.getByRole("heading", { name: /Откуда берём аудиторию/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+
+  // 5. Step «Интересы и триггеры» — pre-filled by AI; continue.
+  await expect(
+    page.getByRole("heading", { name: /Какие интересы и триггеры/ })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Продолжить" }).last().click();
 
-  // 5. Step 3: pick segment + Продолжить
-  await expect(page.getByRole("heading", { name: "Выберите сегменты сигнала" })).toBeVisible();
-  await page.getByRole("button", { name: /Максимальный/ }).click();
-  await page.getByRole("button", { name: "Продолжить" }).last().click();
-
-  // 6. Step 4: upload file, Далее, wait hashing (~4.2s) — База теперь идёт раньше Бюджета
-  await expect(page.getByRole("heading", { name: "Загрузите вашу базу" })).toBeVisible();
+  // 6. Step «Файл» — upload the base, then continue (waits out the hashing).
+  await expect(
+    page.getByRole("heading", { name: "Загрузите вашу базу" })
+  ).toBeVisible();
   const fixturePath = path.resolve(__dirname, "fixtures/test-base.csv");
-  // The page also has a prompt-bar file input — scope to the dropzone (csv accept).
   await page
     .locator('input[type="file"][accept*="csv"]')
+    .first()
     .setInputFiles(fixturePath);
   await expect(page.getByText("test-base.csv")).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 7. Step 5: pick "Своя сумма", enter 500, Далее
+  // 7. Step «Каналы» — pick one channel, continue. (Heading appears after the
+  //    ~hashing step; allow extra time.)
   await expect(
-    page.getByRole("heading", { name: "Укажите максимальный бюджет" })
+    page.getByRole("heading", { name: /Как будем общаться/ })
   ).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: /Своя сумма/ }).click();
-  await page.getByLabel("Своя сумма").fill("500");
+  await page.getByRole("checkbox", { name: /SMS/ }).click();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 8. Step 6: summary → launch (balance was seeded at the top of the test)
-  await expect(page.getByRole("heading", { name: "Проверьте настройки сигнала" })).toBeVisible({
-    timeout: 15_000,
-  });
-  // The sidebar also has a "Запустить" button (opens the launch flyout) —
-  // scope to the data-slot button that contains exactly "Запустить".
+  // 8. Step «Бюджет» — recommended estimate, continue → workflow editor.
+  //    Wait for the step's body (the budget cards) to render before clicking —
+  //    StepContent types its title/subtitle first, so «Далее» appears late and
+  //    a premature `.last()` would re-hit the previous step's button.
+  await expect(
+    page.getByRole("heading", { name: /Прогноз бюджета/ })
+  ).toBeVisible();
+  await expect(page.getByText("Рекомендуемая")).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+
+  // 9. Workflow editor (draft). The header «Запустить» validates the graph and
+  //    routes to the payment screen (it is a routing hop, not the launch).
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
   await page
     .locator('[data-slot="button"]')
     .filter({ hasText: /^Запустить$/ })
+    .first()
+    .click();
+
+  // 10. Payment screen — pick a small custom budget within the seeded balance,
+  //     then launch. (Recommended may exceed the seeded balance for a large
+  //     base; a custom sum keeps the «Запустить» CTA out of top-up mode.)
+  await expect(
+    page.getByRole("heading", { name: "test-base.csv" })
+  ).toHaveCount(0); // sanity: heading is the campaign name, not the file
+  await page.getByRole("button", { name: /Своя сумма/ }).click();
+  await page.getByLabel("Своя сумма").fill("500");
+  await page
+    .locator('[data-slot="button"]')
+    .filter({ hasText: /^Запустить$/ })
+    .first()
+    .click();
+
+  // 11. Launch animation → active campaign detail screen. Wait for a detail-card
+  //     action that is unique to that screen («Дублировать») before opening
+  //     stats — otherwise the always-present sidebar «Статистика» button would
+  //     satisfy the wait during the launch animation and the click would land
+  //     on global stats. The «Статистика» action lives on the detail card now
+  //     (not the canvas header); `.last()` selects it over the sidebar nav
+  //     button (sidebar renders first in the DOM).
+  await expect(
+    page.getByRole("button", { name: "Дублировать", exact: true })
+  ).toBeVisible({ timeout: 10_000 });
+  await page
+    .getByRole("button", { name: "Статистика", exact: true })
     .last()
     .click();
 
-  // 9. Step 7/8: processing screen briefly visible, then result. Skip the
-  //    intermediate assertion — at the default 6s processing duration the
-  //    flow advances faster than playwright can settle.
-  await expect(page.getByRole("heading", { name: /Сигналы готовы/ })).toBeVisible({
-    timeout: 20_000,
-  });
-  await page.getByRole("button", { name: "Использовать в кампании" }).click();
-
-  // 11. CampaignTypeView: pick first campaign type
-  await expect(page.getByText("Выберите тип кампании")).toBeVisible();
-  await page.getByRole("button", { name: /Возврат брошенных действий/ }).click();
-
-  // 12. CanvasHeader → Запустить (scoped: avoid sidebar's Запустить button)
-  await page.locator('[data-slot="button"]').filter({ hasText: /^Запустить$/ }).click();
-
-  // 13. Wait for campaign to be active (header shows active-state buttons)
-  await expect(
-    page.getByRole("button", { name: "Посмотреть статистику" })
-  ).toBeVisible({ timeout: 5_000 });
-
-  // 14. Click header button "Посмотреть статистику"
-  await page
-    .getByRole("button", { name: "Посмотреть статистику" })
-    .click();
-
-  // 15. StatisticsView visible (scoped to a campaign → campaign-stats heading)
+  // 12. Campaign statistics view.
   await expect(
     page.getByRole("heading", { name: "Статистика кампании" })
   ).toBeVisible();
