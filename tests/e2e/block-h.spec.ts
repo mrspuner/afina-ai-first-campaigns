@@ -14,12 +14,27 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
 
 async function openAnyDraftCampaign(page: Page) {
   await page.getByRole("button", { name: "Кампании", exact: true }).click();
-  const draft = page
+  await page
     .locator("[data-slot=card]")
-    .filter({ hasText: "Не запущено" })
-    .first();
-  await draft.click();
+    .filter({ hasText: "Не запущена" })
+    .first()
+    .click();
+  // Card → detail → workflow editor.
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
+}
+
+function promptEditor(page: Page) {
+  return page.locator('[role="textbox"][contenteditable="true"]').first();
+}
+
+// Free-text structural command: no node is selected, so the composer has no
+// chip and fill() can set the whole command safely.
+async function submitCommand(page: Page, text: string) {
+  const editor = promptEditor(page);
+  await editor.click();
+  await editor.fill(text);
+  await editor.press("Enter");
 }
 
 /**
@@ -33,7 +48,8 @@ async function pickNonTerminalLabel(page: Page): Promise<string | null> {
   for (const h of handles) {
     const nt = await h.getAttribute("data-node-type");
     if (!nt) continue;
-    if (nt === "signal" || nt === "success" || nt === "end") continue;
+    if (nt === "signal" || nt === "source" || nt === "success" || nt === "end")
+      continue;
     const labelSpan = h.locator("span").first();
     const txt = (await labelSpan.textContent()) ?? "";
     const label = txt.trim();
@@ -52,9 +68,7 @@ test.describe("Block H — structural node operations", () => {
     const ref = await pickNonTerminalLabel(page);
     test.skip(!ref, "Нет подходящей ноды для ссылки 'после'");
 
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill(`добавь Email после ${ref}`);
-    await textarea.press("Enter");
+    await submitCommand(page, `добавь Email после ${ref}`);
 
     await expect(page.getByText(/Добавил Email/)).toBeVisible({
       timeout: 8_000,
@@ -69,9 +83,7 @@ test.describe("Block H — structural node operations", () => {
     await applyPreset(page, "mid");
     await openAnyDraftCampaign(page);
 
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill("убери Сигнал");
-    await textarea.press("Enter");
+    await submitCommand(page, "убери Сигнал");
     await expect(page.getByText(/точка входа/)).toBeVisible({ timeout: 8_000 });
   });
 
@@ -83,9 +95,7 @@ test.describe("Block H — structural node operations", () => {
     const target = await pickNonTerminalLabel(page);
     test.skip(!target, "Нет подходящей ноды для замены");
 
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill(`замени ${target} на Email`);
-    await textarea.press("Enter");
+    await submitCommand(page, `замени ${target} на Email`);
     await expect(page.getByText(/Заменил/)).toBeVisible({ timeout: 8_000 });
   });
 
@@ -99,16 +109,14 @@ test.describe("Block H — structural node operations", () => {
     const ref = await pickNonTerminalLabel(page);
     test.skip(!ref, "Нет подходящей ноды для 'после'");
 
-    const textarea = page.getByRole("textbox").first();
-    await textarea.fill(`добавь Email после ${ref}`);
-    await textarea.press("Enter");
+    await submitCommand(page, `добавь Email после ${ref}`);
 
     // wait for apply
     await expect(page.getByText(/Добавил Email/)).toBeVisible({
       timeout: 8_000,
     });
 
-    // Click the new Email node (last one) and verify attention block shows.
+    // Click the new Email node (last one) and verify the attention block shows.
     const emailNode = page.locator('[data-node-type="email"]').last();
     await emailNode.click();
     const panel = page.getByTestId("node-control-panel");
