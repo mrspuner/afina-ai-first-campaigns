@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
+import { dismissIntro } from "./helpers/seed-intro";
+
+test.beforeEach(async ({ page }) => {
+  await dismissIntro(page);
+});
 
 test("happy path: welcome → guided signal → campaign type → launch → stats", async ({ page }) => {
   await page.goto("/");

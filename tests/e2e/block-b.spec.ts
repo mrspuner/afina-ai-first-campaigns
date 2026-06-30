@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
+import { dismissIntro } from "./helpers/seed-intro";
+
+test.beforeEach(async ({ page }) => {
+  await dismissIntro(page);
+});
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");

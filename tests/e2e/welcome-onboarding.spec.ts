@@ -1,10 +1,20 @@
 import { test, expect, type Page } from "@playwright/test";
+import { dismissIntroOverlay } from "./helpers/seed-intro";
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   await page.getByRole("button", { name: new RegExp(`^${label}\\b`) }).click();
   await page.keyboard.press("Control+Shift+KeyE");
+}
+
+// This spec intentionally exercises the real first-run path: the IntroOverlay is
+// dismissed through its own UI (Далее → … → «Понятно, начать») rather than seeded
+// away, so we keep e2e coverage that a new user can get past it and reach the
+// welcome onboarding chat.
+async function openWelcome(page: Page) {
+  await page.goto("/");
+  await dismissIntroOverlay(page);
 }
 
 // Поведение welcome унифицировано: клик по чипсе/вопрос открывает правый
@@ -14,7 +24,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
   test("wave 0 → 1 → 2 → 3 navigation writes answers into the drawer", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await expect(
       page.getByRole("heading", { name: "Добро пожаловать" })
     ).toBeVisible();
@@ -50,7 +60,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
   test("welcome chips open the drawer instead of redirecting to the signal flow", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await page
       .getByRole("button", { name: "Откуда берутся мои данные?" })
       .click();
@@ -77,7 +87,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
   test("wave-3 extra question is single-use and ends the thread", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await page
       .getByRole("button", { name: "Что такое сигнал и кампания?" })
       .click();
@@ -109,7 +119,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
   test("history resets when user leaves welcome and returns", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await page
       .getByRole("button", { name: "Что я могу сделать со своей базой?" })
       .click();
@@ -140,7 +150,7 @@ test.describe("Welcome onboarding chat (empty preset)", () => {
   test("free-form submit opens the drawer with user + bot messages", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     const input = page.getByRole("textbox").first();
     await input.click();
     await input.fill("привет");
@@ -158,7 +168,7 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
   test("post-campaign welcome shows the done caption and interface chips", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await applyPreset(page, "full");
 
     // Full preset seeds active/completed campaigns → isCampaignDone === true.
@@ -180,7 +190,7 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
   });
 
   test("'Создать новую кампанию' replies inside the drawer", async ({ page }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await applyPreset(page, "full");
 
     await page.getByRole("button", { name: "Создать новую кампанию" }).click();
@@ -200,7 +210,7 @@ test.describe("Welcome post-onboarding (full preset, campaign launched)", () => 
   test("'Создать новый сигнал' starts the guided signal flow", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openWelcome(page);
     await applyPreset(page, "full");
 
     await page.getByRole("button", { name: "Создать новый сигнал" }).click();
