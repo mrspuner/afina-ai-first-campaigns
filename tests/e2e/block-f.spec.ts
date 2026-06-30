@@ -64,18 +64,39 @@ test.describe("Block F — Последнее (recent campaigns) panel", () => {
     await applyPreset(page, "mid");
     await openFlyout(page);
 
-    const initialCount = await campaignRows(page).count();
-    expect(initialCount).toBeGreaterThan(0);
+    // Read the actual rows from the preset (names are unique per campaign).
+    const names = (await campaignRows(page).locator("p").allTextContents()).map(
+      (n) => n.trim(),
+    );
+    const initialCount = names.length;
+    expect(initialCount).toBeGreaterThan(1);
 
-    // Filter by the first campaign's own name — that row must stay; the overall
-    // list must not grow.
-    const firstName =
-      (await campaignRows(page).first().locator("p").textContent())?.trim() ?? "";
+    // Search by the first campaign's full (unique) name — a term that matches
+    // exactly ONE known row. Pick a known NON-matching campaign to assert it
+    // disappears (a name that does not contain firstName as a substring).
+    const firstName = names[0];
     expect(firstName.length).toBeGreaterThan(0);
+    const otherName = names
+      .slice(1)
+      .find(
+        (n) =>
+          n !== firstName &&
+          !n
+            .toLocaleLowerCase("ru-RU")
+            .includes(firstName.toLocaleLowerCase("ru-RU")),
+      );
+    expect(otherName, "preset must have a non-matching campaign").toBeTruthy();
+
     await searchBox(page).fill(firstName);
 
+    // (a) the matching campaign's row stays visible …
     await expect(flyout(page).getByText(firstName, { exact: true })).toBeVisible();
-    expect(await campaignRows(page).count()).toBeLessThanOrEqual(initialCount);
+    // (b) … and the known non-matching campaign's row is gone.
+    await expect(
+      flyout(page).getByText(otherName!, { exact: true }),
+    ).toHaveCount(0);
+    // The list strictly shrank — the search actually narrowed it.
+    expect(await campaignRows(page).count()).toBeLessThan(initialCount);
   });
 
   test("search with no matches shows empty state", async ({ page }) => {

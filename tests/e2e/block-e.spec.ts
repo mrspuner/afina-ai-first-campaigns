@@ -216,16 +216,19 @@ test.describe("Block E — Node control + AI cycle", () => {
       timeout: 8_000,
     });
 
-    // The SMS content is now managed via a template selector («Шаблон»), so the
-    // raw text no longer renders as a «Текст» row. The faithful current signal
-    // that the AI command edited the content param is the params section's
-    // "edited" marker (yellow dot, title «Параметр изменён») on the content
-    // field — re-open the node and assert it.
+    // The SMS content is now managed via a template selector («Шаблон»,
+    // paramKey "text"), so the raw text no longer renders as a «Текст» row. The
+    // faithful current signal that the AI command edited the CONTENT param is
+    // the "edited" marker (yellow dot, title «Параметр изменён») on the
+    // «Шаблон» row specifically — scope to that row, not any dirty param.
     await page.locator('[data-node-type="sms"]').first().click();
     const panel = page.getByTestId("node-control-panel");
     await expect(panel).toBeVisible();
+    const contentRow = panel.getByRole("button", {
+      name: "Изменить поле «Шаблон»",
+    });
     await expect(
-      panel.locator('[title="Параметр изменён"]').first()
+      contentRow.locator('[title="Параметр изменён"]')
     ).toBeVisible({ timeout: 7_000 });
   });
 
