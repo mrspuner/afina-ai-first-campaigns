@@ -305,6 +305,7 @@ export type Action =
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
   | { type: "campaign_file_added"; campaignId: string; file: { name: string; rowCount: number } }
+  | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[] }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
@@ -590,6 +591,22 @@ export function appReducer(state: AppState, action: Action): AppState {
         campaigns: state.campaigns.map((c) =>
           c.id === action.campaignId
             ? { ...c, files: [...(c.files ?? []), action.file] }
+            : c
+        ),
+      };
+    }
+
+    case "campaign_scoring_set": {
+      // 2c — редактируемый дровер «Интересы и триггеры» на скоринг-ноде:
+      // черновик кампании может править интересы/триггеры до запуска. Источник
+      // правды — сам Campaign (applyCampaignContext накладывает их на ноду при
+      // пересборке графа), поэтому дровер пишет именно сюда.
+      if (!state.campaigns.some((c) => c.id === action.id)) return state;
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.id
+            ? { ...c, interests: action.interests, triggers: action.triggers }
             : c
         ),
       };

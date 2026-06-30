@@ -29,6 +29,7 @@ import { usePromptChips } from "@/state/prompt-chips-context";
 import { usePromptInputController } from "@/components/ai-elements/prompt-input";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
+import { InterestChip } from "@/sections/campaigns/interest-chip";
 import { useScreenHints } from "@/hooks/use-screen-hints";
 import { interestsScreenHints } from "./screen-hints";
 import { cn } from "@/lib/utils";
@@ -72,31 +73,6 @@ function resolveInterests(direction: string, vertical: Vertical): Interest[] {
     .filter((i): i is Interest => i !== undefined);
   if (curated.length > 0) return curated;
   return vertical.interests;
-}
-
-function InterestChip({
-  label,
-  selected,
-  onToggle,
-}: {
-  label: string;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        "rounded-lg border px-3 py-2 text-left text-sm transition-all",
-        selected
-          ? "border-brand/50 bg-brand-muted text-foreground"
-          : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
-      )}
-    >
-      {label}
-    </button>
-  );
 }
 
 function MascotIcon({ className }: { className?: string }) {

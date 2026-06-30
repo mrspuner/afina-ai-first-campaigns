@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Eye } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Eye, Pencil } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { ScoringInsightsDrawer } from "./scoring-insights-drawer";
+import { resolveInterestOptions } from "./interest-options";
 import { getFieldMeta } from "@/state/node-field-editability";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
@@ -129,16 +130,53 @@ export function getParamRows(params: NodeParams): ParamRow[] {
 
 /**
  * Scoring node body: a single «Интересы и триггеры» row whose value is an
- * eye affordance opening a read-only drawer. The interests/triggers themselves
- * come from the wizard (overlaid onto params by `applyCampaignContext`) — the
- * card stays compact; the explanation lives in the drawer.
+ * eye affordance opening the drawer. The interests/triggers come from the wizard
+ * (overlaid onto params by `applyCampaignContext`) — the card stays compact; the
+ * explanation (and, for a draft, the editor) lives in the drawer.
+ *
+ * 2c — while the campaign is a draft (not launched) the drawer is editable;
+ * every change persists to BOTH the campaign (source of truth, survives a graph
+ * rebuild) and this node's params (so the card reflects it immediately). Once
+ * launched the drawer is the read-only narration it has always been.
  */
 function ScoringRow({
+  nodeId,
   params,
 }: {
+  nodeId: string;
   params: Extract<NodeParams, { kind: "scoring" }>;
 }) {
   const [open, setOpen] = useState(false);
+  const dispatch = useAppDispatch();
+  const state = useAppState();
+  const readOnly = useWorkflowReadOnly();
+
+  const editable = !readOnly;
+  const campaignId =
+    state.view.kind === "workflow" ? state.view.campaign.id : undefined;
+  const interestOptions = useMemo(
+    () => resolveInterestOptions(state.clientDirection),
+    [state.clientDirection]
+  );
+
+  function handleChange(next: { interests: string[]; triggers: string[] }) {
+    // Persist to the campaign (durable source of truth) …
+    if (campaignId) {
+      dispatch({
+        type: "campaign_scoring_set",
+        id: campaignId,
+        interests: next.interests,
+        triggers: next.triggers,
+      });
+    }
+    // … and to this scoring node's params, so the open card/drawer update now.
+    dispatch({
+      type: "workflow_node_field_set",
+      nodeId,
+      patch: { interests: next.interests, triggers: next.triggers } as Partial<NodeParams>,
+    });
+  }
+
   return (
     <>
       <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
@@ -146,14 +184,22 @@ function ScoringRow({
         <span aria-hidden />
         <button
           type="button"
-          aria-label="Показать интересы и триггеры"
+          aria-label={
+            editable
+              ? "Изменить интересы и триггеры"
+              : "Показать интересы и триггеры"
+          }
           onClick={(e) => {
             e.stopPropagation();
             setOpen(true);
           }}
           className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
         >
-          <Eye className="h-3.5 w-3.5" />
+          {editable ? (
+            <Pencil className="h-3.5 w-3.5" />
+          ) : (
+            <Eye className="h-3.5 w-3.5" />
+          )}
         </button>
       </div>
       <ScoringInsightsDrawer
@@ -161,6 +207,9 @@ function ScoringRow({
         onOpenChange={setOpen}
         interests={params.interests}
         triggers={params.triggers}
+        editable={editable && campaignId !== undefined}
+        interestOptions={interestOptions}
+        onChange={handleChange}
       />
     </>
   );
@@ -263,8 +312,11 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
         </div>
       )}
 
-      {/* Скоринг — одна строка «Интересы и триггеры» с дровером (read-only). */}
-      {data.params?.kind === "scoring" && <ScoringRow params={data.params} />}
+      {/* Скоринг — одна строка «Интересы и триггеры» с дровером (редактируемым
+          в черновике, read-only после запуска — 2c). */}
+      {data.params?.kind === "scoring" && (
+        <ScoringRow nodeId={id} params={data.params} />
+      )}
 
       {data.params?.kind !== "split" &&
         data.params?.kind !== "wait" &&
