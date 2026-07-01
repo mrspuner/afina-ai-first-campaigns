@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ArtifactScreenView } from "./artifact-screen";
 import type { Artifact, Campaign } from "@/state/app-state";
 
@@ -77,5 +77,25 @@ describe("ArtifactScreenView", () => {
   it("does not show campaign settings section when campaign is undefined", () => {
     renderScreen({ campaign: undefined });
     expect(screen.queryByText(/Настройки кампании-источника/)).not.toBeInTheDocument();
+  });
+
+  it("cumulative artifact → collection detail: total, «Дневные выжимки» list, «Скачать общий»", () => {
+    const cumulative = { id: "str-c", campaignId: "str", kind: "signals", count: 12480, createdAt: "2026-06-30", variant: "cumulative" } as const;
+    const dailies = [
+      { id: "d2", campaignId: "str", kind: "signals", count: 2140, createdAt: "2026-06-30", variant: "daily", periodDate: "2026-06-30" },
+      { id: "d1", campaignId: "str", kind: "signals", count: 1980, createdAt: "2026-06-29", variant: "daily", periodDate: "2026-06-29" },
+    ] as const;
+    const onDownloadDaily = vi.fn();
+    render(
+      <ArtifactScreenView
+        artifact={cumulative} dailies={[...dailies]} campaign={undefined} campaignName="ЖК Заря"
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDownloadDaily={onDownloadDaily} onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Дневные выжимки/)).toBeVisible();
+    expect(screen.getByText(/Выжимка · 30\.06/)).toBeVisible();
+    expect(screen.getByText(/12\s?480/)).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: /Скачать выжимку/i })[0]);
+    expect(onDownloadDaily).toHaveBeenCalledWith("d2");
   });
 });

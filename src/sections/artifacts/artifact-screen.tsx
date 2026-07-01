@@ -5,6 +5,7 @@ import {
   EntityCardShell,
   CardSection,
 } from "@/components/ui/entity-card";
+import { Button } from "@/components/ui/button";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import type { Artifact, Campaign } from "@/state/app-state";
 import type { Channel } from "@/types/campaign";
@@ -42,9 +43,11 @@ interface ArtifactScreenViewProps {
   artifact: Artifact;
   campaign: Campaign | undefined;
   campaignName: string;
+  dailies?: Artifact[];
   onBack: () => void;
   onOpenCampaign: (campaignId: string) => void;
   onDownload: () => void;
+  onDownloadDaily?: (id: string) => void;
   onDelete: () => void;
 }
 
@@ -53,16 +56,19 @@ export function ArtifactScreenView({
   artifact,
   campaign,
   campaignName,
+  dailies,
   onBack,
   onOpenCampaign,
   onDownload,
+  onDownloadDaily,
   onDelete,
 }: ArtifactScreenViewProps) {
   const kindLabel = ARTIFACT_KIND_LABEL[artifact.kind];
+  const isCollection = artifact.variant === "cumulative";
 
   return (
     <EntityCardShell
-      title={kindLabel}
+      title={isCollection ? `Поток · ${campaignName}` : kindLabel}
       onBack={onBack}
       backLabel="К артефактам"
       meta={
@@ -74,18 +80,36 @@ export function ArtifactScreenView({
       }
       secondaryActions={[
         {
-          label: "Скачать",
+          label: isCollection ? "Скачать общий" : "Скачать",
           onClick: onDownload,
           icon: <Download className="h-4 w-4" />,
         },
         { label: "Удалить", onClick: onDelete, icon: <Trash2 className="h-4 w-4" /> },
       ]}
     >
-      <CardSection label="Всего сигналов">
+      <CardSection label={isCollection ? "Всего сигналов за период" : "Всего сигналов"}>
         <p className="text-4xl font-bold tabular-nums text-brand">
           {formatNumber(artifact.count)}
         </p>
       </CardSection>
+
+      {isCollection && dailies && (
+        <CardSection label="Дневные выжимки">
+          <div className="flex flex-col">
+            {dailies.map((d) => (
+              <div key={d.id} className="flex items-center gap-3 border-t border-border/40 py-2.5 text-sm first:border-t-0">
+                <span className="flex-1 text-foreground">
+                  Выжимка · {d.periodDate ? `${d.periodDate.slice(8, 10)}.${d.periodDate.slice(5, 7)}` : "—"}
+                  <span className="ml-2 tabular-nums text-muted-foreground">{d.count.toLocaleString("ru-RU")}</span>
+                </span>
+                <Button variant="outline" size="icon" aria-label="Скачать выжимку" onClick={() => onDownloadDaily?.(d.id)}>
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardSection>
+      )}
 
       <CardSection label="Об артефакте">
         <div className="divide-y divide-border">
@@ -134,8 +158,20 @@ export function ArtifactScreen() {
 
   const campaign = campaigns.find((c) => c.id === artifact.campaignId);
 
+  const dailies =
+    artifact.variant === "cumulative"
+      ? artifacts
+          .filter((a) => a.campaignId === artifact.campaignId && a.variant === "daily")
+          .sort((a, b) => ((a.periodDate ?? "") < (b.periodDate ?? "") ? 1 : -1))
+      : undefined;
+
   function handleDownload() {
     downloadCsv(`afina-signals-${artifact!.id}.csv`, buildSignalsCsv(artifact!.id, artifact!.count));
+  }
+
+  function handleDownloadDaily(id: string) {
+    const d = artifacts.find((a) => a.id === id);
+    if (d) downloadCsv(`afina-signals-${d.periodDate ?? d.id}.csv`, buildSignalsCsv(d.id, d.count));
   }
 
   return (
@@ -143,9 +179,11 @@ export function ArtifactScreen() {
       artifact={artifact}
       campaign={campaign}
       campaignName={campaign?.name ?? "—"}
+      dailies={dailies}
       onBack={() => dispatch({ type: "sidebar_nav", section: "Артефакты" })}
       onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
+      onDownloadDaily={handleDownloadDaily}
       onDelete={() => dispatch({ type: "artifact_deleted", id: artifact.id })}
     />
   );
