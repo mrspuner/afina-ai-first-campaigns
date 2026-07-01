@@ -1,8 +1,9 @@
 // Bug 2a/2b — «без коммуникации» campaign (empty channels): its workflow graph
 // must carry NO communication nodes (email/sms/push/ivr) and its payment screen
-// must show NO communication budget (the «Коммуникация» line collapses to «—»
-// with no per-channel breakdown). Both surfaces read the same template, so the
-// single minimal-template fix corrects them together.
+// must show NO «Коммуникации» row (no per-channel breakdown). With no
+// communication the grand total «Итого» collapses to the «Сигналы» amount, so
+// «Сигналы» + «Итого» (= Сигналы) still render. Both surfaces read the same
+// template, so the single minimal-template fix corrects them together.
 //
 // Reuses `seedScreen` and the catalog's existing `campaign-payment-no-comms`
 // entry; the workflow variant is built inline (data only) so no extra visual
@@ -53,21 +54,22 @@ test.describe("«без коммуникации» — no comm nodes, no comm bu
     }
   });
 
-  test("payment screen shows ONLY «Сигналы» — no «Коммуникации» row (v8 contract)", async ({
+  test("payment screen shows «Сигналы» + «Итого» (= Сигналы), no «Коммуникации» row", async ({
     page,
   }) => {
     const screen = SCREENS.find((s) => s.id === "campaign-payment-no-comms");
     expect(screen, "campaign-payment-no-comms must exist in the catalog").toBeTruthy();
     await seedScreen(page, screen!);
 
-    // Only the «Сигналы» line renders.
+    // The «Сигналы» line renders…
     await expect(page.getByText("Сигналы", { exact: true })).toBeVisible();
+    // …and «Итого» renders too — the grand total collapses to the signals cost
+    // when there is no communication.
+    await expect(page.getByText("Итого", { exact: true })).toBeVisible();
 
-    // Under the v8 design there is NO «Коммуникации» row at all when the
-    // campaign has no channels (not a «—» value — the row is absent), and no
-    // «Итого» row either.
+    // There is NO «Коммуникации» row at all when the campaign has no channels
+    // (the row is absent, not a «—» value).
     await expect(page.getByText("Коммуникации", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Итого", { exact: true })).toHaveCount(0);
 
     // No per-channel breakdown table (its column headers are absent).
     await expect(page.getByText("Первичные", { exact: true })).toHaveCount(0);

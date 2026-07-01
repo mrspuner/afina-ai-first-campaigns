@@ -396,6 +396,21 @@ describe("appReducer — launched campaign screen", () => {
     });
   });
 
+  it("campaign_launched does NOT deduct the balance (no separate charge / no double-charge)", () => {
+    // Signals + communications are shown as ONE budget paid together; the
+    // prototype gates the launch on balance but never deducts from it. This
+    // locks in that «уже оплачено» is a display label, not a prior transaction.
+    const c = makeCampaign({ id: "cmp_A", name: "C", status: "draft" });
+    const state: AppState = { ...initialState, balance: 12_345, campaigns: [c] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_A",
+      timestamp: "2026-05-20T00:00:00.000Z",
+      budget: 5_000,
+    });
+    expect(next.balance).toBe(12_345);
+  });
+
   it("campaign_launched is a no-op for unknown id", () => {
     const state: AppState = {
       ...initialState,

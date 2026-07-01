@@ -47,19 +47,22 @@ export interface BudgetForecast {
   signals: number;
   /** Communication cost from the workflow graph (primary + repeat). */
   communication: number;
-  /** Headline total = graph communication. Mirrors the payment screen's `recommended`. */
+  /** Grand total = signals + communication. Mirrors the payment screen's `recommended`. */
   total: number;
-  /** Stream source only: per-day budget derived from the headline total. */
+  /** Stream source only: per-day communication budget. */
   dailyBudget?: number;
 }
 
 /**
  * The wizard Budget forecast on the SAME graph cost model as the payment screen:
- *  - «Коммуникация» / «Итого» = graphCostFor(...).total (the scenario+source
- *    template graph priced over baseSize). Same inputs → same figure as payment.
+ *  - «Коммуникации» = graphCostFor(...).total (the scenario+source template
+ *    graph priced over baseSize). Same inputs → same figure as payment.
  *  - «Сигналы» = the source-rule scoring portion (own → 0/«бесплатно»), priced
  *    separately because the graph does not model scoring cost.
- *  - stream dailyBudget = total / STREAM_DAYS.
+ *  - «Итого» = signals + communication — signals and communications are paid
+ *    together, so the grand total is what the payment screen asks to pay.
+ *  - stream dailyBudget = communication / STREAM_DAYS (the recurring channel
+ *    spend; the one-off signals cost is not spread across days).
  * When no scenario is selected the graph cost is unavailable; we fall back to the
  * flat communication estimate so the step never crashes / shows nothing.
  */
@@ -78,11 +81,15 @@ export function buildBudgetForecast(input: BudgetForecastInput): BudgetForecast 
   });
   const communication = graph ? graph.total : flat.communication;
   const signals = flat.signals;
-  // Итого mirrors the payment screen, where `recommended = cost.total` is the
-  // communication-only graph total; scoring is shown as a separate line.
-  const total = communication;
+  // Итого = grand total: signals + communications are paid together.
+  const total = signals + communication;
   if (input.sourceType === "stream") {
-    return { signals, communication, total, dailyBudget: Math.round(total / STREAM_DAYS) };
+    return {
+      signals,
+      communication,
+      total,
+      dailyBudget: Math.round(communication / STREAM_DAYS),
+    };
   }
   return { signals, communication, total };
 }

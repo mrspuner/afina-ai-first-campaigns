@@ -1,11 +1,11 @@
 /**
- * Display-time split for the payment screen (aim #24).
+ * Display-time split for the payment screen.
  *
- * Scoring («Сигналы») is ALREADY PAID during signal scoring, so it must be
- * LOCKED: recalculation / «своя сумма» must never rescale it. Only the
- * communication portion scales with the chosen budget — all new payment goes to
- * communications. In recommended mode (or when there is nothing to scale
- * against) the split is returned untouched.
+ * «Сигналы» and «Коммуникации» are paid TOGETHER as one budget — one cannot be
+ * paid without the other. So «своя сумма» rescales the whole grand total: both
+ * lines scale proportionally by `customTotal / recommendedTotal`, and «Итого»
+ * is their sum. In recommended mode (or when there is nothing to scale against)
+ * the split is returned untouched.
  */
 export interface PaymentSplitShape {
   scoring: number;
@@ -18,17 +18,18 @@ export function paymentSplitDisplay<T extends PaymentSplitShape>(args: {
   mode: "recommended" | "custom";
   /** The user-entered custom budget (only used in custom mode). */
   customTotal: number;
-  /** The recommended communication total the lines scale against. */
+  /** The recommended GRAND total (scoring + communication) the lines scale against. */
   recommendedTotal: number;
 }): T {
   const { split, mode, customTotal, recommendedTotal } = args;
   if (mode !== "custom" || recommendedTotal <= 0) return split;
-  // Scoring is locked at its already-paid value; only communication scales.
   const factor = customTotal / recommendedTotal;
+  const scoring = Math.round(split.scoring * factor);
   const communication = Math.round(split.communication * factor);
   return {
     ...split,
+    scoring,
     communication,
-    total: split.scoring + communication,
+    total: scoring + communication,
   };
 }

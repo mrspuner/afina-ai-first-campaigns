@@ -42,9 +42,9 @@ function formatRub(n: number): string {
 }
 
 /**
- * Scoring («Сигналы») payment line text. Own bases score for free. For
- * new/stream the scoring was already paid during signal scoring, so we show
- * the actual already-paid rouble amount instead of a static «уже оплачено».
+ * Scoring («Сигналы») payment line text. Own bases score for free («бесплатно»).
+ * For new/stream the scoring cost is a normal contributing line, shown as its
+ * rouble amount — it is part of «Итого», paid together with communications.
  */
 export function scoringLineDisplay(args: {
   sourceType: "own" | "new" | "stream";
@@ -98,7 +98,6 @@ export function CampaignPaymentScreen() {
     return computeCampaignCost(graph.nodes, graph.edges, audienceSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign?.id, scenarioSignalType, audienceSize, campaign?.sourceType]);
-  const recommended = cost?.total ?? 0;
 
   // Two-payment split (scoring + communication), source-aware. The COMMUNICATION
   // figure comes from the SAME graph cost model as the headline (`cost.total`)
@@ -130,6 +129,11 @@ export function CampaignPaymentScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign?.id, campaign?.sourceType, campaign?.channels, audienceSize, cost]);
   const streamDailyBudget = paymentSplit?.dailyBudget;
+
+  // «Рекомендуемая» / the amount asked to pay = the GRAND total (Сигналы +
+  // Коммуникации). Signals and communications are paid together — the prototype
+  // gates the launch on balance but never deducts, so there is no double-charge.
+  const recommended = paymentSplit?.total ?? 0;
 
   const [mode, setMode] = useState<Mode>("recommended");
   const [customValue, setCustomValue] = useState<string>(
@@ -165,9 +169,9 @@ export function CampaignPaymentScreen() {
     [displayLines]
   );
 
-  // Scoring is already paid, so it is LOCKED — recalc / «своя сумма» rescales
-  // only the communication portion; all new payment goes to communications
-  // (aim #24). Recommended mode leaves the split untouched.
+  // Signals + communications are paid together, so «своя сумма» rescales the
+  // whole grand total: both the scoring and communication lines scale
+  // proportionally to the chosen sum. Recommended mode leaves the split intact.
   const displaySplit = useMemo(() => {
     if (!paymentSplit) return null;
     return paymentSplitDisplay({
@@ -305,14 +309,8 @@ export function CampaignPaymentScreen() {
                   sourceType: campaign.sourceType ?? "new",
                   scoring: displaySplit.scoring,
                 })}
-                signalsHint={
-                  (campaign.sourceType ?? "new") !== "own" &&
-                  displaySplit.scoring > 0
-                    ? "уже оплачено"
-                    : undefined
-                }
                 communicationDisplay={formatRubPlain(displaySplit.communication)}
-                totalDisplay={formatRubPlain(displaySplit.communication)}
+                totalDisplay={formatRubPlain(displaySplit.total)}
                 commGroups={commGroups}
                 formatCell={formatRubPlain}
                 footer={
@@ -371,7 +369,9 @@ export function CampaignPaymentScreen() {
             </span>
             <span className="mt-auto text-xs text-muted-foreground">
               {cost
-                ? `Первичные ${formatNumber(cost.primary)} ₽ + повторные ${formatNumber(cost.repeat)} ₽`
+                ? paymentSplit && paymentSplit.scoring > 0
+                  ? `Сигналы ${formatNumber(paymentSplit.scoring)} ₽ + коммуникации ${formatNumber(paymentSplit.communication)} ₽`
+                  : `Первичные ${formatNumber(cost.primary)} ₽ + повторные ${formatNumber(cost.repeat)} ₽`
                 : "На основе размера аудитории"}
             </span>
           </button>

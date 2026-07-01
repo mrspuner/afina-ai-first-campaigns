@@ -42,7 +42,7 @@ describe("buildBudgetRows (StepBudget forecast)", () => {
     const signalsRow = rows.find((r) => r.key === "signals")!;
     expect(signalsRow.display).not.toMatch(/бесплатно/i);
   });
-  it("always has a Итого row, and it equals the graph communication total", () => {
+  it("always has a Итого row = Сигналы + Коммуникации (grand total)", () => {
     const rows = buildBudgetRows({
       scenarioId: SCENARIO,
       sourceType: "new",
@@ -51,10 +51,13 @@ describe("buildBudgetRows (StepBudget forecast)", () => {
     });
     const total = rows.find((r) => r.key === "total")!;
     const comm = rows.find((r) => r.key === "communication")!;
+    const signals = rows.find((r) => r.key === "signals")!;
     expect(total).toBeTruthy();
-    // Итого mirrors the payment screen: it is the comms-only graph total.
-    expect(total.amount).toBe(comm.amount);
-    expect(total.amount).toBeGreaterThan(0);
+    // new source → signals are charged, so «Итого» is strictly greater than the
+    // communication portion and equals signals + communications.
+    expect(signals.amount).toBeGreaterThan(0);
+    expect(total.amount).toBe(signals.amount + comm.amount);
+    expect(total.amount).toBeGreaterThan(comm.amount);
   });
   it("no scenario falls back to the flat estimate (no channels → communication 0)", () => {
     const rows = buildBudgetRows({
@@ -134,7 +137,7 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
     cleanup();
   });
 
-  it("shows NO «Коммуникации» row and NO «Итого» when there is no graph cost (only «Сигналы»)", () => {
+  it("shows «Сигналы» + «Итого» (= Сигналы) but NO «Коммуникации» row when there is no graph cost", () => {
     renderStep(
       <StepBudget
         data={makeData({ channels: [] })}
@@ -144,7 +147,9 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
     );
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Коммуникации/ })).toBeNull();
-    expect(screen.queryByText("Итого")).toBeNull();
+    // With no communication the grand total collapses to signals, so «Итого»
+    // still renders (equal to «Сигналы»).
+    expect(screen.getByText("Итого")).toBeTruthy();
     cleanup();
   });
 

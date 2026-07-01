@@ -35,20 +35,15 @@ function renderBreakdown(over: Partial<React.ComponentProps<typeof BudgetBreakdo
   );
 }
 
-describe("BudgetBreakdown — merged «Сигналы» row", () => {
+describe("BudgetBreakdown — «Сигналы» is a normal contributing line", () => {
   it("renders a single «Сигналы» row with label + amount", () => {
     renderBreakdown({ signalsDisplay: "2 500 ₽" });
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.getByText("2 500 ₽")).toBeTruthy();
   });
 
-  it("renders the optional signals hint when provided", () => {
-    renderBreakdown({ signalsDisplay: "2 500 ₽", signalsHint: "уже оплачено" });
-    expect(screen.getByText("уже оплачено")).toBeTruthy();
-  });
-
-  it("omits the hint when not provided", () => {
-    renderBreakdown();
+  it("never frames «Сигналы» as pre-paid («уже оплачено»)", () => {
+    renderBreakdown({ signalsDisplay: "2 500 ₽" });
     expect(screen.queryByText("уже оплачено")).toBeNull();
   });
 });
@@ -109,14 +104,16 @@ describe("BudgetBreakdown — collapsible «Коммуникации» table", (
   });
 });
 
-describe("BudgetBreakdown — «Итого» row", () => {
-  it("renders «Итого» with the total amount when communication exists", () => {
-    renderBreakdown({ totalDisplay: "65 000 ₽" });
+describe("BudgetBreakdown — «Итого» = Сигналы + Коммуникации (grand total)", () => {
+  it("renders «Итого» with the grand-total amount when communication exists", () => {
+    // signals 2 500 + communications 65 000 → grand total 67 500.
+    renderBreakdown({ signalsDisplay: "2 500 ₽", totalDisplay: "67 500 ₽" });
     expect(screen.getByText("Итого")).toBeTruthy();
+    expect(screen.getByText("67 500 ₽")).toBeTruthy();
   });
 
   it("the «Итого» amount is NOT yellow/brand-colored (foreground only)", () => {
-    renderBreakdown({ totalDisplay: "65 000 ₽" });
+    renderBreakdown({ totalDisplay: "67 500 ₽" });
     const total = screen.getByText("Итого").closest("div")!;
     expect(total.className).not.toMatch(/text-brand|text-\[#ffec00\]|text-yellow/i);
     expect(total.className).toContain("text-foreground");
@@ -124,18 +121,30 @@ describe("BudgetBreakdown — «Итого» row", () => {
 });
 
 describe("BudgetBreakdown — no communication (empty channels)", () => {
-  it("renders ONLY «Сигналы» — no «Коммуникации» row, no «Итого»", () => {
-    renderBreakdown({ commGroups: empty });
+  it("renders «Сигналы» + «Итого» (= Сигналы) — no «Коммуникации» row", () => {
+    // With no communication the grand total collapses to the signals amount,
+    // so «Итого» still renders and equals «Сигналы».
+    renderBreakdown({
+      signalsDisplay: "2 500 ₽",
+      totalDisplay: "2 500 ₽",
+      commGroups: empty,
+    });
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Коммуникации/ })).toBeNull();
     expect(screen.queryByText("Коммуникации")).toBeNull();
-    expect(screen.queryByText("Итого")).toBeNull();
+    expect(screen.getByText("Итого")).toBeTruthy();
+    // Both «Сигналы» and «Итого» read the same amount.
+    expect(screen.getAllByText("2 500 ₽").length).toBe(2);
   });
 
-  it("treats null commGroups the same as empty (only «Сигналы»)", () => {
-    renderBreakdown({ commGroups: null });
+  it("treats null commGroups the same as empty (Сигналы + Итого, no Коммуникации)", () => {
+    renderBreakdown({
+      signalsDisplay: "2 500 ₽",
+      totalDisplay: "2 500 ₽",
+      commGroups: null,
+    });
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.queryByText("Коммуникации")).toBeNull();
-    expect(screen.queryByText("Итого")).toBeNull();
+    expect(screen.getByText("Итого")).toBeTruthy();
   });
 });

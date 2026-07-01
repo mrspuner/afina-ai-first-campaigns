@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { paymentSplitDisplay } from "./payment-split-display";
 
-const split = { scoring: 184, communication: 1000, total: 1184 };
+// Grand total = scoring + communication. Signals and communications are paid
+// TOGETHER, so «своя сумма» rescales BOTH lines proportionally.
+const split = { scoring: 200, communication: 800, total: 1000 };
 
-describe("paymentSplitDisplay (aim #24 — scoring locked)", () => {
+describe("paymentSplitDisplay (signals + communications paid together)", () => {
   it("recommended mode returns the split untouched", () => {
     const out = paymentSplitDisplay({
       split,
@@ -14,35 +16,39 @@ describe("paymentSplitDisplay (aim #24 — scoring locked)", () => {
     expect(out).toEqual(split);
   });
 
-  it("custom mode: scoring stays LOCKED regardless of the custom amount", () => {
-    const a = paymentSplitDisplay({
-      split,
-      mode: "custom",
-      customTotal: 2000,
-      recommendedTotal: 1000,
-    });
-    const b = paymentSplitDisplay({
-      split,
-      mode: "custom",
-      customTotal: 500,
-      recommendedTotal: 1000,
-    });
-    // Scoring must NOT change when the custom amount changes.
-    expect(a.scoring).toBe(184);
-    expect(b.scoring).toBe(184);
-  });
-
-  it("custom mode: only communication scales (all new payment → communications)", () => {
+  it("custom mode: both scoring AND communication scale proportionally", () => {
     const out = paymentSplitDisplay({
       split,
       mode: "custom",
-      customTotal: 2000, // 2x the recommended communication
+      customTotal: 2000, // 2x the recommended grand total
       recommendedTotal: 1000,
     });
-    expect(out.communication).toBe(2000);
-    expect(out.scoring).toBe(184);
-    // total = locked scoring + scaled communication
-    expect(out.total).toBe(184 + 2000);
+    // factor 2 → both lines double, «Итого» = their sum.
+    expect(out.scoring).toBe(400);
+    expect(out.communication).toBe(1600);
+    expect(out.total).toBe(2000);
+  });
+
+  it("custom mode: scaling down shrinks both lines", () => {
+    const out = paymentSplitDisplay({
+      split,
+      mode: "custom",
+      customTotal: 500, // half the recommended grand total
+      recommendedTotal: 1000,
+    });
+    expect(out.scoring).toBe(100);
+    expect(out.communication).toBe(400);
+    expect(out.total).toBe(500);
+  });
+
+  it("«Итого» always equals scoring + communication after scaling", () => {
+    const out = paymentSplitDisplay({
+      split,
+      mode: "custom",
+      customTotal: 1337,
+      recommendedTotal: 1000,
+    });
+    expect(out.total).toBe(out.scoring + out.communication);
   });
 
   it("recommendedTotal <= 0 returns the split untouched (no division by zero)", () => {

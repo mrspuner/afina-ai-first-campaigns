@@ -30,6 +30,29 @@ describe("buildBudgetForecast channel-awareness (aim #2 mismatch fix)", () => {
     expect(forecast.total).toBe(paymentGraph!.total);
   });
 
+  it("new source: forecast.total is the grand total = signals + communication", () => {
+    const channels: Channel[] = ["sms", "email"];
+    const forecast = buildBudgetForecast({
+      scenarioId: SCENARIO,
+      sourceType: "new",
+      channels,
+      baseSize: BASE,
+    });
+    const paymentGraph = graphCostFor({
+      scenarioId: SCENARIO,
+      sourceType: "new",
+      baseSize: BASE,
+      channels,
+    });
+    expect(paymentGraph).not.toBeNull();
+    // Communication mirrors the graph cost; signals are charged for new bases…
+    expect(forecast.communication).toBe(paymentGraph!.total);
+    expect(forecast.signals).toBeGreaterThan(0);
+    // …and «Итого» = signals + communications, strictly above communications alone.
+    expect(forecast.total).toBe(forecast.signals + forecast.communication);
+    expect(forecast.total).toBeGreaterThan(forecast.communication);
+  });
+
   it("different channels yield different forecast totals (channels are actually threaded)", () => {
     const smsOnly = buildBudgetForecast({
       scenarioId: SCENARIO, sourceType: "own", channels: ["sms"], baseSize: BASE,

@@ -16,16 +16,17 @@ export interface BudgetBreakdownProps {
    * e.g. "бесплатно", "~₽ 2 500", "2 500 ₽".
    */
   signalsDisplay: string;
-  /** Optional muted hint after the Сигналы amount (payment: «уже оплачено»). */
-  signalsHint?: string;
   /** «Коммуникации» total, pre-formatted by the surface. */
   communicationDisplay: string;
-  /** «Итого» total, pre-formatted by the surface. */
+  /**
+   * «Итого» = grand total (Сигналы + Коммуникации), pre-formatted by the surface.
+   * With no communication it collapses to the Сигналы amount.
+   */
   totalDisplay: string;
   /**
    * Per-channel «Первичные» / «Повторные» groups. When null or empty there is
-   * NO communication — only the «Сигналы» row renders (no «Коммуникации», no
-   * «Итого»).
+   * NO communication — the «Коммуникации» row is omitted, but «Сигналы» and
+   * «Итого» (= Сигналы) still render.
    */
   commGroups: CommunicationGroups | null;
   /** Formats a rouble cell inside the expanded table (per-surface ₽ convention). */
@@ -40,12 +41,12 @@ export interface BudgetBreakdownProps {
  * Shared budget breakdown used identically by the wizard Бюджет step and the
  * campaign payment screen (DRY). Collapsed it shows «Сигналы» + a collapsible
  * «Коммуникации» row + «Итого»; expanding «Коммуникации» reveals a quiet
- * per-channel table (Канал | Первичные | Повторные | Итого). With no
- * communication only the «Сигналы» row renders.
+ * per-channel table (Канал | Первичные | Повторные | Итого). «Итого» is the
+ * grand total — Сигналы contributes to it. With no communication the
+ * «Коммуникации» row is omitted, but «Сигналы» and «Итого» (= Сигналы) remain.
  */
 export function BudgetBreakdown({
   signalsDisplay,
-  signalsHint,
   communicationDisplay,
   totalDisplay,
   commGroups,
@@ -59,16 +60,12 @@ export function BudgetBreakdown({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* «Сигналы» — one row: label left, amount right (scoring + signals merged). */}
+      {/* «Сигналы» — a normal contributing line: label left, amount right
+          (scoring + signals merged). It feeds «Итого», never «уже оплачено». */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">Сигналы</span>
-        <span className="flex items-baseline gap-2">
-          {signalsHint && (
-            <span className="text-xs text-muted-foreground/70">{signalsHint}</span>
-          )}
-          <span className="tabular-nums text-muted-foreground">
-            {signalsDisplay}
-          </span>
+        <span className="tabular-nums text-muted-foreground">
+          {signalsDisplay}
         </span>
       </div>
 
@@ -131,19 +128,21 @@ export function BudgetBreakdown({
               </table>
             </div>
           )}
-
-          {/* «Итого» — stronger divider + bold label. Foreground (never yellow). */}
-          <div
-            className={cn(
-              "flex items-center justify-between border-t border-border pt-3 text-sm font-semibold text-foreground",
-              !expanded && "mt-1"
-            )}
-          >
-            <span>Итого</span>
-            <span className="tabular-nums">{totalDisplay}</span>
-          </div>
         </>
       )}
+
+      {/* «Итого» — grand total (Сигналы + Коммуникации). Always renders; with no
+          communication it equals «Сигналы». Stronger divider + bold label.
+          Foreground (never yellow). */}
+      <div
+        className={cn(
+          "flex items-center justify-between border-t border-border pt-3 text-sm font-semibold text-foreground",
+          !expanded && "mt-1"
+        )}
+      >
+        <span>Итого</span>
+        <span className="tabular-nums">{totalDisplay}</span>
+      </div>
 
       {footer}
     </div>

@@ -21,6 +21,12 @@ describe("splitCampaignPayments", () => {
     const p = splitCampaignPayments({ sourceType: "new", channels: ["sms"], baseSize: 1000 });
     expect(p.payments.map((x) => x.kind)).toEqual(["scoring", "communication"]);
   });
+  it("new + channels: grand total = scoring + communication (paid together)", () => {
+    const p = splitCampaignPayments({ sourceType: "new", channels: ["sms"], baseSize: 1000 });
+    expect(p.scoring).toBeGreaterThan(0);
+    expect(p.communication).toBeGreaterThan(0);
+    expect(p.total).toBe(p.scoring + p.communication);
+  });
   it("stream carries a dailyBudget on the communication payment", () => {
     const p = splitCampaignPayments({ sourceType: "stream", channels: ["push"], baseSize: 5000 });
     const comm = p.payments.find((x) => x.kind === "communication")!;
