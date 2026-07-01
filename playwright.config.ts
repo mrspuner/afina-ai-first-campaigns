@@ -5,6 +5,9 @@ export default defineConfig({
   fullyParallel: false,
   reporter: "list",
   timeout: 60_000,
+  // Retry once for timing-sensitive workflow/animation specs (makes
+  // `trace: "on-first-retry"` meaningful and stabilizes pre-existing flakes).
+  retries: 1,
   expect: {
     toHaveScreenshot: { animations: "disabled", scale: "css", maxDiffPixelRatio: 0.01 },
   },
