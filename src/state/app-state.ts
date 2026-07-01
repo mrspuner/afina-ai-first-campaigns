@@ -96,6 +96,10 @@ export type Artifact = {
    */
   count: number;
   createdAt: string;
+  /** Role in a streaming campaign's collection. Absent/"single" = a one-time artifact. */
+  variant?: "single" | "daily" | "cumulative";
+  /** For "daily" digests: the covered day (YYYY-MM-DD). */
+  periodDate?: string;
 };
 
 /**
@@ -537,6 +541,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         kind: action.kind,
         count: action.count,
         createdAt: new Date().toISOString(),
+        variant: "single",
       };
       return {
         ...state,
@@ -1050,6 +1055,7 @@ export function appReducer(state: AppState, action: Action): AppState {
             kind: artifactKindForCampaign(c),
             count: launchMatched,
             createdAt: action.timestamp,
+            variant: "single",
           }]
         : [];
 
@@ -1091,6 +1097,7 @@ export function appReducer(state: AppState, action: Action): AppState {
             kind: artifactKindForCampaign(c),
             count: advanceMatched,
             createdAt: new Date().toISOString(),
+            variant: "single",
           }];
       return {
         ...state,
