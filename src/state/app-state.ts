@@ -7,7 +7,14 @@ import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
-import { estimateArtifactCount, artifactKindForCampaign } from "./artifact-metrics";
+import {
+  estimateArtifactCount,
+  artifactKindForCampaign,
+  digestCount,
+  addDaysIso,
+  MAX_DIGESTS,
+  isStreamingCampaign,
+} from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
 import {
   DEFAULT_DIRECTION_ID,
@@ -350,6 +357,7 @@ export type Action =
   | { type: "wizard_random_remix" }
   | { type: "campaign_launched"; id: string; timestamp: string; budget: number; templates?: MessageTemplate[]; dailyBudget?: number }
   | { type: "campaign_phase_advanced"; id: string }
+  | { type: "stream_digest_emitted"; id: string; timestamp: string }
   | { type: "open_workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { type: "open_campaign_payment"; campaignId: string }
   | { type: "stats_set_period"; period: Period }
@@ -1046,7 +1054,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       // collected-signals artifact during pre-launch `campaign_phase_advanced`.
       const phase: Campaign["phase"] = "communicating";
       const alreadyHasArtifact = state.artifacts.some((a) => a.campaignId === c.id);
-      const makeArtifact = !alreadyHasArtifact;
+      const makeArtifact = !alreadyHasArtifact && !isStreamingCampaign(c);
       const launchMatched = estimateArtifactCount(c);
       const newArtifacts: Artifact[] = makeArtifact
         ? [{
@@ -1110,6 +1118,41 @@ export function appReducer(state: AppState, action: Action): AppState {
             ? { ...state.notifications, signalsBadge: true }
             : state.notifications,
       };
+    }
+
+    case "stream_digest_emitted": {
+      const c = state.campaigns.find((x) => x.id === action.id);
+      if (!c || c.status !== "active" || !isStreamingCampaign(c)) return state;
+      const dayIndex = state.artifacts.filter(
+        (a) => a.campaignId === c.id && a.variant === "daily",
+      ).length;
+      if (dayIndex >= MAX_DIGESTS) return state;
+
+      const count = digestCount(c.id, dayIndex);
+      const kind = artifactKindForCampaign(c);
+      const periodDate = addDaysIso(c.launchedAt ?? c.createdAt, dayIndex);
+      const daily: Artifact = {
+        id: `art_${nanoid(8)}`, campaignId: c.id, kind, count,
+        createdAt: action.timestamp, variant: "daily", periodDate,
+      };
+      const cumulative = state.artifacts.find(
+        (a) => a.campaignId === c.id && a.variant === "cumulative",
+      );
+      const artifacts = cumulative
+        ? [
+            ...state.artifacts.map((a) =>
+              a.id === cumulative.id
+                ? { ...a, count: a.count + count, createdAt: action.timestamp }
+                : a,
+            ),
+            daily,
+          ]
+        : [
+            ...state.artifacts,
+            { id: `art_${nanoid(8)}`, campaignId: c.id, kind, count, createdAt: action.timestamp, variant: "cumulative" as const },
+            daily,
+          ];
+      return { ...state, artifacts };
     }
 
     case "open_workflow":

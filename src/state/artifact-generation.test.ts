@@ -15,10 +15,9 @@ describe("campaign_launched artifact generation", () => {
     expect(s.artifacts[0]).toMatchObject({ campaignId: "c1", kind: "signals_conversions", count: 4200 });
     expect(s.campaigns[0].phase).toBe("communicating");
   });
-  it("stream → artifact at launch + phase communicating", () => {
+  it("stream → NO single artifact at launch (collection comes from daily digests) + phase communicating", () => {
     const s = launchedState({ sourceType: "stream", channels: [] });
-    expect(s.artifacts).toHaveLength(1);
-    expect(s.artifacts[0].kind).toBe("signals");
+    expect(s.artifacts).toHaveLength(0);
     expect(s.campaigns[0].phase).toBe("communicating");
   });
   it("new launches to communicating (collection already done pre-launch)", () => {
