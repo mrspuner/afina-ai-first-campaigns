@@ -130,6 +130,9 @@ export const SCREENS: Screen[] = [
   },
 
   // ---- Wizard (single guided-campaign view; step selected via wizardSeed) ----
+  // The intent-gated flow for the default intent («signals-comms», set in
+  // baseStepData) is: Сценарий → Цель → Интересы → Режим → Файл → Каналы →
+  // Бюджет — seven steps. Each screen seeds the step index into that list.
   {
     id: "wizard-1-scenario",
     name: "Визард · шаг 1 — Сценарий",
@@ -137,25 +140,37 @@ export const SCREENS: Screen[] = [
     expect: 'h1:has-text("Выберите сценарий")',
   },
   {
-    id: "wizard-2-source",
-    name: "Визард · шаг 2 — Источник",
+    id: "wizard-2-intent",
+    name: "Визард · шаг 2 — Цель",
     seed: guided(2, stepData({ scenario: "base-registration" })),
-    expect: 'h1:has-text("Откуда берём аудиторию")',
+    expect: 'h1:has-text("Что хотите получить")',
   },
   {
     id: "wizard-3-interests",
     name: "Визард · шаг 3 — Интересы и триггеры",
-    seed: guided(3, stepData({ scenario: "base-registration", sourceType: "new" })),
+    seed: guided(3, stepData({ scenario: "base-registration" })),
     expect: 'h1:has-text("Какие интересы")',
   },
   {
-    id: "wizard-4-file",
-    name: "Визард · шаг 4 — База",
+    id: "wizard-4-analysis",
+    name: "Визард · шаг 4 — Режим анализа",
     seed: guided(
       4,
       stepData({
         scenario: "base-registration",
-        sourceType: "new",
+        interests: ["Кредитование"],
+        triggers: ["Заявка на кредит"],
+      }),
+    ),
+    expect: 'h1:has-text("Разовый или потоковый")',
+  },
+  {
+    id: "wizard-5-file",
+    name: "Визард · шаг 5 — Файл",
+    seed: guided(
+      5,
+      stepData({
+        scenario: "base-registration",
         interests: ["Кредитование"],
         triggers: ["Заявка на кредит"],
       }),
@@ -163,15 +178,15 @@ export const SCREENS: Screen[] = [
     expect: 'h1:has-text("Загрузите вашу базу")',
   },
   {
-    id: "wizard-5-channels",
-    name: "Визард · шаг 5 — Каналы",
-    seed: guided(5, stepData({ ...wizardData, channels: [] })),
+    id: "wizard-6-channels",
+    name: "Визард · шаг 6 — Каналы",
+    seed: guided(6, stepData({ ...wizardData, channels: [] })),
     expect: 'h1:has-text("Как будем общаться")',
   },
   {
-    id: "wizard-6-budget",
-    name: "Визард · шаг 6 — Бюджет",
-    seed: guided(6, wizardData),
+    id: "wizard-7-budget",
+    name: "Визард · шаг 7 — Бюджет",
+    seed: guided(7, wizardData),
     expect: 'h1:has-text("Прогноз бюджета")',
   },
 

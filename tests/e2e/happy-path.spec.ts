@@ -40,9 +40,9 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   ).toBeVisible();
   await page.getByRole("button", { name: "Спящий клиент" }).click();
 
-  // 4. Step «Источник» — keep the default «Новая база номеров», continue.
+  // 4. Step «Цель» — keep the default «Сигналы + коммуникация», continue.
   await expect(
-    page.getByRole("heading", { name: /Откуда берём аудиторию/ })
+    page.getByRole("heading", { name: /Что хотите получить/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
@@ -52,7 +52,13 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   ).toBeVisible();
   await page.getByRole("button", { name: "Продолжить" }).last().click();
 
-  // 6. Step «Файл» — upload the base, then continue (waits out the hashing).
+  // 6. Step «Режим анализа» — keep the default «Разовый», continue.
+  await expect(
+    page.getByRole("heading", { name: /Разовый или потоковый/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
+
+  // 7. Step «Файл» — upload the base, then continue (waits out the hashing).
   await expect(
     page.getByRole("heading", { name: "Загрузите вашу базу" })
   ).toBeVisible();
@@ -64,7 +70,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   await expect(page.getByText("test-base.csv")).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 7. Step «Каналы» — pick one channel, continue. (Heading appears after the
+  // 8. Step «Каналы» — pick one channel, continue. (Heading appears after the
   //    ~hashing step; allow extra time.)
   await expect(
     page.getByRole("heading", { name: /Как будем общаться/ })
@@ -72,7 +78,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   await page.getByRole("checkbox", { name: /SMS/ }).click();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 8. Step «Бюджет» — recommended estimate, continue → workflow editor.
+  // 9. Step «Бюджет» — recommended estimate, continue → workflow editor.
   //    Wait for the step's body (the budget cards) to render before clicking —
   //    StepContent types its title/subtitle first, so «Далее» appears late and
   //    a premature `.last()` would re-hit the previous step's button.
@@ -82,7 +88,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 9. Workflow editor (draft). The header «Запустить» validates the graph and
+  // 10. Workflow editor (draft). The header «Запустить» validates the graph and
   //    routes to the payment screen (it is a routing hop, not the launch).
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
   await page
@@ -91,7 +97,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
     .first()
     .click();
 
-  // 10. Payment screen — pick a small custom budget within the seeded balance,
+  // 11. Payment screen — pick a small custom budget within the seeded balance,
   //     then launch. (Recommended may exceed the seeded balance for a large
   //     base; a custom sum keeps the «Запустить» CTA out of top-up mode.)
   await expect(
@@ -105,7 +111,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
     .first()
     .click();
 
-  // 11. Launch animation → active campaign detail screen. Wait for a detail-card
+  // 12. Launch animation → active campaign detail screen. Wait for a detail-card
   //     action that is unique to that screen («Дублировать») before opening
   //     stats — otherwise the always-present sidebar «Статистика» button would
   //     satisfy the wait during the launch animation and the click would land
@@ -120,7 +126,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
     .last()
     .click();
 
-  // 12. Campaign statistics view.
+  // 13. Campaign statistics view.
   await expect(
     page.getByRole("heading", { name: "Статистика кампании" })
   ).toBeVisible();

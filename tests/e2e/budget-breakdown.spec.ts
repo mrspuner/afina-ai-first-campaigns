@@ -18,7 +18,7 @@ async function commButton(page: Page) {
   return btn;
 }
 
-for (const id of ["wizard-6-budget", "campaign-payment"]) {
+for (const id of ["wizard-7-budget", "campaign-payment"]) {
   test.describe(`BudgetBreakdown collapsible «Коммуникации» — ${id}`, () => {
     test("collapsed by default, click reveals the per-channel table, click hides it", async ({
       page,

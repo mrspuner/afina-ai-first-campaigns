@@ -81,14 +81,20 @@ async function createCampaignViaWizard(page: Page, channel: "sms") {
   await page.keyboard.press("Control+Shift+KeyE");
   await page.getByRole("button", { name: "Создать кампанию" }).click();
   await page.getByRole("button", { name: "Спящий клиент" }).click();
+  // Цель — keep the default «Сигналы + коммуникация» (path B → channels step).
   await expect(
-    page.getByRole("heading", { name: /Откуда берём аудиторию/ })
+    page.getByRole("heading", { name: /Что хотите получить/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
   await expect(
     page.getByRole("heading", { name: /Какие интересы и триггеры/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Продолжить" }).last().click();
+  // Режим анализа — keep the default «Разовый».
+  await expect(
+    page.getByRole("heading", { name: /Разовый или потоковый/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
   await expect(
     page.getByRole("heading", { name: "Загрузите вашу базу" })
   ).toBeVisible();
