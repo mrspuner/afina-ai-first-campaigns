@@ -17,6 +17,7 @@ const empty: ChatState = {
     generating: false,
     question: null,
     previewTemplateId: null,
+    previewTemplate: null,
   },
 };
 
@@ -254,6 +255,23 @@ describe("chatReducer — template create/preview seam (#14)", () => {
     expect(s.templateDrawer.open).toBe(true);
     expect(s.templateDrawer.mode).toBe("preview");
     expect(s.templateDrawer.previewTemplateId).toBe("tpl_1");
+    expect(s.templateDrawer.previewTemplate).toBeNull();
+  });
+
+  it("open_template_preview accepts an inline template (IVR node scenario)", () => {
+    const template = {
+      id: "ivr_node_preview_comm_ivr",
+      channel: "ivr" as const,
+      name: "Сценарий звонка",
+      content: { kind: "ivr" as const, scenario: "Здравствуйте!", voiceType: "female" as const },
+      usedInCampaigns: 0,
+    };
+    const s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_preview", template });
+    expect(s.templateDrawer.open).toBe(true);
+    expect(s.templateDrawer.mode).toBe("preview");
+    // Inline object is carried verbatim; the id-lookup path stays empty.
+    expect(s.templateDrawer.previewTemplate).toBe(template);
+    expect(s.templateDrawer.previewTemplateId).toBeNull();
   });
 
   it("set_template_question stores the active picker question", () => {

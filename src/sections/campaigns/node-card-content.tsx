@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Eye, Pencil, Plus } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
@@ -13,7 +13,11 @@ import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
-import { channelForNodeKind, templateOptionsForKind } from "@/state/node-template-options";
+import {
+  channelForNodeKind,
+  ivrNodePreviewTemplate,
+  templateOptionsForKind,
+} from "@/state/node-template-options";
 import { cn } from "@/lib/utils";
 import { getNodeColor } from "./node-visuals";
 import { UNIT_COST } from "./campaign-cost";
@@ -478,9 +482,8 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
-              return (
+              const combo = (
                 <NodeFieldCombobox
-                  key={row.label}
                   label={row.label}
                   value={rawValue}
                   optionsKey={meta.optionsKey}
@@ -489,6 +492,32 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   onAiHandoff={() => handleAiField(row.label)}
                 />
               );
+              // IVR «Текст» — рядом с полем «глаз»: предпросмотр СЦЕНАРИЯ ноды в
+              // том же дровере/IvrRenderer, что и sms/email/push. Контент берём из
+              // текущих params ноды (сценарий/голос живут внутри ноды).
+              if (data.params?.kind === "ivr") {
+                const ivrParams = data.params;
+                return (
+                  <div key={row.label} className="flex items-center gap-1">
+                    <div className="min-w-0 flex-1">{combo}</div>
+                    <button
+                      type="button"
+                      aria-label="Предпросмотр"
+                      title="Предпросмотр"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTemplatePreview(ivrNodePreviewTemplate(id, ivrParams));
+                      }}
+                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              }
+              // Прочие combo-поля (sms «Время», condition/success/end) — без «глаза»,
+              // DOM неизменен (без обёртки), чтобы не тронуть визуальные снапшоты.
+              return <Fragment key={row.label}>{combo}</Fragment>;
             }
 
             // ai — иконка-маскот, тег поля улетает ассистенту (без изменений).

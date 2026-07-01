@@ -77,8 +77,11 @@ export function TemplatePreviewDrawer() {
   const reduceMotion = useReducedMotion();
 
   const isPreview = templateDrawer.open && templateDrawer.mode === "preview";
+  // Инлайновый шаблон (IVR-нода) имеет приоритет над поиском по библиотеке —
+  // его контент живёт в ноде, а не в `app-state.templates`.
   const template = isPreview
-    ? templates.find((t) => t.id === templateDrawer.previewTemplateId)
+    ? templateDrawer.previewTemplate ??
+      templates.find((t) => t.id === templateDrawer.previewTemplateId)
     : undefined;
   const open = Boolean(template);
 

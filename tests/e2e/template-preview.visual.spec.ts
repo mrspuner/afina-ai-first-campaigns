@@ -68,9 +68,10 @@ test.describe("@visual template preview drawers", () => {
   });
 });
 
-// IVR uses a different entry point (no node eye — the node field is a combo),
-// so we seed a single ivr template and open its preview from the Артефакты →
-// Шаблоны card «Предпросмотр» eye. The script text is static, so no clock dep.
+// This visual covers the library-template entry point (Артефакты → Шаблоны card
+// «Предпросмотр»). The IVR node's field also has its own eye now, but the drawer
+// it opens renders the same IvrRenderer, so no extra snapshot is needed. The
+// script text is static, so no clock dep.
 const IVR_SCRIPT = [
   "Здравствуйте! Меня зовут Анна, я звоню из компании «Афина».",
   "",

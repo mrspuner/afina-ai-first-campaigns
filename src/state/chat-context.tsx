@@ -3,6 +3,7 @@
 import type { EmailDraft } from "./email-directory";
 import type { Channel } from "@/types/campaign";
 import type { NodeParams } from "@/types/workflow";
+import type { MessageTemplate } from "./app-state";
 
 export type ChatRole = "user" | "assistant";
 
@@ -75,6 +76,13 @@ export interface TemplateDrawerState {
   question: TemplateQuestion | null;
   /** id шаблона в режиме preview (#14, шов для блока 5). */
   previewTemplateId: string | null;
+  /**
+   * Инлайновый шаблон для предпросмотра, когда контент НЕ лежит в библиотеке
+   * `app-state.templates`. Используется IVR-нодой: её сценарий/голос живут внутри
+   * ноды, поэтому «глаз» передаёт готовый {@link MessageTemplate} напрямую. Если
+   * задан — дровер рендерит его, минуя поиск по `previewTemplateId`.
+   */
+  previewTemplate: MessageTemplate | null;
 }
 
 /**
@@ -131,7 +139,7 @@ export type ChatAction =
   | { type: "set_email_draft"; patch: Partial<EmailDraft> }
   | { type: "open_template_drawer" }
   | { type: "open_template_create"; channel: Channel }
-  | { type: "open_template_preview"; templateId: string }
+  | { type: "open_template_preview"; templateId?: string; template?: MessageTemplate }
   | { type: "close_template_drawer" }
   | { type: "set_template_channel"; channel: Channel }
   | { type: "set_template_intent"; intent: string }
@@ -228,7 +236,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...INITIAL_TEMPLATE_DRAWER,
           open: true,
           mode: "preview",
-          previewTemplateId: action.templateId,
+          previewTemplateId: action.templateId ?? null,
+          previewTemplate: action.template ?? null,
         },
       };
     }
@@ -291,6 +300,7 @@ const INITIAL_TEMPLATE_DRAWER: TemplateDrawerState = {
   generating: false,
   question: null,
   previewTemplateId: null,
+  previewTemplate: null,
 };
 
 export const INITIAL_CHAT_STATE: ChatState = {
@@ -352,8 +362,13 @@ interface ChatContextValue {
   openTemplateDrawer: () => void;
   /** Шов для блока 5: открыть дровер сразу на шаге намерения для канала (#14). */
   openTemplateCreate: (channel: Channel) => void;
-  /** Шов для блока 5: открыть дровер в режиме предпросмотра готового шаблона (#14). */
-  openTemplatePreview: (templateId: string) => void;
+  /**
+   * Шов для блока 5: открыть дровер в режиме предпросмотра.
+   * - строка → шаблон ищется по id в `app-state.templates` (sms/email/push);
+   * - объект → инлайновый шаблон рендерится напрямую (IVR-нода, чей сценарий
+   *   живёт внутри ноды, а не в библиотеке).
+   */
+  openTemplatePreview: (target: string | MessageTemplate) => void;
   closeTemplateDrawer: () => void;
   setTemplateChannel: (channel: Channel) => void;
   setTemplateIntent: (intent: string) => void;
@@ -453,7 +468,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     []
   );
   const openTemplatePreview = useCallback(
-    (templateId: string) => dispatch({ type: "open_template_preview", templateId }),
+    (target: string | MessageTemplate) =>
+      dispatch(
+        typeof target === "string"
+          ? { type: "open_template_preview", templateId: target }
+          : { type: "open_template_preview", template: target }
+      ),
     []
   );
   const closeTemplateDrawer = useCallback(() => dispatch({ type: "close_template_drawer" }), []);

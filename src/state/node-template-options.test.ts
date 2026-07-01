@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { templateOptionsForKind, channelForNodeKind } from "./node-template-options";
+import {
+  templateOptionsForKind,
+  channelForNodeKind,
+  ivrNodePreviewTemplate,
+} from "./node-template-options";
 import { PRESET_TEMPLATES } from "./app-state";
+import type { IvrParams } from "@/types/workflow";
 
 describe("node-template-options", () => {
   it("maps communication node kind → channel", () => {
@@ -27,5 +32,34 @@ describe("node-template-options", () => {
 
   it("non-communication kinds yield no template options", () => {
     expect(templateOptionsForKind(PRESET_TEMPLATES, "wait")).toEqual([]);
+  });
+
+  describe("ivrNodePreviewTemplate", () => {
+    const params: IvrParams = {
+      kind: "ivr",
+      scenario: "Приветствие → перевод на оператора",
+      voiceType: "female",
+    };
+
+    it("wraps the node's ivr params in an ivr-channel MessageTemplate", () => {
+      const tpl = ivrNodePreviewTemplate("comm_ivr", params);
+      expect(tpl.channel).toBe("ivr");
+      expect(tpl.content.kind).toBe("ivr");
+      expect(tpl.content).toMatchObject({
+        kind: "ivr",
+        scenario: params.scenario,
+        voiceType: params.voiceType,
+      });
+    });
+
+    it("derives a stable, node-scoped id (no library entry required)", () => {
+      expect(ivrNodePreviewTemplate("comm_ivr", params).id).toBe(
+        "ivr_node_preview_comm_ivr",
+      );
+      // Different nodes → different ids, so previews don't collide.
+      expect(ivrNodePreviewTemplate("other", params).id).toBe(
+        "ivr_node_preview_other",
+      );
+    });
   });
 });

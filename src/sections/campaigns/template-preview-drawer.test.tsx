@@ -94,6 +94,17 @@ function Harness({ templateId }: { templateId: string }) {
   );
 }
 
+/** Opens the preview drawer for an INLINE template (the IVR node's eye — its
+ *  scenario lives on the node, not in the templates library). */
+function InlineHarness({ template }: { template: MessageTemplate }) {
+  const chat = useChat();
+  return (
+    <button type="button" onClick={() => chat.openTemplatePreview(template)}>
+      open
+    </button>
+  );
+}
+
 describe("TemplatePreviewDrawer (connected) — eye-icon wiring", () => {
   it("opens the drawer and shows the selected SMS template's message", () => {
     render(
@@ -117,5 +128,25 @@ describe("TemplatePreviewDrawer (connected) — eye-icon wiring", () => {
     expect(
       screen.getByRole("button", { name: "Закрыть" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens the drawer for an inline IVR template (node scenario, not in library)", () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <InlineHarness template={ivr} />
+          <TemplatePreviewDrawer />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    expect(screen.queryByTestId("template-preview-drawer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(drawer).toBeInTheDocument();
+    // The inline template's own script renders via IvrRenderer — the id is NOT
+    // in app-state.templates, proving the inline object is preferred.
+    expect(screen.getByText(/Здравствуйте! Это звонок от Афины\./)).toBeInTheDocument();
+    expect(screen.getByText(/Шаблон · Звонок/)).toBeInTheDocument();
+    expect(screen.getByText(/Женский/)).toBeInTheDocument();
   });
 });

@@ -2,9 +2,10 @@ import { test, expect } from "@playwright/test";
 
 // IVR templates carry the actual CALL SCRIPT in `scenario` — it can be long and
 // multi-paragraph. The preview drawer must show the WHOLE script (no clipping).
-// The IVR node's field is a combo (no eye), so the eye-icon entry point for IVR
-// is the Артефакты → Шаблоны template card's «Предпросмотр». We seed a single
-// ivr template with a long script and open its preview from there.
+// This spec covers the Артефакты → Шаблоны template card's «Предпросмотр» entry
+// point (a library template). The IVR NODE's field also has its own eye now —
+// that node-scoped path is covered by template-preview-ivr-node.spec.ts. We seed
+// a single ivr template with a long script and open its preview from the card.
 
 const IVR_SCRIPT = [
   "Здравствуйте! Меня зовут Анна, я звоню из компании «Афина».",
