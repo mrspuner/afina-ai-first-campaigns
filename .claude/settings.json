@@ -1,15 +1,1 @@
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /Users/macintosh/Documents/work/afina-ai-first/scripts/update-wiki.py"
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
