@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, Eye, Pencil } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { AlertTriangle, Eye, Pencil, Plus } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { ScoringInsightsDrawer } from "./scoring-insights-drawer";
 import { resolveInterestOptions } from "./interest-options";
 import { getFieldMeta } from "@/state/node-field-editability";
+import { fileSummaryLine } from "@/state/workflow-templates";
+import { rngFor, seededInt } from "@/state/metrics";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
@@ -128,16 +130,24 @@ export function getParamRows(params: NodeParams): ParamRow[] {
   return renderer(params);
 }
 
+/** Deterministic stand-in for parsing an uploaded base's row count — matches the
+ *  wizard's upload step (seeded, never Math.random). */
+function scoringFileRowCount(f: File): number {
+  return seededInt(rngFor("rowcount", f.name, f.size), 1000, 100_000);
+}
+
 /**
- * Scoring node body: a single «Интересы и триггеры» row whose value is an
- * eye affordance opening the drawer. The interests/triggers come from the wizard
- * (overlaid onto params by `applyCampaignContext`) — the card stays compact; the
- * explanation (and, for a draft, the editor) lives in the drawer.
+ * Scoring node body: a «Файлы» row (the uploaded bases, folded onto the scoring
+ * node when the standalone «Файл» graph node was removed) and an «Интересы и
+ * триггеры» row whose value is a pencil/eye affordance opening the drawer. Both
+ * come from the wizard/campaign (overlaid onto params by `applyCampaignContext`)
+ * — the card stays compact; the interests/triggers editor lives in the drawer.
  *
- * 2c — while the campaign is a draft (not launched) the drawer is editable;
- * every change persists to BOTH the campaign (source of truth, survives a graph
+ * 2c — while the campaign is a draft (not launched) the interests/triggers
+ * drawer is editable AND a control lets the user add more base files; every
+ * change persists to BOTH the campaign (source of truth, survives a graph
  * rebuild) and this node's params (so the card reflects it immediately). Once
- * launched the drawer is the read-only narration it has always been.
+ * launched everything is read-only.
  */
 function ScoringRow({
   nodeId,
@@ -147,6 +157,7 @@ function ScoringRow({
   params: Extract<NodeParams, { kind: "scoring" }>;
 }) {
   const [open, setOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const dispatch = useAppDispatch();
   const state = useAppState();
   const readOnly = useWorkflowReadOnly();
@@ -154,10 +165,17 @@ function ScoringRow({
   const editable = !readOnly;
   const campaignId =
     state.view.kind === "workflow" ? state.view.campaign.id : undefined;
+  const canEdit = editable && campaignId !== undefined;
   const interestOptions = useMemo(
     () => resolveInterestOptions(state.clientDirection),
     [state.clientDirection]
   );
+
+  const files = params.files ?? [];
+  const filesSummary =
+    files.length > 0
+      ? fileSummaryLine(files) ?? files.map((f) => f.name).join(", ")
+      : "—";
 
   function handleChange(next: { interests: string[]; triggers: string[] }) {
     // Persist to the campaign (durable source of truth) …
@@ -177,8 +195,58 @@ function ScoringRow({
     });
   }
 
+  function handleAddFile(f: File) {
+    if (!campaignId) return;
+    const file = { name: f.name, rowCount: scoringFileRowCount(f) };
+    // Persist to Campaign.files (durable) AND to this node's «Файлы» param, so
+    // the open card updates immediately (mirrors the interests/triggers path).
+    dispatch({ type: "campaign_file_added", campaignId, file });
+    dispatch({
+      type: "workflow_node_field_set",
+      nodeId,
+      patch: { files: [...files, file] } as Partial<NodeParams>,
+    });
+  }
+
   return (
     <>
+      {/* Файлы — the uploaded bases, with an add-file control in a draft. */}
+      <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
+        <span className="text-muted-foreground">Файлы</span>
+        <span className="truncate text-foreground" title={filesSummary}>
+          {filesSummary}
+        </span>
+        {canEdit ? (
+          <button
+            type="button"
+            aria-label="Добавить файл"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+            className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span aria-hidden />
+        )}
+      </div>
+      {canEdit && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.xlsx,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleAddFile(f);
+            e.target.value = "";
+          }}
+        />
+      )}
+
+      {/* Интересы и триггеры — pencil (draft) / eye (launched) opens the drawer. */}
       <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
         <span className="text-muted-foreground">Интересы и триггеры</span>
         <span aria-hidden />
