@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { StepChannels, toggleChannel, formatUnitCost } from "./step-channels";
-import { initialStepData } from "@/types/campaign";
+import { initialStepData, type StepData } from "@/types/campaign";
 
 vi.mock("@/sections/campaigns/wizard/steps/step-content", () => ({
   StepContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -31,7 +31,7 @@ describe("formatUnitCost (стоимость канала за отправку)
   });
 });
 
-describe("StepChannels — стоимость и блок «Получить только сигналы»", () => {
+describe("StepChannels — стоимость каналов", () => {
   afterEach(cleanup);
 
   it("показывает стоимость каждого канала за отправку", () => {
@@ -41,10 +41,27 @@ describe("StepChannels — стоимость и блок «Получить т�
     expect(screen.getByText("0,5 ₽ / отправка")).toBeInTheDocument();
     expect(screen.getByText("8 ₽ / отправка")).toBeInTheDocument();
   });
+});
 
-  it("блок «Получить только сигналы» с заголовком и описанием", () => {
-    render(<StepChannels data={initialStepData} onNext={vi.fn()} onBack={vi.fn()} />);
-    expect(screen.getByText("Получить только сигналы")).toBeInTheDocument();
-    expect(screen.getByText("Не проводить коммуникации")).toBeInTheDocument();
+describe("StepChannels — channels are mandatory (no «только сигналы» escape)", () => {
+  afterEach(cleanup);
+
+  function renderStep(over: Partial<StepData> = {}) {
+    const data: StepData = { ...initialStepData, channels: [], ...over };
+    const onNext = vi.fn();
+    render(<StepChannels data={data} onNext={onNext} onBack={vi.fn()} />);
+    return { onNext };
+  }
+
+  it("does NOT render the «Получить только сигналы» option", () => {
+    renderStep();
+    expect(screen.queryByText("Получить только сигналы")).toBeNull();
+  });
+
+  it("«Далее» is disabled with no channels and enabled after selecting one", () => {
+    renderStep();
+    expect(screen.getByRole("button", { name: /Далее/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /SMS/i }));
+    expect(screen.getByRole("button", { name: /Далее/i })).not.toBeDisabled();
   });
 });
