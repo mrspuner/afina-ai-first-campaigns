@@ -98,7 +98,10 @@ export function PeriodField({
       </PopoverTrigger>
       <PopoverContent
         align={triggerVariant === "chip" ? "start" : "start"}
-        className="w-72 p-1"
+        // w-80 (was w-72): the widest row «Прошлый квартал 01.01.2026 —
+        // 31.03.2026» wrapped onto two lines at 288px. Sized to the longest
+        // «name + date range» so the row stays on ONE line (see whitespace-nowrap).
+        className="w-80 p-1"
       >
         {PRESET_GROUPS.map((group, gi) => (
           <div key={group.heading} className={gi > 0 ? "mt-1" : ""}>
@@ -116,7 +119,9 @@ export function PeriodField({
                   type="button"
                   onClick={() => commit(preset)}
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                    // whitespace-nowrap keeps «name + date range» on one line;
+                    // the popover is widened (w-80) to fit the longest row.
+                    "flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-md px-2 py-2 text-left text-sm transition-colors",
                     active
                       ? "bg-primary/10 text-foreground"
                       : "text-foreground hover:bg-muted",
