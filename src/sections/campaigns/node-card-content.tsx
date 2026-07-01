@@ -1,11 +1,10 @@
 "use client";
 
 import { Fragment, useRef } from "react";
-import { AlertTriangle, Eye, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, Plus, X } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { getFieldMeta } from "@/state/node-field-editability";
-import { fileSummaryLine } from "@/state/workflow-templates";
 import { rngFor, seededInt } from "@/state/metrics";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
@@ -151,7 +150,7 @@ function scoringFileRowCount(f: File): number {
  * rebuild) and this node's params (so the card reflects it immediately). Once
  * launched everything is read-only.
  */
-function ScoringRow({
+export function ScoringRow({
   nodeId,
   params,
 }: {
@@ -171,10 +170,6 @@ function ScoringRow({
   const canEdit = editable && campaignId !== undefined;
 
   const files = params.files ?? [];
-  const filesSummary =
-    files.length > 0
-      ? fileSummaryLine(files) ?? files.map((f) => f.name).join(", ")
-      : "—";
 
   // Open «Интересы и триггеры» in the AI sidebar (chat-drawer) — the drawer that
   // already hosts «Афина ИИ» + the prompt composer. The editor there is the SAME
@@ -199,29 +194,71 @@ function ScoringRow({
     });
   }
 
+  // Обратная к добавлению: удаляем базу по ИНДЕКСУ (имена CampaignFile не
+  // гарантированно уникальны). Снимаем и с Campaign.files (durable), и с параметра
+  // ноды (чтобы карточка обновилась сразу) — зеркалит handleAddFile.
+  function handleRemoveFile(index: number) {
+    if (!campaignId) return;
+    dispatch({ type: "campaign_file_removed", campaignId, index });
+    dispatch({
+      type: "workflow_node_field_set",
+      nodeId,
+      patch: { files: files.filter((_, i) => i !== index) } as Partial<NodeParams>,
+    });
+  }
+
   return (
     <>
-      {/* Файлы — the uploaded bases, with an add-file control in a draft. */}
-      <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
+      {/* Файлы — одна удаляемая строка на каждую загруженную базу (в черновике);
+          read-only после запуска. «Добавить файл» — под списком. */}
+      <div className="grid grid-cols-[minmax(72px,max-content)_1fr] items-start gap-x-2.5 px-1 py-0.5 text-[11px]">
         <span className="text-muted-foreground">Файлы</span>
-        <span className="truncate text-foreground" title={filesSummary}>
-          {filesSummary}
-        </span>
-        {canEdit ? (
-          <button
-            type="button"
-            aria-label="Добавить файл"
-            onClick={(e) => {
-              e.stopPropagation();
-              fileInputRef.current?.click();
-            }}
-            className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        ) : (
-          <span aria-hidden />
-        )}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {files.length === 0 ? (
+            <span className="text-foreground">—</span>
+          ) : (
+            files.map((file, i) => (
+              <div
+                key={`${file.name}__${i}`}
+                className="group/file flex min-w-0 items-center gap-1.5"
+              >
+                <span className="truncate text-foreground" title={file.name}>
+                  {file.name}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground/50">
+                  ~{file.rowCount.toLocaleString("ru-RU")} строк
+                </span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    aria-label={`Удалить файл: ${file.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveFile(i);
+                    }}
+                    className="nodrag ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/40 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:text-foreground focus-visible:outline-none"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              aria-label="Добавить файл"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              className="nodrag -mx-1 mt-0.5 flex w-fit items-center gap-1 rounded px-1 py-0.5 text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:text-foreground focus-visible:outline-none"
+            >
+              <Plus className="h-3 w-3 shrink-0" />
+              <span>Добавить файл</span>
+            </button>
+          )}
+        </div>
       </div>
       {canEdit && (
         <input
