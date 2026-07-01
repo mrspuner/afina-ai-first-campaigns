@@ -300,6 +300,7 @@ export type Action =
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
   | { type: "campaign_file_added"; campaignId: string; file: CampaignFile }
+  | { type: "campaign_file_removed"; campaignId: string; index: number }
   | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[] }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
@@ -585,6 +586,25 @@ export function appReducer(state: AppState, action: Action): AppState {
         campaigns: state.campaigns.map((c) =>
           c.id === action.campaignId
             ? { ...c, files: [...(c.files ?? []), action.file] }
+            : c
+        ),
+      };
+    }
+
+    case "campaign_file_removed": {
+      // Обратная к «Добавить файл»: снимает базу со скоринг-ноды по индексу.
+      // Ключ — индекс (а не имя): CampaignFile = { name, rowCount }, имена не
+      // гарантированно уникальны, так что одинаково названные базы удаляются
+      // по позиции. No-op для неизвестной кампании / индекса вне диапазона.
+      const target = state.campaigns.find((c) => c.id === action.campaignId);
+      if (!target) return state;
+      const currentFiles = target.files ?? [];
+      if (action.index < 0 || action.index >= currentFiles.length) return state;
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.campaignId
+            ? { ...c, files: currentFiles.filter((_, i) => i !== action.index) }
             : c
         ),
       };
