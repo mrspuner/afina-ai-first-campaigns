@@ -14,12 +14,12 @@ import { splitCampaignPayments } from "./campaign-payments";
 import { STREAM_DAYS } from "./campaign-budget-estimate";
 import { paymentSplitDisplay } from "@/sections/campaigns/payment-split-display";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
+import { BudgetBreakdown } from "@/sections/campaigns/budget-breakdown";
 import { campaignBaseRows } from "@/sections/campaigns/campaign-metrics";
 import { getCachedGraph } from "./workflow-graph-cache";
 import {
   estimateTouches,
   computeCampaignCost,
-  CHANNEL_LABEL,
   type CampaignCost,
 } from "./campaign-cost";
 
@@ -299,94 +299,37 @@ export function CampaignPaymentScreen() {
             <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Платежи
             </h2>
-            <ul className="mt-2.5 flex flex-col gap-1.5 text-sm">
-              <li className="flex items-baseline justify-between gap-3">
-                <span className="flex items-baseline gap-2 text-muted-foreground">
-                  Сигналы
-                  {(campaign.sourceType ?? "new") !== "own" &&
-                    displaySplit.scoring > 0 && (
-                      <span className="text-xs text-muted-foreground/70">
-                        уже оплачено
+            <div className="mt-2.5">
+              <BudgetBreakdown
+                signalsDisplay={scoringLineDisplay({
+                  sourceType: campaign.sourceType ?? "new",
+                  scoring: displaySplit.scoring,
+                })}
+                signalsHint={
+                  (campaign.sourceType ?? "new") !== "own" &&
+                  displaySplit.scoring > 0
+                    ? "уже оплачено"
+                    : undefined
+                }
+                communicationDisplay={formatRubPlain(displaySplit.communication)}
+                totalDisplay={formatRubPlain(displaySplit.communication)}
+                commGroups={commGroups}
+                formatCell={formatRubPlain}
+                footer={
+                  streamDailyBudget !== undefined ? (
+                    <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5 text-sm">
+                      <span className="text-muted-foreground">
+                        Дневной бюджет · потолок
                       </span>
-                    )}
-                </span>
-                <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
-                  {scoringLineDisplay({
-                    sourceType: campaign.sourceType ?? "new",
-                    scoring: displaySplit.scoring,
-                  })}
-                </span>
-              </li>
-              <li className="flex items-baseline justify-between gap-3">
-                <span className="text-muted-foreground">Коммуникация</span>
-                <span className="shrink-0 font-medium tabular-nums text-foreground">
-                  {displaySplit.communication > 0
-                    ? formatRubPlain(displaySplit.communication)
-                    : "—"}
-                </span>
-              </li>
-              {cost &&
-                (commGroups.primary.length > 0 ||
-                  commGroups.repeat.length > 0) && (
-                  <li className="mt-0.5">
-                    <ul className="flex flex-col gap-2 border-l-2 border-border pl-3">
-                      {commGroups.primary.length > 0 && (
-                        <li>
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Первичные
-                          </p>
-                          <ul className="mt-1 flex flex-col gap-1">
-                            {commGroups.primary.map((g) => (
-                              <li
-                                key={`primary-${g.channel}`}
-                                className="flex items-baseline justify-between gap-3 text-xs"
-                              >
-                                <span className="min-w-0 truncate text-foreground/80">
-                                  {CHANNEL_LABEL[g.channel]}
-                                </span>
-                                <span className="shrink-0 font-medium tabular-nums text-foreground/80">
-                                  {formatRubPlain(g.sum)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      )}
-                      {commGroups.repeat.length > 0 && (
-                        <li>
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Повторные
-                          </p>
-                          <ul className="mt-1 flex flex-col gap-1">
-                            {commGroups.repeat.map((g) => (
-                              <li
-                                key={`repeat-${g.channel}`}
-                                className="flex items-baseline justify-between gap-3 text-xs"
-                              >
-                                <span className="min-w-0 truncate text-foreground/80">
-                                  {CHANNEL_LABEL[g.channel]}
-                                </span>
-                                <span className="shrink-0 font-medium tabular-nums text-foreground/80">
-                                  {formatRubPlain(g.sum)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      )}
-                    </ul>
-                  </li>
-                )}
-              {streamDailyBudget !== undefined && (
-                <li className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
-                  <span className="text-muted-foreground">Дневной бюджет · потолок</span>
-                  <span className="shrink-0 tabular-nums text-foreground">
-                    {formatRubPlain(streamDailyBudget)} ·{" "}
-                    {formatRubPlain(displaySplit.total)}
-                  </span>
-                </li>
-              )}
-            </ul>
+                      <span className="shrink-0 tabular-nums text-foreground">
+                        {formatRubPlain(streamDailyBudget)} ·{" "}
+                        {formatRubPlain(displaySplit.total)}
+                      </span>
+                    </div>
+                  ) : undefined
+                }
+              />
+            </div>
           </div>
         )}
 

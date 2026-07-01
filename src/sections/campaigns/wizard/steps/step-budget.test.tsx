@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { buildBudgetRows, StepBudget } from "./step-budget";
 import type { StepData } from "@/types/campaign";
 import { AppStateProvider } from "@/state/app-state-context";
@@ -83,39 +83,14 @@ function makeData(overrides: Partial<StepData> = {}): StepData {
   };
 }
 
-describe("StepBudget — channel list + repeat-buffer UI", () => {
-  it("shows channel names when channels are selected", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({ channels: ["sms", "email"] })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    expect(screen.getByText(/Каналы: SMS, Email/)).toBeTruthy();
-    cleanup();
-  });
+describe("StepBudget — «Коммуникации» collapsible table (v8)", () => {
+  const SCENARIO = "base-first-deal"; // signalType "Первая сделка"
 
-  it("shows 'Каналы: —' when no channels selected", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({ channels: [] })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    expect(screen.getByText(/Каналы: —/)).toBeTruthy();
-    cleanup();
-  });
-
-  // aim #23: the «Коммуникация» breakdown is split into «Первичные» /
-  // «Повторные» groups (each channel once), replacing the old single
-  // "Повторные коммуникации (+30% буфер)" buffer line.
-  it("shows «Первичные» and «Повторные» group headers when a scenario yields a graph cost", () => {
+  it("renders a collapsed «Коммуникации» row (table hidden) when a scenario yields a graph cost", () => {
     renderStep(
       <StepBudget
         data={makeData({
-          scenario: "base-first-deal",
+          scenario: SCENARIO,
           sourceType: "new",
           channels: ["sms"],
           fileRowCount: 10_000,
@@ -124,12 +99,42 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
         onBack={vi.fn()}
       />
     );
-    expect(screen.getByText("Первичные")).toBeTruthy();
-    expect(screen.getByText("Повторные")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Коммуникации/ })).toBeTruthy();
+    // Collapsed by default: the per-channel table is not mounted yet.
+    expect(screen.queryByText("Канал")).toBeNull();
+    expect(screen.queryByText("Первичные")).toBeNull();
     cleanup();
   });
 
-  it("does NOT show the «Повторные» group when there is no graph cost", () => {
+  // aim #23 lives on now as table columns: expanding «Коммуникации» reveals a
+  // Канал | Первичные | Повторные | Итого table, one row per channel.
+  it("clicking «Коммуникации» reveals the table with a single SMS row (primary 50 000 / repeat 15 000)", () => {
+    renderStep(
+      <StepBudget
+        data={makeData({
+          scenario: SCENARIO,
+          sourceType: "new",
+          channels: ["sms"],
+          fileRowCount: 10_000,
+        })}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Коммуникации/ }));
+    expect(screen.getByText("Канал")).toBeTruthy();
+    expect(screen.getByText("Первичные")).toBeTruthy();
+    expect(screen.getByText("Повторные")).toBeTruthy();
+    const table = screen.getByRole("table");
+    // Single channel → the SAME table, exactly one channel row.
+    expect(table.querySelectorAll("tbody tr").length).toBe(1);
+    const smsRow = within(table).getByText("SMS").closest("tr")!;
+    expect(smsRow.textContent).toMatch(/₽\s*50[\s ]?000/); // primary
+    expect(smsRow.textContent).toMatch(/₽\s*15[\s ]?000/); // repeat
+    cleanup();
+  });
+
+  it("shows NO «Коммуникации» row and NO «Итого» when there is no graph cost (only «Сигналы»)", () => {
     renderStep(
       <StepBudget
         data={makeData({ channels: [] })}
@@ -137,7 +142,9 @@ describe("StepBudget — channel list + repeat-buffer UI", () => {
         onBack={vi.fn()}
       />
     );
-    expect(screen.queryByText("Повторные")).toBeNull();
+    expect(screen.getByText("Сигналы")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Коммуникации/ })).toBeNull();
+    expect(screen.queryByText("Итого")).toBeNull();
     cleanup();
   });
 
@@ -240,88 +247,6 @@ describe("StepBudget — max daily budget field (aim #21, stream-only)", () => {
     expect(
       screen.queryByText(/Максимальный дневной бюджет \(необязательно\)/)
     ).toBeNull();
-    cleanup();
-  });
-});
-
-describe("StepBudget — contacts sub-line + graph cost breakdown", () => {
-  const SCENARIO = "base-first-deal"; // signalType "Первая сделка"
-
-  it("renders the ~…контактов figure as a sub-line under the Сигналы row (not on the row)", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({
-          scenario: SCENARIO,
-          sourceType: "own",
-          channels: ["sms"],
-          fileRowCount: 10_000,
-        })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    const signalsLabel = screen.getByText("Сигналы");
-    const contacts = screen.getByText(/контактов/);
-    // The contacts figure sits in its own sub-line directly after the Сигналы
-    // row, not inside the row that holds the «Сигналы» label/amount.
-    const signalsRow = signalsLabel.closest("div");
-    expect(signalsRow).toBeTruthy();
-    expect(signalsRow?.contains(contacts)).toBe(false);
-    cleanup();
-  });
-
-  // aim #23: the breakdown is grouped into «Первичные» / «Повторные», each
-  // channel deduped + summed and shown ONCE per group, labelled by channel name
-  // only (no per-node «· label» rows).
-  it("renders the «Первичные» group with a single SMS row summing the primary cost", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({
-          scenario: SCENARIO,
-          sourceType: "new",
-          channels: ["sms"],
-          fileRowCount: 10_000,
-        })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    // base-first-deal/new over 10 000 contacts: primary SMS = 50 000 roubles.
-    const primaryHeader = screen.getByText("Первичные");
-    const group = primaryHeader.parentElement!;
-    // Exactly one SMS row in the primary group (dedup), summing to 50 000.
-    const smsRows = Array.from(group.querySelectorAll("div")).filter(
-      (el) => el.querySelector("span")?.textContent === "SMS"
-    );
-    expect(smsRows.length).toBe(1);
-    expect(group.textContent).toMatch(/₽\s*50[\s ]?000/);
-    // The simple "Каналы: …" fallback must NOT show when graph lines exist.
-    expect(screen.queryByText(/^Каналы:/)).toBeNull();
-    cleanup();
-  });
-
-  it("renders the «Повторные» group with the summed repeat cost (15 000)", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({
-          scenario: SCENARIO,
-          sourceType: "new",
-          channels: ["sms"],
-          fileRowCount: 10_000,
-        })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    const repeatHeader = screen.getByText("Повторные");
-    const group = repeatHeader.parentElement!;
-    // Repeat (post-condition) SMS for base-first-deal/new over 10 000 = 15 000.
-    expect(group.textContent).toMatch(/₽\s*15\D?000/);
-    // The channel appears once in the repeat group too (dedup).
-    const smsRows = Array.from(group.querySelectorAll("div")).filter(
-      (el) => el.querySelector("span")?.textContent === "SMS"
-    );
-    expect(smsRows.length).toBe(1);
     cleanup();
   });
 });

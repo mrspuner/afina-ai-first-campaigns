@@ -14,8 +14,8 @@ import {
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
-import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
+import { BudgetBreakdown } from "@/sections/campaigns/budget-breakdown";
 import type { StepData } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 
@@ -104,7 +104,7 @@ export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
     },
     {
       key: "communication",
-      label: "Коммуникация",
+      label: "Коммуникации",
       amount: f.communication,
       display: formatRubApprox(f.communication),
     },
@@ -254,6 +254,10 @@ export function StepBudget({ data, onNext, onBack, active }: StepProps) {
     return out;
   }, [recommendedRows, estimate.total, customTotal, data.sourceType, data.fileRowCount]);
 
+  const signalsRow = rows.find((r) => r.key === "signals")!;
+  const commRow = rows.find((r) => r.key === "communication")!;
+  const totalRow = rows.find((r) => r.key === "total")!;
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
     setCustomValue(raw);
@@ -281,96 +285,37 @@ export function StepBudget({ data, onNext, onBack, active }: StepProps) {
       maxWidth="max-w-xl"
     >
       <div className="flex flex-col gap-5">
-        {/* Forecast rows: Сигналы / Коммуникация / Итого (plain text rows) */}
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
-          {rows.map((row) => (
-            <div key={row.key}>
-              <div
-                className={cn(
-                  "flex items-center justify-between text-sm",
-                  row.key === "total" &&
-                    "mt-1 border-t border-border pt-3 font-semibold text-foreground"
-                )}
-              >
-                <span
-                  className={
-                    row.key === "total" ? "text-foreground" : "text-muted-foreground"
-                  }
-                >
-                  {row.label}
-                </span>
-                <span className="flex items-center gap-3">
-                  <span className="tabular-nums">{row.display}</span>
-                </span>
-              </div>
-              {row.key === "signals" && row.contactLabel && (
-                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                  {row.contactLabel}
-                </p>
-              )}
-              {row.key === "communication" && (
+        {/* Forecast: merged «Сигналы» + collapsible «Коммуникации» table + «Итого».
+            Shared with the payment screen via BudgetBreakdown. */}
+        <div className="rounded-lg border border-border bg-card p-4">
+          <BudgetBreakdown
+            signalsDisplay={signalsRow.display}
+            communicationDisplay={commRow.display}
+            totalDisplay={totalRow.display}
+            commGroups={commGroups}
+            formatCell={formatRub}
+            footer={
+              isStream &&
+              (estimate.dailyBudget !== undefined || maxDailyLine) ? (
                 <>
-                  {commGroups &&
-                  (commGroups.primary.length > 0 || commGroups.repeat.length > 0) ? (
-                    <>
-                      {commGroups.primary.length > 0 && (
-                        <div className="mt-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Первичные
-                          </p>
-                          {commGroups.primary.map((g) => (
-                            <div
-                              key={`primary-${g.channel}`}
-                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
-                            >
-                              <span>{CHANNEL_LABEL[g.channel]}</span>
-                              <span className="tabular-nums">{formatRub(g.sum)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {commGroups.repeat.length > 0 && (
-                        <div className="mt-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Повторные
-                          </p>
-                          {commGroups.repeat.map((g) => (
-                            <div
-                              key={`repeat-${g.channel}`}
-                              className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground"
-                            >
-                              <span>{CHANNEL_LABEL[g.channel]}</span>
-                              <span className="tabular-nums">{formatRub(g.sum)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {data.channels.length > 0
-                        ? `Каналы: ${data.channels.map((ch) => CHANNEL_LABEL[ch]).join(", ")}`
-                        : "Каналы: —"}
-                    </p>
+                  {estimate.dailyBudget !== undefined && (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Дневной бюджет</span>
+                      <span className="tabular-nums">
+                        ~{formatRub(estimate.dailyBudget)}/день × {STREAM_DAYS} дн · потолок ~{formatRub(estimate.total)}
+                      </span>
+                    </div>
+                  )}
+                  {maxDailyLine && (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{maxDailyLine.label}</span>
+                      <span className="tabular-nums">{maxDailyLine.display}</span>
+                    </div>
                   )}
                 </>
-              )}
-            </div>
-          ))}
-          {isStream && estimate.dailyBudget !== undefined && (
-            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Дневной бюджет</span>
-              <span className="tabular-nums">
-                ~{formatRub(estimate.dailyBudget)}/день × {STREAM_DAYS} дн · потолок ~{formatRub(estimate.total)}
-              </span>
-            </div>
-          )}
-          {isStream && maxDailyLine && (
-            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-              <span>{maxDailyLine.label}</span>
-              <span className="tabular-nums">{maxDailyLine.display}</span>
-            </div>
-          )}
+              ) : undefined
+            }
+          />
         </div>
 
         {/* Recommended / custom budget cards (reuses step-5 RadioDot pattern) */}
