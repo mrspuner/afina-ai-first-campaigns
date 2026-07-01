@@ -50,13 +50,14 @@ describe("workflow templates", () => {
     }
   });
 
-  // The graph entry node is now typed `source` (replaces the legacy `signal`
-  // root). Its params stay the `signal` NodeParams member — there is no
-  // `source` params kind — so it is exempt from the params.kind===nodeType
-  // invariant below.
-  it.each(SIGNAL_TYPES)("entry node of %s is of type source", (type) => {
+  // The «Файл» entry node was removed; the graph ROOT is now the «Скоринг» node
+  // for the default (`new`) source. Every node carries params whose kind matches
+  // its nodeType (no `source` exemption needed anymore).
+  it.each(SIGNAL_TYPES)("entry node of %s is «Скоринг» (root, default new)", (type) => {
     const { nodes } = createTemplate(type);
-    expect(nodes[0].data.nodeType).toBe("source");
+    expect(nodes[0].data.nodeType).toBe("scoring");
+    expect(nodes.some((nd) => nd.data.nodeType === "source")).toBe(false);
+    expect(nodes.some((nd) => nd.data.label === "Файл")).toBe(false);
   });
 
   // Block A5 — numeric-suffix rule: within a template, every label must be unique.
@@ -78,56 +79,57 @@ describe("all template nodes have matching params.kind", () => {
         `node ${node.id} (${node.data.nodeType}) has no params`
       ).toBeDefined();
       if (node.data.params) {
-        // Entry node is typed `source` but keeps the `signal` params member
-        // (no `source` NodeParams kind exists). Exempt it from the invariant.
-        const expectedKind =
-          node.data.nodeType === "source" ? "signal" : node.data.nodeType;
-        expect(node.data.params.kind).toBe(expectedKind);
+        expect(node.data.params.kind).toBe(node.data.nodeType);
       }
     }
   });
 });
 
-describe("graph path Файл → Скоринг → Сигнал → Коммуникация (group C #8)", () => {
-  it.each(SIGNAL_TYPES)("entry node of %s is labelled «Файл»", (type) => {
+describe("graph root Скоринг → Сигнал → Коммуникация (no «Файл» entry node)", () => {
+  it.each(SIGNAL_TYPES)("has NO «Файл» entry node for %s", (type) => {
     const { nodes } = createTemplate(type, "new");
-    expect(nodes[0].data.label).toBe("Файл");
-    expect(nodes[0].data.nodeType).toBe("source");
+    expect(nodes.some((n) => n.data.label === "Файл")).toBe(false);
+    expect(nodes.some((n) => n.data.nodeType === "source")).toBe(false);
   });
 
-  it("new/stream: path is Файл → Скоринг → Сигнал → <comm>", () => {
+  it("new/stream: root is Скоринг → Сигнал → <comm>", () => {
     for (const st of ["new", "stream"] as const) {
       const { nodes, edges } = createTemplate("Регистрация", st);
-      const entry = nodes[0];
+      const root = nodes[0];
       const scoring = nodes.find((n) => n.data.nodeType === "scoring")!;
       const signal = nodes.find((n) => n.id === "signal_result")!;
       expect(scoring).toBeDefined();
+      // Scoring is the root: it is nodes[0] and has no incoming edge.
+      expect(root.data.nodeType).toBe("scoring");
+      expect(edges.some((e) => e.target === scoring.id)).toBe(false);
       expect(signal.data.nodeType).toBe("signal");
       expect(signal.data.label).toBe("Сигнал");
-      // entry → scoring → signal chain
-      expect(edges.some((e) => e.source === entry.id && e.target === scoring.id)).toBe(true);
+      // scoring → signal chain
       expect(edges.some((e) => e.source === scoring.id && e.target === signal.id)).toBe(true);
     }
   });
 
-  it("own: path is Файл → Сигнал → <comm> (no scoring)", () => {
+  it("own: root is Сигнал → <comm> (no scoring, no «Файл»)", () => {
     const { nodes, edges } = createTemplate("Регистрация", "own");
     expect(nodes.some((n) => n.data.nodeType === "scoring")).toBe(false);
-    const entry = nodes[0];
+    expect(nodes.some((n) => n.data.nodeType === "source")).toBe(false);
+    const root = nodes[0];
     const signal = nodes.find((n) => n.id === "signal_result")!;
     expect(signal).toBeDefined();
-    expect(edges.some((e) => e.source === entry.id && e.target === signal.id)).toBe(true);
+    // The signal result node is the root.
+    expect(root.id).toBe(signal.id);
+    expect(edges.some((e) => e.target === signal.id)).toBe(false);
   });
 
-  it("scoring node carries ScoringParams (interests/triggers) and never needs attention", () => {
+  it("scoring node carries ScoringParams (interests/triggers/files) and never needs attention", () => {
     const { nodes } = createTemplate("Регистрация", "new");
     const scoring = nodes.find((n) => n.data.nodeType === "scoring")!;
-    expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: [], triggers: [] });
+    expect(scoring.data.params).toMatchObject({ kind: "scoring", interests: [], triggers: [], files: [] });
     expect(scoring.data.needsAttention ?? false).toBe(false);
   });
 });
 
-describe("applyCampaignContext — files on «Файл», interests on «Скоринг» (group C #8)", () => {
+describe("applyCampaignContext — files/interests on «Скоринг», base count on «Сигнал»", () => {
   it("fileSummaryLine pluralises bases and sums rows", () => {
     expect(fileSummaryLine([])).toBeUndefined();
     expect(fileSummaryLine([{ name: "a", rowCount: 1000 }])).toMatch(/^1 база · ~1[\s ]?000 строк$/);
@@ -136,17 +138,24 @@ describe("applyCampaignContext — files on «Файл», interests on «Ско�
     ).toMatch(/^2 базы · ~2[\s ]?500 строк$/);
   });
 
-  it("populates the entry «Файл» node from campaign files", () => {
+  it("folds campaign files onto the «Скоринг» node and base count onto «Сигнал» (new)", () => {
     const t = createTemplate("Регистрация", "new");
-    const out = applyCampaignContext(t, {
-      files: [{ name: "base-1.csv", rowCount: 4000 }, { name: "base-2.csv", rowCount: 6000 }],
-      interests: ["Ипотека"],
-    });
-    const entry = out.nodes[0];
-    expect(entry.data.nodeType).toBe("source");
-    expect(entry.data.sublabel).toMatch(/2 базы/);
-    expect(entry.data.params).toMatchObject({ kind: "signal", count: 10000 });
-    expect((entry.data.params as { fileName: string }).fileName).toBe("base-1.csv, base-2.csv");
+    const files = [{ name: "base-1.csv", rowCount: 4000 }, { name: "base-2.csv", rowCount: 6000 }];
+    const out = applyCampaignContext(t, { files, interests: ["Ипотека"] });
+    const scoring = out.nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect(scoring.data.params).toMatchObject({ kind: "scoring", files });
+    const signal = out.nodes.find((n) => n.id === "signal_result")!;
+    expect(signal.data.params).toMatchObject({ kind: "signal", count: 10000 });
+  });
+
+  it("own (no scoring): the root «Сигнал» node shows the uploaded base", () => {
+    const t = createTemplate("Регистрация", "own");
+    const files = [{ name: "own-1.csv", rowCount: 4000 }, { name: "own-2.csv", rowCount: 6000 }];
+    const out = applyCampaignContext(t, { files });
+    const signal = out.nodes.find((n) => n.id === "signal_result")!;
+    expect(signal.data.sublabel).toMatch(/2 базы/);
+    expect(signal.data.params).toMatchObject({ kind: "signal", count: 10000 });
+    expect((signal.data.params as { fileName: string }).fileName).toBe("own-1.csv, own-2.csv");
   });
 
   it("populates the «Скоринг» node interests from the campaign", () => {
@@ -201,18 +210,20 @@ describe("source-aware generation (A3)", () => {
     const g = createTemplate("Регистрация", "stream");
     expect(g.nodes.some((n) => n.data.nodeType === "scoring")).toBe(true);
   });
-  it("entry node stays type source even after scoring insertion", () => {
+  it("scoring node is the root (nodes[0]) for new", () => {
     const g = createTemplate("Регистрация", "new");
-    expect(g.nodes[0].data.nodeType).toBe("source");
+    expect(g.nodes[0].data.nodeType).toBe("scoring");
+    expect(g.nodes.some((n) => n.data.nodeType === "source")).toBe(false);
   });
-  it("scoring node sits between source and the first communication", () => {
+  it("scoring root has a single out-edge to the signal node", () => {
     const g = createTemplate("Регистрация", "new");
-    const entryId = g.nodes[0].id;
-    // No edge directly from entry to a non-scoring node remains.
-    const entryEdges = g.edges.filter((e) => e.source === entryId);
-    expect(entryEdges).toHaveLength(1);
     const scoringNode = g.nodes.find((n) => n.data.nodeType === "scoring")!;
-    expect(entryEdges[0].target).toBe(scoringNode.id);
+    // Root: no incoming edge.
+    expect(g.edges.some((e) => e.target === scoringNode.id)).toBe(false);
+    const scoringEdges = g.edges.filter((e) => e.source === scoringNode.id);
+    expect(scoringEdges).toHaveLength(1);
+    const signalNode = g.nodes.find((n) => n.id === "signal_result")!;
+    expect(scoringEdges[0].target).toBe(signalNode.id);
   });
   it("source-aware graph still validates ok", () => {
     for (const st of ["new", "stream", "own"] as const) {
@@ -304,15 +315,15 @@ describe("channel-aware template generation", () => {
 describe("empty-channels «без коммуникации» minimal template (bug 2a/2b)", () => {
   const COMM_TYPES = new Set(["email", "sms", "push", "ivr"]);
 
-  it("channels=[] (new) → only source+scoring+signal+success, ZERO comm nodes", () => {
+  it("channels=[] (new) → only scoring+signal+success (no «Файл»), ZERO comm nodes", () => {
     const { nodes } = createTemplate("Регистрация", "new", []);
     const types = nodes.map((n) => n.data.nodeType);
     expect(types.filter((t) => COMM_TYPES.has(t))).toEqual([]);
-    expect(types).toContain("source");
+    expect(types).not.toContain("source");
     expect(types).toContain("scoring");
     expect(types).toContain("signal");
     expect(types).toContain("success");
-    const allowed = new Set(["source", "scoring", "signal", "success"]);
+    const allowed = new Set(["scoring", "signal", "success"]);
     expect(types.every((t) => allowed.has(t))).toBe(true);
   });
 
@@ -321,11 +332,12 @@ describe("empty-channels «без коммуникации» minimal template (b
     expect(nodes.filter((n) => COMM_TYPES.has(n.data.nodeType))).toEqual([]);
   });
 
-  it("channels=[] own source → signal+success, no scoring, no comm nodes", () => {
+  it("channels=[] own source → signal+success, no scoring, no source, no comm nodes", () => {
     const { nodes } = createTemplate("Регистрация", "own", []);
     const types = nodes.map((n) => n.data.nodeType);
     expect(types.filter((t) => COMM_TYPES.has(t))).toEqual([]);
     expect(types).not.toContain("scoring");
+    expect(types).not.toContain("source");
     expect(types).toContain("signal");
     expect(types).toContain("success");
   });

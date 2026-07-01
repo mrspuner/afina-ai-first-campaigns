@@ -6,6 +6,7 @@ import type {
   WorkflowEdge,
   WorkflowNodeType,
   WorkflowNodeData,
+  CampaignFile,
 } from "@/types/workflow";
 
 import type { Channel } from "@/types/campaign";
@@ -249,29 +250,20 @@ export const TEMPLATE_BY_TYPE: Record<SignalType, () => Template> = {
   "Удержание": retentionTemplate,
 };
 
-/** Relabels the entry node «Сигнал» → «Файл» (Block C #8): the graph now reads
- *  as a path Файл → Скоринг → Сигнал → Коммуникация, so the entry (the uploaded
- *  base) is the «Файл», and the scored audience becomes a downstream «Сигнал». */
-function relabelEntryToFile(t: Template): Template {
-  const [entry, ...rest] = t.nodes;
-  if (!entry) return t;
-  return {
-    nodes: [{ ...entry, data: { ...entry.data, label: "Файл" } }, ...rest],
-    edges: t.edges,
-  };
-}
-
 /**
- * Builds the campaign path between the entry `Файл` node and its first
- * downstream node (Block C #8): inserts a `scoring` node (for `new`/`stream` —
- * collected/streamed audiences are scored before communication; `own` bases are
- * pre-loaded and skip it) and always a `signal` result node (the scored
- * audience). Path: Файл → [Скоринг →] Сигнал → <original first target>.
+ * Turns the base skeleton's entry `source` node into the real campaign root:
+ * the standalone «Файл» entry node is REMOVED and folded into the graph root.
  *
- * The scoring node carries `ScoringParams` (interests/triggers, empty by default
- * — filled from the campaign), and the signal node carries `SignalParams`;
- * neither has a required human field, so `nodeNeedsAttention` stays false and
- * the path never blocks launch.
+ * Root shapes (the entry `source` node is dropped entirely):
+ *   - `new` / `stream`: Скоринг → Сигнал → <original first target>. Scoring is
+ *     the root and carries the uploaded «Файлы» (plus interests/triggers).
+ *   - `own`: Сигнал → <original first target>. Own bases skip scoring, so the
+ *     `signal` result node is the root and hosts the uploaded base directly.
+ *
+ * The scoring node carries `ScoringParams` (interests/triggers/files, empty by
+ * default — filled from the campaign), and the signal node carries
+ * `SignalParams`; neither has a required human field, so `nodeNeedsAttention`
+ * stays false and the path never blocks launch.
  */
 function withSignalPath(t: Template, sourceType: SourceType): Template {
   const entry = t.nodes[0];
@@ -279,45 +271,49 @@ function withSignalPath(t: Template, sourceType: SourceType): Template {
   const entryId = entry.id;
   const firstEdge = t.edges.find((edge) => edge.source === entryId);
   if (!firstEdge) return t;
+  const firstTarget = firstEdge.target;
 
   const hasScoring = sourceType !== "own";
-  const inserted = hasScoring ? 2 : 1;
+  // Root nodes that REPLACE the removed entry: scoring+signal (new/stream) or
+  // just signal (own).
+  const rootCount = hasScoring ? 2 : 1;
 
-  // Make room: shift every non-entry node right by the inserted-node count.
-  const shifted = t.nodes.map((nd) =>
-    nd.id === entryId
-      ? nd
-      : { ...nd, position: { ...nd.position, x: nd.position.x + inserted * STEP } }
-  );
+  // The removed entry sat at x=0; downstream nodes at x >= STEP. The new root
+  // nodes occupy x = 0 .. (rootCount-1)*STEP, so the first downstream node
+  // (originally at x=STEP) must land at x = rootCount*STEP => shift every
+  // non-entry node right by (rootCount-1)*STEP.
+  const shift = (rootCount - 1) * STEP;
+  const rest = t.nodes
+    .slice(1)
+    .map((nd) => ({ ...nd, position: { ...nd.position, x: nd.position.x + shift } }));
 
   const newNodes: WorkflowNode[] = [];
   const newEdges: WorkflowEdge[] = [];
-  let prevId = entryId;
+  const y = entry.position.y;
   let x = entry.position.x;
+  let prevId: string | null = null;
 
   if (hasScoring) {
-    x += STEP;
     newNodes.push(
-      n("scoring", "Скоринг", "scoring", x, entry.position.y, "Качество базы", undefined,
-        { kind: "scoring", interests: [], triggers: [] })
+      n("scoring", "Скоринг", "scoring", x, y, "Качество базы", undefined,
+        { kind: "scoring", interests: [], triggers: [], files: [] })
     );
-    newEdges.push(e(prevId, "scoring"));
     prevId = "scoring";
+    x += STEP;
   }
 
-  x += STEP;
   newNodes.push(
-    n("signal_result", "Сигнал", "signal", x, entry.position.y, "Готовая аудитория", undefined,
+    n("signal_result", "Сигнал", "signal", x, y, "Готовая аудитория", undefined,
       { kind: "signal", fileName: "", count: 0, segments: EMPTY_SEGMENTS })
   );
-  newEdges.push(e(prevId, "signal_result"));
+  if (prevId) newEdges.push(e(prevId, "signal_result"));
   prevId = "signal_result";
 
   const edges = t.edges
     .filter((edge) => edge.id !== firstEdge.id)
-    .concat(newEdges, [e(prevId, firstEdge.target)]);
+    .concat(newEdges, [e(prevId, firstTarget)]);
 
-  return { nodes: [...shifted, ...newNodes], edges };
+  return { nodes: [...newNodes, ...rest], edges };
 }
 
 // ── Channel-aware template builders ──────────────────────────────────────────
@@ -537,7 +533,7 @@ const SEGMENTED_TYPES = new Set<SignalType>(["Апсейл", "Удержание
  * selected NO channels gets a graph with only the signal path and a terminal
  * success node — no communication nodes (email/sms/push/ivr). `withSignalPath`
  * later inserts the [Скоринг →] Сигнал steps between the entry and success, so
- * the final graph is Файл → [Скоринг →] Сигнал → Успех. Built off the legacy
+ * the final graph is [Скоринг →] Сигнал → Успех. Built off the legacy
  * skeleton purely to pick up the entry's signal params and the success
  * goal/label; every other (communication) node is dropped.
  *
@@ -595,8 +591,10 @@ export function createTemplate(
     base = TEMPLATE_BY_TYPE[signalType]();
   }
 
-  // Graph reads as Файл → [Скоринг →] Сигнал → Коммуникация (Block C #8).
-  return withSignalPath(relabelEntryToFile(base), sourceType);
+  // Graph root: Скоринг → Сигнал → Коммуникация (new/stream) or Сигнал →
+  // Коммуникация (own). The standalone «Файл» entry node is folded into the
+  // root — new/stream carry «Файлы» on the scoring node, own on the signal node.
+  return withSignalPath(base, sourceType);
 }
 
 /** Short human summary of the uploaded bases, e.g. «2 базы · ~14 000 строк». */
@@ -609,15 +607,19 @@ export function fileSummaryLine(
 }
 
 /**
- * Overlays real campaign data onto a freshly-built graph (Block C #8): the entry
- * «Файл» node shows the uploaded bases (names + total rows) and the «Скоринг»
- * node carries the campaign's interests and triggers. Pure — returns a new
- * graph; leaves graphs without a matching node untouched.
+ * Overlays real campaign data onto a freshly-built graph. Now that the «Файл»
+ * entry node is gone, the uploaded base lives on the graph ROOT:
+ *   - `new`/`stream`: the «Скоринг» node carries interests, triggers AND the
+ *     uploaded «Файлы»; the downstream «Сигнал» node gets the base `count` (N,
+ *     read by the cost model).
+ *   - `own` (no scoring): the root «Сигнал» node hosts the base directly —
+ *     names + total rows + count.
+ * Pure — returns a new graph; leaves graphs without a matching node untouched.
  */
 export function applyCampaignContext(
   t: Template,
   ctx: {
-    files?: { name: string; rowCount: number }[];
+    files?: CampaignFile[];
     interests?: string[];
     triggers?: string[];
   }
@@ -627,24 +629,35 @@ export function applyCampaignContext(
   const triggers = ctx.triggers ?? [];
   const totalRows = files.reduce((s, f) => s + f.rowCount, 0);
   const summary = fileSummaryLine(files);
+  const hasScoring = t.nodes.some((nd) => nd.data.nodeType === "scoring");
 
   const nodes = t.nodes.map((nd) => {
-    if (nd.data.nodeType === "source" && nd.data.params?.kind === "signal") {
+    // Scoring root (new/stream): interests + triggers + the uploaded files.
+    if (nd.data.nodeType === "scoring" && nd.data.params?.kind === "scoring") {
+      return {
+        ...nd,
+        data: { ...nd.data, params: { ...nd.data.params, interests, triggers, files } },
+      };
+    }
+    // Signal result node: always carries the base `count` (N for the cost
+    // model). For `own` (no scoring) it is also the root that shows the base —
+    // surface the file names + summary there so nothing is lost with «Файл» gone.
+    if (nd.data.nodeType === "signal" && nd.data.params?.kind === "signal") {
+      const showFiles = !hasScoring;
       return {
         ...nd,
         data: {
           ...nd.data,
-          ...(summary ? { sublabel: summary } : {}),
+          ...(showFiles && summary ? { sublabel: summary } : {}),
           params: {
             ...nd.data.params,
-            fileName: files.map((f) => f.name).join(", ") || nd.data.params.fileName,
             count: totalRows || nd.data.params.count,
+            ...(showFiles
+              ? { fileName: files.map((f) => f.name).join(", ") || nd.data.params.fileName }
+              : {}),
           },
         },
       };
-    }
-    if (nd.data.nodeType === "scoring" && nd.data.params?.kind === "scoring") {
-      return { ...nd, data: { ...nd.data, params: { ...nd.data.params, interests, triggers } } };
     }
     return nd;
   });

@@ -4,7 +4,7 @@ import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
-import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
+import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
 import { estimateArtifactCount, artifactKindForCampaign } from "./artifact-metrics";
@@ -64,7 +64,7 @@ export type Campaign = {
   /** Wizard-selected behavioral triggers (intent signals). Mirrors `interests`;
    *  surfaced read-only in the scoring node's «Интересы и триггеры» drawer. */
   triggers?: string[];
-  files?: { name: string; rowCount: number }[];
+  files?: CampaignFile[];
   dailyBudget?: number;
   /**
    * Distinguishes "scoring running" from "communication started" — `status`
@@ -299,7 +299,7 @@ export type Action =
   | { type: "campaign_artifact_ready"; campaignId: string; kind: Artifact["kind"]; count: number }
   | { type: "campaign_opened"; id: string }
   | { type: "campaign_renamed"; id: string; name: string }
-  | { type: "campaign_file_added"; campaignId: string; file: { name: string; rowCount: number } }
+  | { type: "campaign_file_added"; campaignId: string; file: CampaignFile }
   | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[] }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }

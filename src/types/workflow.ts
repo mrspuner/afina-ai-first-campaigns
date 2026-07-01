@@ -91,14 +91,29 @@ export type SignalParams = {
 };
 
 /**
- * Scoring node (Block C #8) — carries the campaign's interests/triggers so they
- * can be edited from the graph drawer. No required human field: empty lists are
- * valid (scoring never blocks launch), so it is exempt from `nodeNeedsAttention`.
+ * Lightweight snapshot of an uploaded base file. The wizard works with raw
+ * browser `File[]`; this is the parsed `{ name, rowCount }` projection stored on
+ * `Campaign.files` and mirrored onto the scoring node's «Файлы» param. Defined
+ * here (a leaf type module) so both the app state and the graph reuse ONE shape.
+ */
+export interface CampaignFile {
+  name: string;
+  rowCount: number;
+}
+
+/**
+ * Scoring node — the graph ROOT for `new`/`stream` sources. Carries the
+ * campaign's interests/triggers (editable from the graph drawer in a draft) and
+ * the uploaded base «Файлы» (folded in when the standalone «Файл» entry node was
+ * removed). No required human field: empty lists are valid (scoring never blocks
+ * launch), so it is exempt from `nodeNeedsAttention`.
  */
 export type ScoringParams = {
   kind: "scoring";
   interests: string[];
   triggers: string[];
+  /** Uploaded base files folded onto the scoring node (add-file lives here). */
+  files: CampaignFile[];
 };
 
 export type SuccessParams = {

@@ -894,7 +894,7 @@ function applyAddCondition(
 export function relayoutGraph(graph: GraphState): GraphState {
   const signal = graph.nodes.find((n) => {
     const t = (n.data as { nodeType: WorkflowNodeType }).nodeType;
-    return t === "source" || t === "signal";
+    return t === "scoring" || t === "source" || t === "signal";
   });
   if (!signal) return graph;
 

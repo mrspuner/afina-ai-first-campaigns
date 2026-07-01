@@ -175,7 +175,9 @@ export function WorkflowSection() {
   const cost = useMemo(() => {
     const g = graphRef.current;
     if (!g) return null;
-    const signalNode = g.nodes.find((n) => n.data.nodeType === "source");
+    const signalNode = g.nodes.find(
+      (n) => n.data.nodeType === "source" || n.data.nodeType === "signal"
+    );
     const N =
       signalNode?.data.params?.kind === "signal" ? signalNode.data.params.count : 0;
     if (!N) return null;
