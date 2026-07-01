@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronRight, Pencil } from "lucide-react";
+import { ChevronRight, Eye, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
@@ -109,6 +109,13 @@ interface TemplateCardProps {
    */
   onOpenEmail?: (content: EmailParams) => void;
   /**
+   * Open the full styled preview of a non-email template (sms/push/ivr) in the
+   * side drawer. Delegated so the card stays pure (no ChatProvider dependency)
+   * — the connected tab wires this to `openTemplatePreview`. Email keeps its own
+   * «Письмо» affordance (`onOpenEmail`), so this is only surfaced off-email.
+   */
+  onPreview?: (id: string) => void;
+  /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
    */
@@ -119,6 +126,7 @@ export function TemplateCard({
   template,
   onRename,
   onOpenEmail,
+  onPreview,
   index = 0,
 }: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
@@ -217,6 +225,20 @@ export function TemplateCard({
 
       {/* Per-channel component fields */}
       <FieldList content={content} onOpenEmail={onOpenEmail} />
+
+      {/* Non-email channels get a styled full-preview affordance (email opens
+          its letter via the «Письмо» field above). */}
+      {content.kind !== "email" && onPreview && (
+        <button
+          type="button"
+          aria-label="Предпросмотр"
+          onClick={() => onPreview(id)}
+          className="group flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
+        >
+          <Eye className="size-3.5 shrink-0" />
+          Предпросмотр
+        </button>
+      )}
     </Card>
   );
 }

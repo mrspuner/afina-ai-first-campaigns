@@ -17,6 +17,8 @@ interface TemplatesTabViewProps {
   onRename: (id: string, name: string) => void;
   /** #32: open an email template's letter in the read-only side drawer. */
   onOpenEmail?: (content: EmailParams) => void;
+  /** Open a non-email template's styled preview in the read-only side drawer. */
+  onPreview?: (id: string) => void;
 }
 
 /** Presentational list — pure, no state access (testable in isolation). */
@@ -25,6 +27,7 @@ export function TemplatesTabView({
   onCreateManual,
   onRename,
   onOpenEmail,
+  onPreview,
 }: TemplatesTabViewProps) {
   if (templates.length === 0) {
     return <TemplatesEmptyState onCreateManual={onCreateManual} />;
@@ -45,6 +48,7 @@ export function TemplatesTabView({
           index={i}
           onRename={onRename}
           onOpenEmail={onOpenEmail}
+          onPreview={onPreview}
         />
       ))}
     </div>
@@ -75,7 +79,7 @@ function emailParamsToDraft(content: EmailParams): EmailDraft {
 export function TemplatesTab() {
   const { templates } = useAppState();
   const dispatch = useAppDispatch();
-  const { openEmailEditor } = useChat();
+  const { openEmailEditor, openTemplatePreview } = useChat();
   const templateFlow = useTemplateFlow();
 
   // «Создать шаблон» запускает поток создания в чат-дровере (#14): ассистент
@@ -97,6 +101,8 @@ export function TemplatesTab() {
           preview: true,
         })
       }
+      // sms/push/ivr: открыть стилизованный предпросмотр в правом дровере.
+      onPreview={(id) => openTemplatePreview(id)}
     />
   );
 }

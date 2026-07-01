@@ -4,6 +4,7 @@ import { TemplatesTabView, TemplatesTab } from "./templates-tab";
 import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
 import { EmailEditorPanel } from "@/sections/campaigns/email-editor-panel";
+import { TemplatePreviewDrawer } from "@/sections/campaigns/template-preview-drawer";
 import type { MessageTemplate } from "@/state/app-state";
 
 const templates: MessageTemplate[] = [
@@ -84,6 +85,42 @@ describe("TemplatesTabView", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Письмо/i }));
     expect(onOpenEmail).toHaveBeenCalledWith(emailTemplate.content);
+  });
+
+  it("threads onPreview down to a non-email card and calls it with the id", () => {
+    const onPreview = vi.fn();
+    render(
+      <TemplatesTabView
+        templates={templates}
+        onCreateManual={vi.fn()}
+        onRename={vi.fn()}
+        onPreview={onPreview}
+      />,
+    );
+    // The sms + push cards each expose a «Предпросмотр» affordance.
+    const buttons = screen.getAllByRole("button", { name: "Предпросмотр" });
+    expect(buttons.length).toBe(2);
+    fireEvent.click(buttons[0]);
+    expect(onPreview).toHaveBeenCalledWith("tpl_sms");
+  });
+});
+
+describe("TemplatesTab (connected) — opens sms/push in the preview drawer", () => {
+  it("opens a seeded SMS template's styled preview on «Предпросмотр» click", () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <TemplatesTab />
+          <TemplatePreviewDrawer />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    // Click the first «Предпросмотр» (seeded sms/push templates carry one).
+    const buttons = screen.getAllByRole("button", { name: "Предпросмотр" });
+    expect(buttons.length).toBeGreaterThan(0);
+    fireEvent.click(buttons[0]);
+    // The unified preview drawer mounts.
+    expect(screen.getByTestId("template-preview-drawer")).toBeInTheDocument();
   });
 });
 
