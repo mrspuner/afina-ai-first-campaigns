@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useLayoutEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useChat } from "@/state/chat-context";
 import { useAppState } from "@/state/app-state-context";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
@@ -87,6 +87,11 @@ export function TemplatePreviewBody({ template }: { template: MessageTemplate })
 export function TemplatePreviewDrawer() {
   const { templateDrawer, closeTemplateDrawer } = useChat();
   const { templates } = useAppState();
+  // Под reduced-motion слайд по X отключаем — только opacity (см. globals.css).
+  // Слайд (motion anim: translateX) — inline-transform на rAF, который CSS-крушение
+  // reduced-motion не ловит; в финальных кадрах ease-out он оставляет дробный X,
+  // из-за чего снимок дровера-элемента округляется до 560/561px и флачит визуал.
+  const reduceMotion = useReducedMotion();
 
   const isPreview = templateDrawer.open && templateDrawer.mode === "preview";
   const template = isPreview
@@ -113,11 +118,15 @@ export function TemplatePreviewDrawer() {
         <motion.aside
           key="template-preview-drawer"
           data-testid="template-preview-drawer"
-          initial={{ x: "100%" }}
-          animate={{ x: 0 }}
-          exit={{ x: "100%" }}
-          transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed right-0 top-0 z-40 flex h-screen w-[560px] flex-col border-l border-white/10 bg-[rgba(14,14,12,0.96)] backdrop-blur-[2px]"
+          initial={reduceMotion ? { opacity: 0 } : { x: "100%" }}
+          animate={reduceMotion ? { opacity: 1 } : { x: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { x: "100%" }}
+          transition={
+            reduceMotion
+              ? { duration: 0.2 }
+              : { duration: 0.46, ease: [0.16, 1, 0.3, 1] }
+          }
+          className="fixed right-0 top-0 z-40 box-border flex h-screen w-[560px] flex-col border-l border-white/10 bg-[rgba(14,14,12,0.96)] backdrop-blur-[2px]"
         >
           {/* Шапка панели: канал + имя шаблона */}
           <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
