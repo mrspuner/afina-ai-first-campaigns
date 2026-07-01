@@ -43,7 +43,12 @@ const ivr: MessageTemplate = {
   id: "t_ivr",
   channel: "ivr",
   name: "Звонок — напоминание",
-  content: { kind: "ivr", scenario: "Напомнить о заявке", voiceType: "female" },
+  content: {
+    kind: "ivr",
+    scenario:
+      "Здравствуйте! Это звонок от Афины.\n\nМы напоминаем о вашей заявке — перезвоните нам, когда будет удобно.",
+    voiceType: "female",
+  },
   usedInCampaigns: 0,
 };
 
@@ -69,9 +74,11 @@ describe("TemplatePreviewBody — routes by channel", () => {
     expect(screen.getByText(/Афина <noreply@afina.ai>/)).toBeInTheDocument();
   });
 
-  it("renders IVR as label-value pairs (no visual message)", () => {
+  it("renders IVR as a full-text call-script panel (whole scenario, voice meta)", () => {
     render(<TemplatePreviewBody template={ivr} />);
-    expect(screen.getByText("Напомнить о заявке")).toBeInTheDocument();
+    // The FULL script is shown — both the opening and the trailing line.
+    const script = screen.getByText(/Здравствуйте! Это звонок от Афины\./);
+    expect(script).toHaveTextContent("перезвоните нам, когда будет удобно");
     // Voice value is mapped to a human label.
     expect(screen.getByText(/Женский/)).toBeInTheDocument();
   });

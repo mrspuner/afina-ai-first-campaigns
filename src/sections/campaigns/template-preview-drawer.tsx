@@ -7,20 +7,14 @@ import { useChat } from "@/state/chat-context";
 import { useAppState } from "@/state/app-state-context";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import type { MessageTemplate } from "@/state/app-state";
-import type { EmailParams, IvrParams } from "@/types/workflow";
+import type { EmailParams } from "@/types/workflow";
 import type { EmailDraft } from "@/state/email-directory";
 import { EmailRenderer } from "./email-renderer";
 import { SmsRenderer } from "./sms-renderer";
 import { PushRenderer } from "./push-renderer";
+import { IvrRenderer } from "./ivr-renderer";
 
 const PREVIEW_WIDTH_PX = 560;
-
-/** Человеческие подписи типа голоса IVR (звонок — без визуального сообщения). */
-const VOICE_LABEL: Record<IvrParams["voiceType"], string> = {
-  male: "Мужской",
-  female: "Женский",
-  neutral: "Нейтральный",
-};
 
 /**
  * #32-mapping: разворачивает плоские EmailParams в EmailDraft, который рисует
@@ -45,7 +39,7 @@ function emailParamsToDraft(content: EmailParams): EmailDraft {
 /**
  * Чистое тело предпросмотра шаблона — маршрутизация по каналу:
  *  - email / sms / push → стилизованный рендерер «как настоящее» сообщение;
- *  - ivr → пары «подпись—значение» (у голосового звонка нет визуального тела).
+ *  - ivr → панель «сценарий звонка» с ПОЛНЫМ текстом скрипта (без обрезки).
  * Без провайдеров — тестируется в изоляции.
  */
 export function TemplatePreviewBody({ template }: { template: MessageTemplate }) {
@@ -61,18 +55,7 @@ export function TemplatePreviewBody({ template }: { template: MessageTemplate })
     case "push":
       return <PushRenderer params={content} />;
     case "ivr":
-      return (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 rounded-xl border border-white/10 bg-card/40 px-4 py-3.5">
-          <dt className="text-xs text-muted-foreground/60">Сценарий:</dt>
-          <dd className="text-sm text-foreground">
-            {content.scenario.trim() || "—"}
-          </dd>
-          <dt className="text-xs text-muted-foreground/60">Голос:</dt>
-          <dd className="text-sm text-foreground">
-            {VOICE_LABEL[content.voiceType]}
-          </dd>
-        </dl>
-      );
+      return <IvrRenderer params={content} />;
     default:
       return null;
   }

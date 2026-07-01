@@ -67,3 +67,50 @@ test.describe("@visual template preview drawers", () => {
     await expect(drawer).toHaveScreenshot("template-preview-push.png");
   });
 });
+
+// IVR uses a different entry point (no node eye — the node field is a combo),
+// so we seed a single ivr template and open its preview from the Артефакты →
+// Шаблоны card «Предпросмотр» eye. The script text is static, so no clock dep.
+const IVR_SCRIPT = [
+  "Здравствуйте! Меня зовут Анна, я звоню из компании «Афина».",
+  "",
+  "Вы недавно интересовались ипотечными программами на нашем сайте.",
+  "У нас появилось персональное предложение со ставкой от 5,9%.",
+  "",
+  "Если вам удобно, я расскажу подробности прямо сейчас — это займёт пару минут.",
+].join("\n");
+
+const IVR_SEED = {
+  surveyStatus: "completed",
+  introSeen: true,
+  balance: 100_000,
+  templates: [
+    {
+      id: "tpl_ivr_call",
+      channel: "ivr",
+      name: "Звонок — ипотека",
+      content: { kind: "ivr", scenario: IVR_SCRIPT, voiceType: "female" },
+      usedInCampaigns: 0,
+    },
+  ],
+  view: { kind: "section", name: "Артефакты" },
+};
+
+test.describe("@visual template preview drawer — IVR", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-06-30T12:00:00Z"));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript((seed) => {
+      (window as unknown as { __AFINA_SEED__?: unknown }).__AFINA_SEED__ = seed;
+    }, IVR_SEED);
+    await page.goto("/");
+  });
+
+  test("visual: IVR preview drawer (full script)", async ({ page }) => {
+    await page.getByRole("tab", { name: "Шаблоны" }).click();
+    await page.getByRole("button", { name: "Предпросмотр" }).click();
+    const drawer = page.getByTestId("template-preview-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveScreenshot("template-preview-ivr.png");
+  });
+});
