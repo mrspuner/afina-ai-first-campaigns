@@ -8,7 +8,9 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import type { Artifact, Campaign } from "@/state/app-state";
 import type { Channel } from "@/types/campaign";
+import { downloadCsv } from "@/lib/download-csv";
 import { ARTIFACT_KIND_LABEL } from "./artifact-labels";
+import { buildSignalsCsv } from "./signals-csv";
 
 const SOURCE_LABEL: Record<NonNullable<Campaign["sourceType"]>, string> = {
   new: "Новая база номеров", stream: "Поток", own: "Свои сигналы",
@@ -133,11 +135,7 @@ export function ArtifactScreen() {
   const campaign = campaigns.find((c) => c.id === artifact.campaignId);
 
   function handleDownload() {
-    // Prototype: a real backend would emit a CSV here.
-    console.log("download artifact", artifact!.id);
-    window.alert(
-      `Скачивание ${formatNumber(artifact!.count)} сигналов (CSV) — в прототипе симулировано.`,
-    );
+    downloadCsv(`afina-signals-${artifact!.id}.csv`, buildSignalsCsv(artifact!.id, artifact!.count));
   }
 
   return (
