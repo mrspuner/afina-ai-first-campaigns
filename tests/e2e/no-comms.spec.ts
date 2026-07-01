@@ -53,20 +53,25 @@ test.describe("«без коммуникации» — no comm nodes, no comm bu
     }
   });
 
-  test("payment screen shows no communication budget line", async ({ page }) => {
+  test("payment screen shows ONLY «Сигналы» — no «Коммуникации» row (v8 contract)", async ({
+    page,
+  }) => {
     const screen = SCREENS.find((s) => s.id === "campaign-payment-no-comms");
     expect(screen, "campaign-payment-no-comms must exist in the catalog").toBeTruthy();
     await seedScreen(page, screen!);
 
-    // The «Коммуникация» label still exists structurally, but its value is «—»
-    // (zero) and there is NO per-channel breakdown.
-    const commLabel = page.getByText("Коммуникация", { exact: true });
-    await expect(commLabel).toBeVisible();
-    const commValue = commLabel.locator("xpath=following-sibling::span[1]");
-    await expect(commValue).toHaveText("—");
+    // Only the «Сигналы» line renders.
+    await expect(page.getByText("Сигналы", { exact: true })).toBeVisible();
 
-    // No primary/repeat communication breakdown groups.
+    // Under the v8 design there is NO «Коммуникации» row at all when the
+    // campaign has no channels (not a «—» value — the row is absent), and no
+    // «Итого» row either.
+    await expect(page.getByText("Коммуникации", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Итого", { exact: true })).toHaveCount(0);
+
+    // No per-channel breakdown table (its column headers are absent).
     await expect(page.getByText("Первичные", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Повторные", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Канал", { exact: true })).toHaveCount(0);
   });
 });
