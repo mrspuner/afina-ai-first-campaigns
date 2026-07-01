@@ -19,6 +19,7 @@ const empty: ChatState = {
     previewTemplateId: null,
     previewTemplate: null,
   },
+  scoringDrawer: { open: false, editable: false, nodeId: null, campaignId: null },
 };
 
 function msg(partial: Partial<ChatMessage> & Pick<ChatMessage, "role" | "text">): ChatMessage {
@@ -319,5 +320,68 @@ describe("chatReducer — template create/preview seam (#14)", () => {
   it("open_template_drawer default mode is create", () => {
     const s = chatReducer(INITIAL_CHAT_STATE, { type: "open_template_drawer" });
     expect(s.templateDrawer.mode).toBe("create");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scoring node «Интересы и триггеры» — content mode of the AI sidebar
+// ---------------------------------------------------------------------------
+
+describe("chatReducer — scoringDrawer slice", () => {
+  it("initial state has scoringDrawer closed", () => {
+    expect(INITIAL_CHAT_STATE.scoringDrawer.open).toBe(false);
+    expect(INITIAL_CHAT_STATE.scoringDrawer.nodeId).toBeNull();
+    expect(INITIAL_CHAT_STATE.scoringDrawer.campaignId).toBeNull();
+  });
+
+  it("open_scoring_drawer opens the sidebar bound to node + campaign", () => {
+    const s = chatReducer(empty, {
+      type: "open_scoring_drawer",
+      nodeId: "n_scoring",
+      campaignId: "cmp_1",
+      editable: true,
+    });
+    expect(s.mode).toBe("sidebar");
+    expect(s.scoringDrawer).toEqual({
+      open: true,
+      editable: true,
+      nodeId: "n_scoring",
+      campaignId: "cmp_1",
+    });
+  });
+
+  it("open_scoring_drawer carries editable=false for a launched campaign", () => {
+    const s = chatReducer(empty, {
+      type: "open_scoring_drawer",
+      nodeId: "n_scoring",
+      campaignId: "cmp_1",
+      editable: false,
+    });
+    expect(s.scoringDrawer.editable).toBe(false);
+  });
+
+  it("close_scoring_drawer collapses the sidebar and resets the slice", () => {
+    let s = chatReducer(empty, {
+      type: "open_scoring_drawer",
+      nodeId: "n_scoring",
+      campaignId: "cmp_1",
+      editable: true,
+    });
+    s = chatReducer(s, { type: "close_scoring_drawer" });
+    expect(s.mode).toBe("collapsed");
+    expect(s.scoringDrawer.open).toBe(false);
+    expect(s.scoringDrawer.nodeId).toBeNull();
+  });
+
+  it("close_sidebar also drops the scoring content mode", () => {
+    let s = chatReducer(empty, {
+      type: "open_scoring_drawer",
+      nodeId: "n_scoring",
+      campaignId: "cmp_1",
+      editable: true,
+    });
+    s = chatReducer(s, { type: "close_sidebar" });
+    expect(s.mode).toBe("collapsed");
+    expect(s.scoringDrawer.open).toBe(false);
   });
 });

@@ -1,11 +1,9 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useRef } from "react";
 import { AlertTriangle, Eye, Pencil, Plus } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
-import { ScoringInsightsDrawer } from "./scoring-insights-drawer";
-import { resolveInterestOptions } from "./interest-options";
 import { getFieldMeta } from "@/state/node-field-editability";
 import { fileSummaryLine } from "@/state/workflow-templates";
 import { rngFor, seededInt } from "@/state/metrics";
@@ -160,20 +158,17 @@ function ScoringRow({
   nodeId: string;
   params: Extract<NodeParams, { kind: "scoring" }>;
 }) {
-  const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dispatch = useAppDispatch();
   const state = useAppState();
   const readOnly = useWorkflowReadOnly();
+  const chat = useChat();
+  const { removeChip } = usePromptChips();
 
   const editable = !readOnly;
   const campaignId =
     state.view.kind === "workflow" ? state.view.campaign.id : undefined;
   const canEdit = editable && campaignId !== undefined;
-  const interestOptions = useMemo(
-    () => resolveInterestOptions(state.clientDirection),
-    [state.clientDirection]
-  );
 
   const files = params.files ?? [];
   const filesSummary =
@@ -181,22 +176,14 @@ function ScoringRow({
       ? fileSummaryLine(files) ?? files.map((f) => f.name).join(", ")
       : "—";
 
-  function handleChange(next: { interests: string[]; triggers: string[] }) {
-    // Persist to the campaign (durable source of truth) …
-    if (campaignId) {
-      dispatch({
-        type: "campaign_scoring_set",
-        id: campaignId,
-        interests: next.interests,
-        triggers: next.triggers,
-      });
-    }
-    // … and to this scoring node's params, so the open card/drawer update now.
-    dispatch({
-      type: "workflow_node_field_set",
-      nodeId,
-      patch: { interests: next.interests, triggers: next.triggers } as Partial<NodeParams>,
-    });
+  // Open «Интересы и триггеры» in the AI sidebar (chat-drawer) — the drawer that
+  // already hosts «Афина ИИ» + the prompt composer. The editor there is the SAME
+  // one the wizard uses; edits persist to the campaign scoring params. Drop the
+  // auto scoring-node chip so the drawer's bar matches the wizard's bar (parity).
+  function openInterestsDrawer() {
+    if (!campaignId) return;
+    removeChip(`node_${nodeId}`);
+    chat.openScoringDrawer({ nodeId, campaignId, editable });
   }
 
   function handleAddFile(f: File) {
@@ -263,7 +250,7 @@ function ScoringRow({
           }
           onClick={(e) => {
             e.stopPropagation();
-            setOpen(true);
+            openInterestsDrawer();
           }}
           className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
         >
@@ -274,15 +261,6 @@ function ScoringRow({
           )}
         </button>
       </div>
-      <ScoringInsightsDrawer
-        open={open}
-        onOpenChange={setOpen}
-        interests={params.interests}
-        triggers={params.triggers}
-        editable={editable && campaignId !== undefined}
-        interestOptions={interestOptions}
-        onChange={handleChange}
-      />
     </>
   );
 }

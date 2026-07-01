@@ -438,7 +438,11 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
     return (
       <>
         <SelectedNodeChipEffect
-          selected={view.kind === "workflow" ? selectedWorkflowNode : null}
+          selected={
+            view.kind === "workflow" && !chat.scoringDrawer.open
+              ? selectedWorkflowNode
+              : null
+          }
         />
         {tplQuestion && (
           <VariantPicker

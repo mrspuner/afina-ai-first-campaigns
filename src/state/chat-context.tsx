@@ -107,11 +107,30 @@ export interface EmailEditorState {
   draft: EmailDraft | null;
 }
 
+/**
+ * «Интересы и триггеры» content mode of the AI sidebar (chat-drawer). When
+ * `open`, the sidebar renders the shared interests/triggers editor (the SAME one
+ * the wizard uses) above its composer, instead of the chat history — so the
+ * scoring node reuses the drawer that ALREADY has «Афина ИИ» + the prompt bar
+ * (single-composer invariant already solved by sidebar mode). Bound to the
+ * scoring node + campaign so edits persist to the campaign's scoring params.
+ */
+export interface ScoringDrawerState {
+  open: boolean;
+  /** Draft (not launched) → editable; launched → read-only. */
+  editable: boolean;
+  /** Scoring node whose params mirror the edit (card updates immediately). */
+  nodeId: string | null;
+  /** Campaign that durably owns the interests/triggers (source of truth). */
+  campaignId: string | null;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   mode: ChatPanelMode;
   emailEditor: EmailEditorState;
   templateDrawer: TemplateDrawerState;
+  scoringDrawer: ScoringDrawerState;
 }
 
 export type ChatAction =
@@ -146,7 +165,14 @@ export type ChatAction =
   | { type: "set_template_variants"; variants: TemplateDrawerVariant[] }
   | { type: "set_template_selected"; id: string }
   | { type: "set_template_generating"; generating: boolean }
-  | { type: "set_template_question"; question: TemplateQuestion | null };
+  | { type: "set_template_question"; question: TemplateQuestion | null }
+  | {
+      type: "open_scoring_drawer";
+      nodeId: string;
+      campaignId: string;
+      editable: boolean;
+    }
+  | { type: "close_scoring_drawer" };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -183,7 +209,30 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state.mode === "sidebar" ? state : { ...state, mode: "sidebar" };
     }
     case "close_sidebar": {
-      return state.mode === "collapsed" ? state : { ...state, mode: "collapsed" };
+      // Closing the sidebar also drops any content mode it was hosting (the
+      // scoring «Интересы и триггеры» editor) so it doesn't resurface next time
+      // the sidebar opens for plain chat.
+      if (state.mode === "collapsed" && !state.scoringDrawer.open) return state;
+      return { ...state, mode: "collapsed", scoringDrawer: INITIAL_SCORING_DRAWER };
+    }
+    case "open_scoring_drawer": {
+      return {
+        ...state,
+        mode: "sidebar",
+        scoringDrawer: {
+          open: true,
+          editable: action.editable,
+          nodeId: action.nodeId,
+          campaignId: action.campaignId,
+        },
+      };
+    }
+    case "close_scoring_drawer": {
+      return {
+        ...state,
+        mode: "collapsed",
+        scoringDrawer: INITIAL_SCORING_DRAWER,
+      };
     }
     case "open_email_editor": {
       return {
@@ -303,11 +352,19 @@ const INITIAL_TEMPLATE_DRAWER: TemplateDrawerState = {
   previewTemplate: null,
 };
 
+const INITIAL_SCORING_DRAWER: ScoringDrawerState = {
+  open: false,
+  editable: false,
+  nodeId: null,
+  campaignId: null,
+};
+
 export const INITIAL_CHAT_STATE: ChatState = {
   messages: [],
   mode: "collapsed",
   emailEditor: INITIAL_EMAIL_EDITOR,
   templateDrawer: INITIAL_TEMPLATE_DRAWER,
+  scoringDrawer: INITIAL_SCORING_DRAWER,
 };
 
 let messageCounter = 0;
@@ -377,6 +434,14 @@ interface ChatContextValue {
   setTemplateGenerating: (generating: boolean) => void;
   /** Активный вопрос пикера (#14). null скрывает пикер. */
   setTemplateQuestion: (question: TemplateQuestion | null) => void;
+  /** «Интересы и триггеры» content mode of the AI sidebar (scoring node). */
+  scoringDrawer: ScoringDrawerState;
+  openScoringDrawer: (opts: {
+    nodeId: string;
+    campaignId: string;
+    editable: boolean;
+  }) => void;
+  closeScoringDrawer: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -502,6 +567,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const openScoringDrawer = useCallback(
+    (opts: { nodeId: string; campaignId: string; editable: boolean }) =>
+      dispatch({
+        type: "open_scoring_drawer",
+        nodeId: opts.nodeId,
+        campaignId: opts.campaignId,
+        editable: opts.editable,
+      }),
+    []
+  );
+  const closeScoringDrawer = useCallback(
+    () => dispatch({ type: "close_scoring_drawer" }),
+    []
+  );
+
   const value = useMemo<ChatContextValue>(
     () => ({
       messages: state.messages,
@@ -527,6 +607,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setTemplateSelected,
       setTemplateGenerating,
       setTemplateQuestion,
+      scoringDrawer: state.scoringDrawer,
+      openScoringDrawer,
+      closeScoringDrawer,
     }),
     [
       state.messages,
@@ -552,6 +635,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setTemplateSelected,
       setTemplateGenerating,
       setTemplateQuestion,
+      state.scoringDrawer,
+      openScoringDrawer,
+      closeScoringDrawer,
     ]
   );
 
