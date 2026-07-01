@@ -52,9 +52,9 @@ async function createCampaignViaWizard(
   // Scenario (auto-advances on click).
   await page.getByRole("button", { name: scenarioCardName }).click();
 
-  // Source — keep default «Новая база номеров».
+  // Цель — keep the default «Сигналы + коммуникация» (path B → channels step).
   await expect(
-    page.getByRole("heading", { name: /Откуда берём аудиторию/ })
+    page.getByRole("heading", { name: /Что хотите получить/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
@@ -63,6 +63,12 @@ async function createCampaignViaWizard(
     page.getByRole("heading", { name: /Какие интересы и триггеры/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Продолжить" }).last().click();
+
+  // Режим анализа — keep the default «Разовый».
+  await expect(
+    page.getByRole("heading", { name: /Разовый или потоковый/ })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).last().click();
 
   // File — upload, continue (waits out hashing).
   await expect(

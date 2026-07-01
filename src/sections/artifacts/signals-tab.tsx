@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import type { Artifact, Campaign } from "@/state/app-state";
+import { downloadCsv } from "@/lib/download-csv";
 import { ArtifactCard } from "./artifact-card";
+import { ArtifactCollectionCard } from "./artifact-collection-card";
 import { ArtifactsEmptyState } from "./artifacts-empty-state";
+import { groupArtifacts } from "./artifact-grouping";
+import { buildSignalsCsv } from "./signals-csv";
 
 interface SignalsTabViewProps {
   artifacts: Artifact[];
@@ -28,26 +31,33 @@ export function SignalsTabView({
     return <ArtifactsEmptyState />;
   }
 
-  const sorted = [...artifacts].sort((a, b) =>
-    a.createdAt < b.createdAt ? 1 : -1,
-  );
+  const groups = groupArtifacts(artifacts);
 
   return (
     <div className="flex flex-col gap-3">
-      {sorted.map((artifact, i) => (
-        <ArtifactCard
-          key={artifact.id}
-          artifact={artifact}
-          index={i}
-          campaignName={
-            campaigns.find((c) => c.id === artifact.campaignId)?.name ?? "—"
-          }
-          onOpen={onOpen}
-          onOpenCampaign={onOpenCampaign}
-          onDownload={onDownload}
-          onDelete={onDelete}
-        />
-      ))}
+      {groups.map((g, i) =>
+        g.kind === "collection" ? (
+          <ArtifactCollectionCard
+            key={g.cumulative.id}
+            campaignName={campaigns.find((c) => c.id === g.campaignId)?.name ?? "—"}
+            cumulative={g.cumulative}
+            dailyCount={g.dailyCount}
+            onOpen={onOpen}
+            onDownload={onDownload}
+          />
+        ) : (
+          <ArtifactCard
+            key={g.artifact.id}
+            artifact={g.artifact}
+            index={i}
+            campaignName={campaigns.find((c) => c.id === g.campaignId)?.name ?? "—"}
+            onOpen={onOpen}
+            onOpenCampaign={onOpenCampaign}
+            onDownload={onDownload}
+            onDelete={onDelete}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -57,18 +67,10 @@ export function SignalsTab() {
   const { artifacts, campaigns } = useAppState();
   const dispatch = useAppDispatch();
 
-  const total = useMemo(
-    () => artifacts.reduce((sum, a) => sum + a.count, 0),
-    [artifacts],
-  );
-
   function handleDownload(artifactId: string) {
     const artifact = artifacts.find((a) => a.id === artifactId);
-    // Prototype: a real backend would emit a CSV here.
-    console.log("download artifact", artifactId);
-    window.alert(
-      `Скачивание ${(artifact?.count ?? total).toLocaleString("ru-RU")} сигналов (CSV) — в прототипе симулировано.`,
-    );
+    if (!artifact) return;
+    downloadCsv(`afina-signals-${artifact.id}.csv`, buildSignalsCsv(artifact.id, artifact.count));
   }
 
   return (

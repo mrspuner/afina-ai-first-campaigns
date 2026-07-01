@@ -35,24 +35,19 @@ describe("computeStepTransition", () => {
     ).toEqual({ step: 2, resetData: true });
   });
 
-  it("rewinds to step 3 (after source) and resets data when the source changes", () => {
+  it("intent changed → rewind to INTENT_STEP + 1 with reset", () => {
     expect(
-      computeStepTransition({
-        currentStep: 4,
-        maxStep: 6,
-        scenarioChanged: false,
-        sourceChanged: true,
-      })
+      computeStepTransition({ currentStep: 5, maxStep: 6, scenarioChanged: false, intentChanged: true }),
     ).toEqual({ step: 3, resetData: true });
   });
 
-  it("scenario change takes priority over a simultaneous source change", () => {
+  it("scenario change takes priority over a simultaneous intent change", () => {
     expect(
       computeStepTransition({
         currentStep: 4,
         maxStep: 6,
         scenarioChanged: true,
-        sourceChanged: true,
+        intentChanged: true,
       })
     ).toEqual({ step: 2, resetData: true });
   });

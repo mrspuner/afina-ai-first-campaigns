@@ -27,7 +27,7 @@ import type { ChipSegment } from "@/state/prompt-chips-context";
 import { fetchAssistAvailability } from "@/lib/ai/assist-client";
 import { buildDataSummary, buildStatsLines } from "@/lib/ai/data-summary";
 import { STEP_LABELS } from "@/sections/campaigns/wizard/campaign-stepper";
-import { stepsForSource } from "@/sections/campaigns/wizard/wizard-steps";
+import { stepsForIntent } from "@/sections/campaigns/wizard/wizard-steps";
 import { isAiParserEnabled, appendAiLogEntry } from "@/state/dev-config";
 import { getCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
 import { summarizeGraph } from "@/lib/ai/graph-summary";
@@ -395,12 +395,12 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
 
       // Контекст визарда (шаг + название)
       const wizardStep = appState.wizardCurrentStep;
-      // The wizard's step list is source-gated; app-state only carries the
-      // numeric step. Use the default («new») sequence for a best-effort
-      // context label — it covers the common path and degrades to the raw
-      // number when the index is out of range.
+      // The wizard's step list is intent-gated; app-state only carries the
+      // numeric step. Use the default («signals-comms») sequence for a
+      // best-effort context label — it covers the common path and degrades to
+      // the raw number when the index is out of range.
       const wizardStepId =
-        wizardStep !== null ? stepsForSource("new")[wizardStep - 1] : undefined;
+        wizardStep !== null ? stepsForIntent("signals-comms")[wizardStep - 1] : undefined;
       const stepTitle = wizardStep !== null
         ? (wizardStepId ? STEP_LABELS[wizardStepId] : String(wizardStep))
         : undefined;

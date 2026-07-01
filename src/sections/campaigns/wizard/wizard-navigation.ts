@@ -1,8 +1,8 @@
 /** The wizard step on which the scenario is chosen (Step1Scenario). */
 export const SCENARIO_STEP = 1;
 
-/** The wizard step on which the source is chosen (StepSource). */
-export const SOURCE_STEP = 2;
+/** The wizard step on which the intent is chosen (StepIntent). */
+export const INTENT_STEP = 2;
 
 export interface StepTransition {
   /** Step to land on after the transition. */
@@ -26,16 +26,16 @@ export interface StepTransition {
  *    scroll back to the rendered step-1 panel and pick a new scenario without
  *    clicking the stepper, which leaves `currentStep` further along. Using
  *    `currentStep + 1` there would skip steps (2 → 3 → 4 …) on each re-pick.
- *    Takes priority over a source change (a new scenario resets everything,
- *    including the source).
+ *    Takes priority over an intent change (a new scenario resets everything,
+ *    including the intent).
  *
- * 2. Source changed — the chosen source decides the tail of the step list
- *    (interests / file / integration differ per source), so rewind to the
- *    step right after the source picker ({@link SOURCE_STEP} + 1) and reset
+ * 2. Intent changed — the chosen intent decides the tail of the step list
+ *    (interests / analysis / file / channels differ per intent), so rewind to
+ *    the step right after the intent picker ({@link INTENT_STEP} + 1) and reset
  *    downstream data. Analogous to the scenario rewind but anchored one step
- *    later, keeping scenario + the new source.
+ *    later, keeping scenario + the new intent.
  *
- * 3. Revisited an earlier step (no scenario/source change) — jump forward to
+ * 3. Revisited an earlier step (no scenario/intent change) — jump forward to
  *    the furthest step already reached instead of advancing by one, so filled
  *    progress isn't re-walked.
  *
@@ -45,16 +45,16 @@ export function computeStepTransition(args: {
   currentStep: number;
   maxStep: number;
   scenarioChanged: boolean;
-  sourceChanged?: boolean;
+  intentChanged?: boolean;
 }): StepTransition {
-  const { currentStep, maxStep, scenarioChanged, sourceChanged } = args;
+  const { currentStep, maxStep, scenarioChanged, intentChanged } = args;
 
   if (scenarioChanged) {
     return { step: SCENARIO_STEP + 1, resetData: true };
   }
 
-  if (sourceChanged) {
-    return { step: SOURCE_STEP + 1, resetData: true };
+  if (intentChanged) {
+    return { step: INTENT_STEP + 1, resetData: true };
   }
 
   if (currentStep < maxStep) {

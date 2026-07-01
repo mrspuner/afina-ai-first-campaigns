@@ -26,26 +26,18 @@ export function formatUnitCost(channel: Channel): string {
 
 export function StepChannels({ data, onNext, onBack }: StepProps) {
   const [channels, setChannels] = useState<Channel[]>(data.channels);
-  // "Без коммуникации" — explicit degenerate-campaign choice (empty channels).
-  const [noComms, setNoComms] = useState(false);
 
   function toggle(channel: Channel) {
-    setNoComms(false);
     setChannels((prev) => toggleChannel(prev, channel));
   }
 
-  function selectNoComms() {
-    setNoComms(true);
-    setChannels([]);
-  }
-
-  // Continue is always valid: a channel set OR an explicit "no communication".
-  const canContinue = channels.length > 0 || noComms;
+  // Communication is mandatory here; signals-only is now path A at step 2.
+  const canContinue = channels.length > 0;
 
   return (
     <StepContent
       title="Как будем общаться с аудиторией?"
-      subtitle="Выберите каналы коммуникации — или запустите кампанию без неё."
+      subtitle="Выберите каналы коммуникации."
     >
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3">
@@ -86,33 +78,6 @@ export function StepChannels({ data, onNext, onBack }: StepProps) {
             );
           })}
         </div>
-
-        <div className="border-t border-border" />
-
-        <button
-          type="button"
-          aria-pressed={noComms}
-          onClick={selectNoComms}
-          className={cn(
-            "flex items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-            noComms
-              ? "border-brand/50 bg-brand-muted text-foreground"
-              : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
-          )}
-        >
-          <span
-            aria-hidden
-            className={cn(
-              "mt-1 h-3 w-3 shrink-0 rounded-full border-2 transition-colors",
-              noComms ? "border-foreground bg-foreground" : "border-border"
-            )}
-          />
-          <span className="flex flex-col">
-            <span className="font-medium text-foreground">Получить только сигналы</span>
-            <span className="text-xs text-muted-foreground">Не проводить коммуникации</span>
-          </span>
-        </button>
 
         <StepFooter
           onBack={onBack}

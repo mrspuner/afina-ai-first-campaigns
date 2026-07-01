@@ -35,6 +35,56 @@ export function CampaignArtifactsBlock({
     return null;
   }
 
+  // Streaming campaign: a cumulative «Все сигналы за период» artifact plus
+  // daily выжимки. Render a compact collection — cumulative row, up to 3
+  // most-recent dailies, and a count of the rest. Opening any row routes to
+  // the collection detail (via the cumulative artifact's id).
+  const cumulative = artifacts.find((a) => a.variant === "cumulative");
+  if (cumulative) {
+    const dailies = artifacts
+      .filter((a) => a.variant === "daily")
+      .sort((a, b) => {
+        const ap = a.periodDate ?? "";
+        const bp = b.periodDate ?? "";
+        return ap < bp ? 1 : ap > bp ? -1 : 0;
+      });
+    const shown = dailies.slice(0, 3);
+    return (
+      <div className="flex flex-col">
+        <button
+          type="button"
+          onClick={onOpen ? () => onOpen(cumulative.id) : undefined}
+          disabled={!onOpen}
+          className="flex items-center gap-3 py-2.5 text-left text-sm transition-colors enabled:hover:text-foreground disabled:cursor-default"
+        >
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="font-medium text-foreground">Все сигналы за период</span>
+          <span className="text-muted-foreground">{formatNumber(cumulative.count)} сигналов</span>
+        </button>
+        {shown.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            onClick={onOpen ? () => onOpen(cumulative.id) : undefined}
+            disabled={!onOpen}
+            className="flex items-center gap-3 border-t border-border/40 py-2.5 text-left text-sm transition-colors enabled:hover:text-foreground disabled:cursor-default"
+          >
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="text-foreground">
+              Выжимка · {d.periodDate ? `${d.periodDate.slice(8, 10)}.${d.periodDate.slice(5, 7)}` : "—"}
+            </span>
+            <span className="tabular-nums text-muted-foreground">{formatNumber(d.count)}</span>
+          </button>
+        ))}
+        {dailies.length > shown.length && (
+          <p className="border-t border-border/40 py-2.5 text-xs text-muted-foreground">
+            …ещё {dailies.length - shown.length} выжимок
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       {artifacts.map((a) => (
