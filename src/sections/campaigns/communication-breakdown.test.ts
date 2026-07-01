@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { groupCommunicationLines } from "./communication-breakdown";
+import {
+  groupCommunicationLines,
+  buildChannelTable,
+} from "./communication-breakdown";
 import type { CostLine } from "./campaign-cost";
 
 function line(over: Partial<CostLine>): CostLine {
@@ -63,5 +66,53 @@ describe("groupCommunicationLines (aim #23)", () => {
     const groups = groupCommunicationLines([]);
     expect(groups.primary).toEqual([]);
     expect(groups.repeat).toEqual([]);
+  });
+});
+
+describe("buildChannelTable (v8 Коммуникации table — Канал | Первичные | Повторные | Итого)", () => {
+  it("single channel → one row with primary + repeat and their per-channel total", () => {
+    const groups = groupCommunicationLines([
+      line({ nodeId: "a", channel: "sms", sum: 50_000, isDynamic: false }),
+      line({ nodeId: "b", channel: "sms", sum: 15_000, isDynamic: true }),
+    ]);
+    expect(buildChannelTable(groups)).toEqual([
+      { channel: "sms", primary: 50_000, repeat: 15_000, total: 65_000 },
+    ]);
+  });
+
+  it("multi channel → one row per channel, first-appearance order preserved", () => {
+    const groups = groupCommunicationLines([
+      line({ nodeId: "a", channel: "sms", sum: 100, isDynamic: false }),
+      line({ nodeId: "b", channel: "email", sum: 40, isDynamic: false }),
+      line({ nodeId: "c", channel: "email", sum: 10, isDynamic: true }),
+    ]);
+    expect(buildChannelTable(groups)).toEqual([
+      { channel: "sms", primary: 100, repeat: 0, total: 100 },
+      { channel: "email", primary: 40, repeat: 10, total: 50 },
+    ]);
+  });
+
+  it("a channel only present in the repeat group still gets a row (primary 0)", () => {
+    const groups = groupCommunicationLines([
+      line({ nodeId: "a", channel: "push", sum: 7, isDynamic: true }),
+    ]);
+    expect(buildChannelTable(groups)).toEqual([
+      { channel: "push", primary: 0, repeat: 7, total: 7 },
+    ]);
+  });
+
+  it("no communication → empty table (no rows)", () => {
+    expect(buildChannelTable(groupCommunicationLines([]))).toEqual([]);
+  });
+
+  it("per-channel total column equals primary + repeat for every row", () => {
+    const groups = groupCommunicationLines([
+      line({ nodeId: "a", channel: "sms", sum: 200, isDynamic: false }),
+      line({ nodeId: "b", channel: "sms", sum: 60, isDynamic: true }),
+      line({ nodeId: "c", channel: "ivr", sum: 80, isDynamic: false }),
+    ]);
+    for (const row of buildChannelTable(groups)) {
+      expect(row.total).toBe(row.primary + row.repeat);
+    }
   });
 });

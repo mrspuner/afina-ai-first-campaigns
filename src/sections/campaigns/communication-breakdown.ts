@@ -47,3 +47,35 @@ export function groupCommunicationLines(
     repeat: groupByChannel(lines.filter((l) => l.isDynamic)),
   };
 }
+
+/** One table row per channel: primary + repeat sums and their per-channel total. */
+export interface ChannelTableRow {
+  channel: Channel;
+  primary: number;
+  repeat: number;
+  total: number;
+}
+
+/**
+ * Flatten the «Первичные» / «Повторные» groups into a Канал ×
+ * (Первичные | Повторные | Итого) table — one row per channel that appears in
+ * either group. Channel order follows first appearance across primary→repeat.
+ * A channel missing from a group contributes 0 there. Pure + display-only.
+ */
+export function buildChannelTable(groups: CommunicationGroups): ChannelTableRow[] {
+  const primaryByChannel = new Map(groups.primary.map((g) => [g.channel, g.sum]));
+  const repeatByChannel = new Map(groups.repeat.map((g) => [g.channel, g.sum]));
+  const order: Channel[] = [];
+  const seen = new Set<Channel>();
+  for (const g of [...groups.primary, ...groups.repeat]) {
+    if (!seen.has(g.channel)) {
+      seen.add(g.channel);
+      order.push(g.channel);
+    }
+  }
+  return order.map((channel) => {
+    const primary = primaryByChannel.get(channel) ?? 0;
+    const repeat = repeatByChannel.get(channel) ?? 0;
+    return { channel, primary, repeat, total: primary + repeat };
+  });
+}
