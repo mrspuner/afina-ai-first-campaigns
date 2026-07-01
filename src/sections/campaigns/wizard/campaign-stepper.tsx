@@ -7,8 +7,9 @@ import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 /** Russian labels for each wizard step id, rendered in the stepper rail. */
 export const STEP_LABELS: Record<WizardStepId, string> = {
   scenario: "Сценарий",
-  source: "Источник",
+  intent: "Цель",
   interests: "Интересы",
+  analysis: "Режим",
   file: "Файл",
   integration: "Интеграция",
   channels: "Каналы",
@@ -16,7 +17,7 @@ export const STEP_LABELS: Record<WizardStepId, string> = {
 };
 
 interface CampaignStepperProps {
-  /** The active, source-dependent step sequence (1 row per id). */
+  /** The active, intent-dependent step sequence (1 row per id). */
   steps: WizardStepId[];
   currentStep: number;
   maxStep: number;

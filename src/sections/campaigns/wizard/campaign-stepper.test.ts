@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { STEP_LABELS } from "./campaign-stepper";
-import { stepsForSource } from "./wizard-steps";
+import { stepsForIntent } from "./wizard-steps";
 
 describe("STEP_LABELS", () => {
   it("maps every wizard step id to a Russian label", () => {
     expect(STEP_LABELS).toEqual({
       scenario: "Сценарий",
-      source: "Источник",
+      intent: "Цель",
       interests: "Интересы",
+      analysis: "Режим",
       file: "Файл",
       integration: "Интеграция",
       channels: "Каналы",
@@ -15,33 +16,23 @@ describe("STEP_LABELS", () => {
     });
   });
 
-  it("labels every step in each source-gated sequence", () => {
-    for (const source of ["new", "own", "stream"] as const) {
-      const labels = stepsForSource(source).map((id) => STEP_LABELS[id]);
+  it("labels every step in each intent-gated sequence", () => {
+    for (const intent of ["signals", "signals-comms", "comms-own"] as const) {
+      const labels = stepsForIntent(intent).map((id) => STEP_LABELS[id]);
       expect(labels.every((l) => typeof l === "string" && l.length > 0)).toBe(true);
     }
   });
 
-  it("new sequence renders Сценарий→Источник→Интересы→Файл→Каналы→Бюджет", () => {
-    expect(stepsForSource("new").map((id) => STEP_LABELS[id])).toEqual([
-      "Сценарий",
-      "Источник",
-      "Интересы",
-      "Файл",
-      "Каналы",
-      "Бюджет",
+  it("A path renders Сценарий→Цель→Интересы→Режим→Файл→Бюджет (no Каналы)", () => {
+    expect(stepsForIntent("signals").map((id) => STEP_LABELS[id])).toEqual([
+      "Сценарий", "Цель", "Интересы", "Режим", "Файл", "Бюджет",
     ]);
   });
 
-  it("own sequence omits Интересы; stream loads a Файл (no Интеграция)", () => {
-    const own = stepsForSource("own").map((id) => STEP_LABELS[id]);
-    expect(own).not.toContain("Интересы");
-    expect(own).toContain("Файл");
-
-    // Group B #4: stream now uploads a numbers base (Файл) instead of Интеграция.
-    const stream = stepsForSource("stream").map((id) => STEP_LABELS[id]);
-    expect(stream).toContain("Файл");
-    expect(stream).not.toContain("Интеграция");
-    expect(stream).toContain("Интересы");
+  it("C path omits Интересы and Режим", () => {
+    const labels = stepsForIntent("comms-own").map((id) => STEP_LABELS[id]);
+    expect(labels).not.toContain("Интересы");
+    expect(labels).not.toContain("Режим");
+    expect(labels).toContain("Каналы");
   });
 });

@@ -6,14 +6,15 @@ import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
-import { StepSource } from "@/sections/campaigns/wizard/steps/step-source";
+import { StepIntent } from "@/sections/campaigns/wizard/steps/step-intent";
 import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
+import { StepAnalysis } from "@/sections/campaigns/wizard/steps/step-analysis";
 import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
-import { stepsForSource } from "@/sections/campaigns/wizard/wizard-steps";
+import { stepsForIntent } from "@/sections/campaigns/wizard/wizard-steps";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
 const FALLBACK_BASE = 10_000;
@@ -101,15 +102,15 @@ function WorkspaceInner({
       const scenarioChanged =
         partial.scenario !== undefined &&
         partial.scenario !== stepData.scenario;
-      const sourceChanged =
-        partial.sourceType !== undefined &&
-        partial.sourceType !== stepData.sourceType;
+      const intentChanged =
+        partial.intent !== undefined &&
+        partial.intent !== stepData.intent;
 
       const { step: next, resetData } = computeStepTransition({
         currentStep,
         maxStep,
         scenarioChanged,
-        sourceChanged,
+        intentChanged,
       });
 
       // Changing scenario invalidates everything downstream (interests,
@@ -120,16 +121,16 @@ function WorkspaceInner({
       // step 2 instead of overshooting. `setMaxStep(next)` collapses any
       // phantom steps that were reached under the old scenario.
       //
-      // Changing the source likewise reshapes the tail of the step list
-      // (interests / file / integration differ per source). When only the
-      // source changed (scenario takes priority), reset downstream data but
-      // keep scenario + the new source, then rewind to the step right after
-      // the source picker.
+      // Changing the intent likewise reshapes the tail of the step list
+      // (interests / analysis / file / channels differ per intent). When only
+      // the intent changed (scenario takes priority), reset downstream data but
+      // keep scenario + the new intent, then rewind to the step right after
+      // the intent picker.
       if (resetData) {
         if (scenarioChanged) {
           setStepData({ ...initialStepData, ...partial });
         } else {
-          // sourceChanged: preserve scenario, apply the new source, clear the
+          // intentChanged: preserve scenario, apply the new intent, clear the
           // rest (interests/file/fileRowCount/apiKey/channels/budget/…).
           setStepData((prev) => ({
             ...initialStepData,
@@ -155,7 +156,7 @@ function WorkspaceInner({
       }
       advanceTo(next);
     },
-    [advanceTo, currentStep, maxStep, stepData.scenario, stepData.sourceType]
+    [advanceTo, currentStep, maxStep, stepData.scenario, stepData.intent]
   );
 
   const handleStepperClick = useCallback((step: number) => {
@@ -190,9 +191,9 @@ function WorkspaceInner({
     });
   }, [handleNext, onLaunchRequested, stepData]);
 
-  // The source-gated step sequence. The numeric currentStep/maxStep are
+  // The intent-gated step sequence. The numeric currentStep/maxStep are
   // 1-based INDICES into this list; the id at step N is steps[N-1].
-  const steps = stepsForSource(stepData.sourceType);
+  const steps = stepsForIntent(stepData.intent);
 
   function renderStepContent(step: number) {
     // `active` lets each step publish its own PromptBar hints only while it is
@@ -202,13 +203,14 @@ function WorkspaceInner({
     // автопереходит по выбору сценария и футера не имеет, поэтому начинаем
     // прокидывать onBack со 2-го.
     const onBack = () => handleGoToStep(step - 1);
-    // Source-gated flow (spec §C): the visible steps depend on the chosen
-    // source. Budget is always the last step and triggers the launch.
+    // Intent-gated flow (spec Часть I): the visible steps depend on the chosen
+    // intent. Budget is always the last step and triggers the launch.
     const id = steps[step - 1];
     switch (id) {
       case "scenario": return <Step1Scenario {...props} />;
-      case "source": return <StepSource {...props} onBack={onBack} />;
+      case "intent": return <StepIntent {...props} onBack={onBack} />;
       case "interests": return <Step2Interests {...props} onBack={onBack} />;
+      case "analysis": return <StepAnalysis {...props} onBack={onBack} />;
       case "file": return <StepFile {...props} onBack={onBack} />;
       case "integration": return <StepIntegration {...props} onBack={onBack} />;
       case "channels": return <StepChannels {...props} onBack={onBack} />;

@@ -1,23 +1,21 @@
-import type { SourceType } from "@/types/campaign";
+import type { CampaignIntent } from "@/types/campaign";
 
 export type WizardStepId =
-  | "scenario" | "source" | "interests" | "file" | "integration" | "channels" | "budget";
+  | "scenario" | "intent" | "interests" | "analysis" | "file" | "integration" | "channels" | "budget";
 
 /**
- * The ordered wizard step list depends on the chosen source (spec §C). Until a
- * source is picked only scenario+source are determined.
- *  - new    → interests, file
- *  - own    → file (no interests)
- *  - stream → interests, file (uploads a numbers base to monitor; no separate
- *             integration step — `integration` stays a valid id for the still-
- *             alive StepIntegration component, just out of the default chain)
+ * The ordered wizard step list depends on the chosen intent (spec Часть I).
+ * Until an intent is picked only scenario+intent are determined.
+ *  - signals (A)        → interests, analysis, file, budget (no channels)
+ *  - signals-comms (B)  → interests, analysis, file, channels, budget
+ *  - comms-own (C)      → file, channels, budget (own base, no interests/analysis)
  */
-export function stepsForSource(source: SourceType | undefined): WizardStepId[] {
-  const head: WizardStepId[] = ["scenario", "source"];
-  if (!source) return head;
+export function stepsForIntent(intent: CampaignIntent | undefined): WizardStepId[] {
+  const head: WizardStepId[] = ["scenario", "intent"];
+  if (!intent) return head;
   const tail: WizardStepId[] =
-    source === "new" ? ["interests", "file"]
-    : source === "own" ? ["file"]
-    : ["interests", "file"]; // stream — loads a numbers base instead of integration
-  return [...head, ...tail, "channels", "budget"];
+    intent === "signals" ? ["interests", "analysis", "file", "budget"]
+    : intent === "signals-comms" ? ["interests", "analysis", "file", "channels", "budget"]
+    : ["file", "channels", "budget"]; // comms-own
+  return [...head, ...tail];
 }
