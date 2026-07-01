@@ -78,6 +78,48 @@ const artifact: Artifact = {
   createdAt: "2026-06-15T14:30:00.000Z",
 };
 
+// ---- Streaming-collection fixtures (Task II-8) ----
+// A completed streaming campaign + its artifacts: one cumulative + five daily
+// digests for the SAME campaignId. `status: "completed"` keeps the seed
+// deterministic — the StreamDigestDriver only ticks `active` streams, so a
+// completed one is a no-op and never appends more dailies after 7s. The
+// collection card + detail render off artifacts (not status), so they still
+// show. Fixed ids/dates/counts; cumulative.count == sum of the five dailies.
+const streamCampaign: Campaign = {
+  id: "cmp_stream01",
+  name: "Ипотека под ключ",
+  status: "completed",
+  createdAt: "2026-06-01T10:00:00.000Z",
+  launchedAt: "2026-06-10T09:00:00.000Z",
+  completedAt: "2026-06-15T09:00:00.000Z",
+  sourceType: "stream",
+  channels: ["sms", "email"],
+  interests: ["Ипотека"],
+  budget: 40_000,
+  phase: "communicating",
+  scenario: { id: "base-registration", name: "Регистрация" },
+};
+
+const streamDailies: Artifact[] = [
+  { id: "art_stream_d1", campaignId: "cmp_stream01", kind: "signals_conversions", count: 1_200, createdAt: "2026-06-10T09:00:00.000Z", variant: "daily", periodDate: "2026-06-10" },
+  { id: "art_stream_d2", campaignId: "cmp_stream01", kind: "signals_conversions", count: 980, createdAt: "2026-06-11T09:00:00.000Z", variant: "daily", periodDate: "2026-06-11" },
+  { id: "art_stream_d3", campaignId: "cmp_stream01", kind: "signals_conversions", count: 1_540, createdAt: "2026-06-12T09:00:00.000Z", variant: "daily", periodDate: "2026-06-12" },
+  { id: "art_stream_d4", campaignId: "cmp_stream01", kind: "signals_conversions", count: 2_100, createdAt: "2026-06-13T09:00:00.000Z", variant: "daily", periodDate: "2026-06-13" },
+  { id: "art_stream_d5", campaignId: "cmp_stream01", kind: "signals_conversions", count: 1_760, createdAt: "2026-06-14T09:00:00.000Z", variant: "daily", periodDate: "2026-06-14" },
+];
+
+// Cumulative count = sum of the five dailies (1200 + 980 + 1540 + 2100 + 1760).
+const streamCumulative: Artifact = {
+  id: "art_stream_cum",
+  campaignId: "cmp_stream01",
+  kind: "signals_conversions",
+  count: 7_580,
+  createdAt: "2026-06-14T09:00:00.000Z",
+  variant: "cumulative",
+};
+
+const streamArtifacts: Artifact[] = [streamCumulative, ...streamDailies];
+
 // ---- Wizard StepData (files are raw File[] in the app; the harness seeds [] —
 //      downstream steps fall back to fileRowCount / FALLBACK_BASE). ----
 
@@ -314,5 +356,34 @@ export const SCREENS: Screen[] = [
     name: "Раздел — Настройки",
     seed: { ...FIXED, view: { kind: "section", name: "Настройки" } },
     expect: 'h1:has-text("Настройки")',
+  },
+
+  // ---- Streaming artifacts (Task II-8) ----
+  {
+    id: "artifacts-collection",
+    name: "Артефакты · коллекция потока",
+    // Артефакты → Сигналы: the streaming campaign's cumulative + dailies
+    // collapse into one ArtifactCollectionCard («Поток · …»). Completed stream
+    // → the digest driver is a no-op, so the snapshot is stable.
+    seed: {
+      ...FIXED,
+      campaigns: [streamCampaign],
+      artifacts: streamArtifacts,
+      view: { kind: "section", name: "Артефакты" },
+    },
+    expect: "text=Поток ·",
+  },
+  {
+    id: "artifact-collection-detail",
+    name: "Артефакт · детали коллекции",
+    // Collection detail (ArtifactScreen) opened on the cumulative: «Всего
+    // сигналов за период» total + «Дневные выжимки» list of the five dailies.
+    seed: {
+      ...FIXED,
+      campaigns: [streamCampaign],
+      artifacts: streamArtifacts,
+      view: { kind: "artifact", artifactId: streamCumulative.id },
+    },
+    expect: "text=Дневные выжимки",
   },
 ];
