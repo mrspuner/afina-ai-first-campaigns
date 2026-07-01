@@ -118,6 +118,10 @@ export type FunnelNumbers = {
   rejects: number;
   expensesUsd: number;
   incomeUsd: number;
+  /** «Сигналы» — сматчившиеся intent-сигналы (matched). Инвариант: ≤ numbers. */
+  signals: number;
+  /** «Номера» — размер загруженной базы номеров. Всегда ≥ signals. */
+  numbers: number;
 };
 
 export const EMPTY_FUNNEL: FunnelNumbers = {
@@ -129,6 +133,8 @@ export const EMPTY_FUNNEL: FunnelNumbers = {
   rejects: 0,
   expensesUsd: 0,
   incomeUsd: 0,
+  signals: 0,
+  numbers: 0,
 };
 
 /** Formatted funnel row for display: money strings + recomputed % rates. */
@@ -143,6 +149,8 @@ export type FunnelDisplay = {
   rejects: number;
   rr: string;
   clicks: number;
+  numbers: number;
+  signals: number;
 };
 
 const CURRENCY_SYMBOL: Record<Currency, string> = {
@@ -181,7 +189,15 @@ export function computeFunnel(rng: () => number, baseSends: number): FunnelNumbe
   const rejects = Math.max(0, actions - holds - approves);
   const expensesUsd = 300 + rng() * 5000;
   const incomeUsd = expensesUsd * (4 + rng() * 18);
-  return { sends, clicks, actions, holds, approves, rejects, expensesUsd, incomeUsd };
+  // «Сигналы» — сматчившиеся intent-сигналы (matched), к которым идут отправки:
+  // signals ≥ sends. «Номера» — загруженная база (matched / rate), всегда ≥
+  // signals (инвариант сигналы ≤ номера). Детерминированы по тому же rng.
+  const signals = Math.max(sends, Math.round(sends / (0.7 + rng() * 0.25)));
+  const numbers = Math.max(signals, Math.round(signals / (0.4 + rng() * 0.3)));
+  return {
+    sends, clicks, actions, holds, approves, rejects, expensesUsd, incomeUsd,
+    signals, numbers,
+  };
 }
 
 /** Масштабирует воронку долей прошедшего дня (0..1). Аддитивные целочисленные
@@ -203,6 +219,10 @@ export function scaleFunnel(n: FunnelNumbers, fraction: number): FunnelNumbers {
     rejects: Math.max(0, actions - holds - approves),
     expensesUsd: n.expensesUsd * f,
     incomeUsd: n.incomeUsd * f,
+    // Масштабируются той же долей; floor монотонен, поэтому signals ≤ numbers
+    // сохраняется после масштабирования.
+    signals: Math.floor(n.signals * f),
+    numbers: Math.floor(n.numbers * f),
   };
 }
 
@@ -218,6 +238,8 @@ export function addFunnel(a: FunnelNumbers, b: FunnelNumbers): FunnelNumbers {
     rejects: a.rejects + b.rejects,
     expensesUsd: a.expensesUsd + b.expensesUsd,
     incomeUsd: a.incomeUsd + b.incomeUsd,
+    signals: a.signals + b.signals,
+    numbers: a.numbers + b.numbers,
   };
 }
 
@@ -238,6 +260,8 @@ export function formatFunnel(n: FunnelNumbers, currency: Currency): FunnelDispla
     rejects: n.rejects,
     ar: `${ar.toFixed(2)}%`,
     rr: `${rr.toFixed(2)}%`,
+    numbers: n.numbers,
+    signals: n.signals,
   };
 }
 

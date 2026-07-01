@@ -56,6 +56,8 @@ export type RowKind =
   | "traffic-suppliers";
 
 export type ColumnKey =
+  | "numbers"
+  | "signals"
   | "approves"
   | "expenses"
   | "income"
@@ -102,6 +104,8 @@ export const DEFAULT_FILTERS: StatisticsFilters = {
   rowCount: 2000,
   subRows: "campaigns",
   columns: [
+    "numbers",
+    "signals",
     "approves",
     "expenses",
     "income",

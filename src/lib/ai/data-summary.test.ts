@@ -23,7 +23,7 @@ describe("buildDataSummary", () => {
       campaigns: [],
       statsLines: statsLinesFromFunnel({
         sends: 10, clicks: 5, actions: 3, holds: 1, approves: 2, rejects: 0,
-        expensesUsd: 100, incomeUsd: 300,
+        expensesUsd: 100, incomeUsd: 300, signals: 14, numbers: 30,
       }),
     });
     expect(s).toContain("доход $300");

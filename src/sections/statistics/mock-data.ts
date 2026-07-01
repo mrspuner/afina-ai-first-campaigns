@@ -111,6 +111,8 @@ export function generateRows(
 }
 
 export const COLUMN_HEADERS: Record<ColumnKey, string> = {
+  numbers: "Номера",
+  signals: "Сигналы",
   expenses: "Expenses",
   income: "Income",
   sends: "Sends",

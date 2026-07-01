@@ -80,6 +80,8 @@ const SUB_ROW_GROUPS = [
 ] as const;
 
 const COLUMN_LABELS: Record<ColumnKey, string> = {
+  numbers: "Номера",
+  signals: "Сигналы",
   approves: "Approves",
   expenses: "Expenses",
   income: "Income",
@@ -93,6 +95,8 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
 };
 
 const ALL_COLUMNS: ColumnKey[] = [
+  "numbers",
+  "signals",
   "approves",
   "expenses",
   "income",

@@ -74,3 +74,39 @@ describe("filtersEqual учитывает sort", () => {
     expect(filtersEqual(a, b)).toBe(true);
   });
 });
+
+describe("Номера/Сигналы — колонки статистики", () => {
+  it("видны по умолчанию (DEFAULT_FILTERS.columns)", () => {
+    expect(DEFAULT_FILTERS.columns).toContain("numbers");
+    expect(DEFAULT_FILTERS.columns).toContain("signals");
+  });
+
+  it("TOGGLE_COLUMN скрывает и возвращает «Сигналы»", () => {
+    const hidden = statisticsReducer(DEFAULT_FILTERS, {
+      type: "TOGGLE_COLUMN",
+      column: "signals",
+    });
+    expect(hidden.columns).not.toContain("signals");
+    const back = statisticsReducer(hidden, {
+      type: "TOGGLE_COLUMN",
+      column: "signals",
+    });
+    expect(back.columns).toContain("signals");
+  });
+
+  it("REORDER_COLUMNS принимает порядок с «Номера»/«Сигналы»", () => {
+    const next = statisticsReducer(DEFAULT_FILTERS, {
+      type: "REORDER_COLUMNS",
+      columns: ["signals", "numbers", "sends"],
+    });
+    expect(next.columns).toEqual(["signals", "numbers", "sends"]);
+  });
+
+  it("SET_SORT сортирует по «Номера»", () => {
+    const next = statisticsReducer(DEFAULT_FILTERS, {
+      type: "SET_SORT",
+      sort: { column: "numbers", direction: "desc" },
+    });
+    expect(next.sort).toEqual({ column: "numbers", direction: "desc" });
+  });
+});

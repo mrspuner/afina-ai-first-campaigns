@@ -504,3 +504,19 @@ describe("внутридневная доля — сегодняшние фак�
     }
   });
 });
+
+describe("Номера/Сигналы — инвариант сигналы ≤ номера в кубе", () => {
+  it("общий агрегат и каждая группа: signals ≤ numbers", () => {
+    const facts = buildFacts(CTX_ACTIVE, PERIOD_JUNE, { now: NOW });
+    expect(facts.length).toBeGreaterThan(0);
+    const total = aggregate(facts);
+    expect(total.signals).toBeGreaterThan(0);
+    expect(total.signals).toBeLessThanOrEqual(total.numbers);
+    for (const dim of ["days", "channels", "campaigns"] as const) {
+      for (const g of groupFacts(facts, dim)) {
+        const agg = aggregate(g.facts);
+        expect(agg.signals).toBeLessThanOrEqual(agg.numbers);
+      }
+    }
+  });
+});

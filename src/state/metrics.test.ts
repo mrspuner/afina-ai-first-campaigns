@@ -129,3 +129,45 @@ describe("computeFunnel / addFunnel / formatFunnel", () => {
     expect(d.sends).toBe(200);
   });
 });
+
+describe("funnel «Номера»/«Сигналы» columns", () => {
+  it("computeFunnel: sends ≤ signals ≤ numbers и детерминирован", () => {
+    const f = computeFunnel(makeRng(777), 5000);
+    expect(f.sends).toBeLessThanOrEqual(f.signals);
+    expect(f.signals).toBeLessThanOrEqual(f.numbers);
+    expect(Number.isInteger(f.signals)).toBe(true);
+    expect(Number.isInteger(f.numbers)).toBe(true);
+    expect(computeFunnel(makeRng(777), 5000)).toEqual(f);
+  });
+
+  it("инвариант сигналы ≤ номера держится на диапазоне сидов", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const f = computeFunnel(makeRng(seed), 1 + seed * 137);
+      expect(f.signals).toBeLessThanOrEqual(f.numbers);
+    }
+  });
+
+  it("addFunnel суммирует signals/numbers и сохраняет инвариант", () => {
+    const a = computeFunnel(makeRng(1), 1000);
+    const b = computeFunnel(makeRng(2), 2000);
+    const sum = addFunnel(a, b);
+    expect(sum.signals).toBe(a.signals + b.signals);
+    expect(sum.numbers).toBe(a.numbers + b.numbers);
+    expect(sum.signals).toBeLessThanOrEqual(sum.numbers);
+  });
+
+  it("scaleFunnel сохраняет сигналы ≤ номера после масштабирования", () => {
+    const base = computeFunnel(makeRng(9), 8000);
+    for (const fr of [0, 0.3, 0.7, 1]) {
+      const scaled = scaleFunnel(base, fr);
+      expect(scaled.signals).toBeLessThanOrEqual(scaled.numbers);
+    }
+  });
+
+  it("formatFunnel отдаёт numbers/signals числами", () => {
+    const n = { ...EMPTY_FUNNEL, sends: 100, signals: 140, numbers: 300 };
+    const d = formatFunnel(n, "rub");
+    expect(d.numbers).toBe(300);
+    expect(d.signals).toBe(140);
+  });
+});

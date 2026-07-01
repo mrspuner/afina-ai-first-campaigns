@@ -259,14 +259,16 @@ export const SCREENS: Screen[] = [
   {
     id: "section-statistics",
     name: "Раздел — Статистика",
-    // Empty cube → deterministic empty state (data tables are date-relative).
+    // Seeded with a launched campaign + artifact so the fact-cube renders rows
+    // and the «Номера»/«Сигналы» columns are visible in the baseline. The clock
+    // is pinned (seed.ts) so the date-relative cube stays deterministic.
     seed: {
       ...FIXED,
-      campaigns: [],
-      artifacts: [],
+      campaigns: [activeCampaign],
+      artifacts: [artifact],
       view: { kind: "section", name: "Статистика" },
     },
-    expect: 'h1:has-text("Пока нет статистики")',
+    expect: 'h1:has-text("Сводный за период")',
   },
   {
     id: "section-artifacts",
