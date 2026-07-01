@@ -19,7 +19,7 @@ interface SurveyFormProps {
 export function SurveyForm({
   onSubmit,
   title = "С чего начнём — опишите вашу задачу",
-  subtitle = "Укажите сайт компании или опишите задачу — достаточно одного. Афина подберёт подходящие сценарии.",
+  subtitle = "Укажите сайт компании или опишите компанию и ее бизнес — достаточно одного. Афина подберёт подходящие сценарии.",
 }: SurveyFormProps) {
   const { survey } = useAppState();
   const dispatch = useAppDispatch();
