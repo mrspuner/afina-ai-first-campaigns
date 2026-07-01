@@ -7,7 +7,7 @@ import type { StepData, Channel, SourceType } from "@/types/campaign";
 import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
-import { estimateArtifactCount, artifactKindForCampaign, estimateBaseSize } from "./artifact-metrics";
+import { estimateArtifactCount, artifactKindForCampaign } from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
 import {
   DEFAULT_DIRECTION_ID,
@@ -92,14 +92,9 @@ export type Artifact = {
   /**
    * «Сигналы» — сколько контактов из загруженной базы сматчилось / дали
    * intent-сигнал. Это число, которое скачивается артефактом и идёт в reach
-   * статистического куба. Инвариант: `count` ≤ `baseSize`.
+   * статистического куба.
    */
   count: number;
-  /**
-   * «Номера» — размер загруженной базы (сколько контактов/номеров было в базе),
-   * из которой отобрались сигналы. Всегда ≥ `count` (сигналы ≤ номера).
-   */
-  baseSize: number;
   createdAt: string;
 };
 
@@ -540,7 +535,6 @@ export function appReducer(state: AppState, action: Action): AppState {
         campaignId: action.campaignId,
         kind: action.kind,
         count: action.count,
-        baseSize: estimateBaseSize(action.count, action.campaignId),
         createdAt: new Date().toISOString(),
       };
       return {
@@ -1035,7 +1029,6 @@ export function appReducer(state: AppState, action: Action): AppState {
             campaignId: c.id,
             kind: artifactKindForCampaign(c),
             count: launchMatched,
-            baseSize: estimateBaseSize(launchMatched, c.id),
             createdAt: action.timestamp,
           }]
         : [];
@@ -1077,7 +1070,6 @@ export function appReducer(state: AppState, action: Action): AppState {
             campaignId: c.id,
             kind: artifactKindForCampaign(c),
             count: advanceMatched,
-            baseSize: estimateBaseSize(advanceMatched, c.id),
             createdAt: new Date().toISOString(),
           }];
       return {

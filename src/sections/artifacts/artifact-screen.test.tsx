@@ -8,7 +8,6 @@ const artifact: Artifact = {
   campaignId: "cmp_1",
   kind: "signals_conversions",
   count: 54321,
-  baseSize: 120000,
   createdAt: "2026-06-18T00:00:00.000Z",
 };
 

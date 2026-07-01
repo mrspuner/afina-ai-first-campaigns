@@ -134,7 +134,6 @@ describe("appReducer — preset_applied", () => {
           campaignId: "new-cmp",
           kind: "signals" as const,
           count: 1000,
-          baseSize: 2400,
           createdAt: "2026-04-01T00:00:00.000Z",
         },
       ],

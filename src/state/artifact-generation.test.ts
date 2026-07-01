@@ -27,7 +27,7 @@ describe("campaign_launched artifact generation", () => {
   });
   it("new with a pre-launch artifact does NOT get a second at launch", () => {
     const preLaunch: Artifact = {
-      id: "art_pre", campaignId: "c1", kind: "signals_conversions", count: 1234, baseSize: 3000, createdAt: "pre",
+      id: "art_pre", campaignId: "c1", kind: "signals_conversions", count: 1234, createdAt: "pre",
     };
     const s = launchedState({ sourceType: "new", channels: ["sms"] }, [preLaunch]);
     expect(s.artifacts).toHaveLength(1);

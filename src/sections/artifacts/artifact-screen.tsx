@@ -79,21 +79,10 @@ export function ArtifactScreenView({
         { label: "Удалить", onClick: onDelete, icon: <Trash2 className="h-4 w-4" /> },
       ]}
     >
-      <CardSection label="Объём">
-        <div className="flex flex-wrap items-start gap-x-12 gap-y-4">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">Сигналы</p>
-            <p className="mt-1 text-4xl font-bold tabular-nums text-foreground">
-              {formatNumber(artifact.count)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">Номера</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground/80">
-              {formatNumber(artifact.baseSize)}
-            </p>
-          </div>
-        </div>
+      <CardSection label="Всего сигналов">
+        <p className="text-4xl font-bold tabular-nums text-brand">
+          {formatNumber(artifact.count)}
+        </p>
       </CardSection>
 
       <CardSection label="Об артефакте">

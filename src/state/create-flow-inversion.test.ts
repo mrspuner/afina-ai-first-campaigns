@@ -19,7 +19,7 @@ describe("create-flow inversion", () => {
       ...initialState,
       campaigns: [draftCampaign()],
       artifacts: [
-        { id: "art_1", campaignId: "cmp_seed", kind: "signals" as const, count: 10, baseSize: 24, createdAt: "x" },
+        { id: "art_1", campaignId: "cmp_seed", kind: "signals" as const, count: 10, createdAt: "x" },
       ],
     };
     const linked = state.artifacts.filter((a) => a.campaignId === "cmp_seed");

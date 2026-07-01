@@ -75,7 +75,6 @@ const artifact: Artifact = {
   campaignId: "cmp_test01",
   kind: "signals_conversions",
   count: 12_500,
-  baseSize: 27_000,
   createdAt: "2026-06-15T14:30:00.000Z",
 };
 
