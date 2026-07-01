@@ -1,0 +1,161 @@
+"use client";
+
+import { X } from "lucide-react";
+import { useLayoutEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { useChat } from "@/state/chat-context";
+import { useAppState } from "@/state/app-state-context";
+import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
+import type { MessageTemplate } from "@/state/app-state";
+import type { EmailParams, IvrParams } from "@/types/workflow";
+import type { EmailDraft } from "@/state/email-directory";
+import { EmailRenderer } from "./email-renderer";
+import { SmsRenderer } from "./sms-renderer";
+import { PushRenderer } from "./push-renderer";
+
+const PREVIEW_WIDTH_PX = 560;
+
+/** Человеческие подписи типа голоса IVR (звонок — без визуального сообщения). */
+const VOICE_LABEL: Record<IvrParams["voiceType"], string> = {
+  male: "Мужской",
+  female: "Женский",
+  neutral: "Нейтральный",
+};
+
+/**
+ * #32-mapping: разворачивает плоские EmailParams в EmailDraft, который рисует
+ * EmailRenderer. Та же логика, что в templates-tab — CTA показывается только при
+ * наличии ссылки. Контент только для просмотра, поэтому id/name косметические.
+ */
+function emailParamsToDraft(content: EmailParams): EmailDraft {
+  const hasLink = Boolean(content.link);
+  return {
+    id: content.emailId ?? "preview",
+    name: content.subject || "Письмо",
+    subject: content.subject,
+    body: content.body,
+    sender: content.sender,
+    link: content.link ?? "",
+    cta: "Перейти",
+    showCta: hasLink,
+    showImage: false,
+  };
+}
+
+/**
+ * Чистое тело предпросмотра шаблона — маршрутизация по каналу:
+ *  - email / sms / push → стилизованный рендерер «как настоящее» сообщение;
+ *  - ivr → пары «подпись—значение» (у голосового звонка нет визуального тела).
+ * Без провайдеров — тестируется в изоляции.
+ */
+export function TemplatePreviewBody({ template }: { template: MessageTemplate }) {
+  const { content } = template;
+
+  switch (content.kind) {
+    case "email":
+      return (
+        <EmailRenderer draft={emailParamsToDraft(content)} readOnly onChange={() => {}} />
+      );
+    case "sms":
+      return <SmsRenderer params={content} />;
+    case "push":
+      return <PushRenderer params={content} />;
+    case "ivr":
+      return (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 rounded-xl border border-white/10 bg-card/40 px-4 py-3.5">
+          <dt className="text-xs text-muted-foreground/60">Сценарий:</dt>
+          <dd className="text-sm text-foreground">
+            {content.scenario.trim() || "—"}
+          </dd>
+          <dt className="text-xs text-muted-foreground/60">Голос:</dt>
+          <dd className="text-sm text-foreground">
+            {VOICE_LABEL[content.voiceType]}
+          </dd>
+        </dl>
+      );
+    default:
+      return null;
+  }
+}
+
+/**
+ * Боковой дровер предпросмотра выбранного шаблона (шов блока 5/6). Открывается
+ * по «глазу» в селекте шаблонов ноды И по карточке шаблона в «Артефактах».
+ * Состояние живёт в chat-context (templateDrawer, mode === "preview"); сам
+ * шаблон ищется по previewTemplateId в app-state.templates.
+ */
+export function TemplatePreviewDrawer() {
+  const { templateDrawer, closeTemplateDrawer } = useChat();
+  const { templates } = useAppState();
+
+  const isPreview = templateDrawer.open && templateDrawer.mode === "preview";
+  const template = isPreview
+    ? templates.find((t) => t.id === templateDrawer.previewTemplateId)
+    : undefined;
+  const open = Boolean(template);
+
+  // Канвас/дровер чата читают --email-preview-width, чтобы освободить место
+  // справа — переиспользуем тот же шов, что и email-панель (взаимоисключаемы).
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty(
+      "--email-preview-width",
+      open ? `${PREVIEW_WIDTH_PX}px` : "0px",
+    );
+    return () => {
+      root.style.removeProperty("--email-preview-width");
+    };
+  }, [open]);
+
+  return (
+    <AnimatePresence>
+      {open && template && (
+        <motion.aside
+          key="template-preview-drawer"
+          data-testid="template-preview-drawer"
+          initial={{ x: "100%" }}
+          animate={{ x: 0 }}
+          exit={{ x: "100%" }}
+          transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed right-0 top-0 z-40 flex h-screen w-[560px] flex-col border-l border-white/10 bg-[rgba(14,14,12,0.96)] backdrop-blur-[2px]"
+        >
+          {/* Шапка панели: канал + имя шаблона */}
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
+                Шаблон · {CHANNEL_LABEL[template.channel]}
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {template.name}
+              </span>
+            </div>
+            <button
+              type="button"
+              aria-label="Закрыть предпросмотр"
+              onClick={closeTemplateDrawer}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Предпросмотр сообщения */}
+          <div className="flex-1 overflow-y-auto px-5 py-6">
+            <TemplatePreviewBody template={template} />
+          </div>
+
+          {/* Низ: только «Закрыть» — предпросмотр read-only */}
+          <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-4">
+            <button
+              type="button"
+              onClick={closeTemplateDrawer}
+              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              Закрыть
+            </button>
+          </div>
+        </motion.aside>
+      )}
+    </AnimatePresence>
+  );
+}
