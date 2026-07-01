@@ -131,8 +131,8 @@ test.describe("Block B2 — NodeControlPanel (expanded node card)", () => {
     ).toBeVisible();
 
     // Click an empty pane area to deselect. Compute a point in the fit-view
-    // padding ABOVE the topmost node (and at horizontal centre, clear of the
-    // top-left «Добавить файл» control) so the click never lands on a node.
+    // padding ABOVE the topmost node (at horizontal centre) so the click never
+    // lands on a node.
     const point = await page.evaluate(() => {
       const pane = document
         .querySelector(".react-flow__pane")!

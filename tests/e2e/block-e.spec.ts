@@ -52,8 +52,7 @@ async function appendToPrompt(page: Page, text: string) {
 }
 
 // Click an empty pane area (deselect). Compute a point in the fit-view padding
-// above the topmost node and at horizontal centre, clear of the top-left
-// «Добавить файл» control.
+// above the topmost node and at horizontal centre.
 async function clickEmptyPane(page: Page) {
   const point = await page.evaluate(() => {
     const pane = document
