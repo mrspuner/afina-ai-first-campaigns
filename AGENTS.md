@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 If another agent may be working on this project at the same time, you MUST work in your own worktree on your own branch. Never share the main checkout with another running agent — concurrent commits to the same working tree corrupt the index and silently mix unrelated changes into one commit.
 
-The active development branch is **`integration`** — base new work on it. `main`/`origin/main` lag far behind (they are not pushed up to date), so never base off `main`.
+The active development branch is **`integration`** — it is the working trunk: base new work on it and target it for merges/PRs. Treat `main`/`origin/main` as the release/stable line — it may trail `integration` and is updated separately, so never branch from `main`. (They can also happen to be level; the rule stands regardless: branch from and target `integration`.)
 
 Before touching any code:
 
@@ -23,7 +23,7 @@ Before touching any code:
 
 ## MANDATORY preflight: verify your worktree base BEFORE any edits
 
-Spawned/isolated worktrees (e.g. agents launched with worktree isolation) are often created off `origin/main`, which is ~100+ commits BEHIND `integration`. Working on that stale base wastes effort and produces invalid changes. So the FIRST thing any worktree agent does:
+Spawned/isolated worktrees (e.g. agents launched with worktree isolation) are often created off `origin/main` rather than `integration`. Whenever `main` trails `integration`, working on that stale base wastes effort and produces invalid changes. So the FIRST thing any worktree agent does:
 
 ```bash
 git status --short                 # expect clean
