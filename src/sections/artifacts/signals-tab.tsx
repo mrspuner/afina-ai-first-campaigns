@@ -4,7 +4,9 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import type { Artifact, Campaign } from "@/state/app-state";
 import { downloadCsv } from "@/lib/download-csv";
 import { ArtifactCard } from "./artifact-card";
+import { ArtifactCollectionCard } from "./artifact-collection-card";
 import { ArtifactsEmptyState } from "./artifacts-empty-state";
+import { groupArtifacts } from "./artifact-grouping";
 import { buildSignalsCsv } from "./signals-csv";
 
 interface SignalsTabViewProps {
@@ -29,26 +31,33 @@ export function SignalsTabView({
     return <ArtifactsEmptyState />;
   }
 
-  const sorted = [...artifacts].sort((a, b) =>
-    a.createdAt < b.createdAt ? 1 : -1,
-  );
+  const groups = groupArtifacts(artifacts);
 
   return (
     <div className="flex flex-col gap-3">
-      {sorted.map((artifact, i) => (
-        <ArtifactCard
-          key={artifact.id}
-          artifact={artifact}
-          index={i}
-          campaignName={
-            campaigns.find((c) => c.id === artifact.campaignId)?.name ?? "—"
-          }
-          onOpen={onOpen}
-          onOpenCampaign={onOpenCampaign}
-          onDownload={onDownload}
-          onDelete={onDelete}
-        />
-      ))}
+      {groups.map((g, i) =>
+        g.kind === "collection" ? (
+          <ArtifactCollectionCard
+            key={g.cumulative.id}
+            campaignName={campaigns.find((c) => c.id === g.campaignId)?.name ?? "—"}
+            cumulative={g.cumulative}
+            dailyCount={g.dailyCount}
+            onOpen={onOpen}
+            onDownload={onDownload}
+          />
+        ) : (
+          <ArtifactCard
+            key={g.artifact.id}
+            artifact={g.artifact}
+            index={i}
+            campaignName={campaigns.find((c) => c.id === g.campaignId)?.name ?? "—"}
+            onOpen={onOpen}
+            onOpenCampaign={onOpenCampaign}
+            onDownload={onDownload}
+            onDelete={onDelete}
+          />
+        ),
+      )}
     </div>
   );
 }
