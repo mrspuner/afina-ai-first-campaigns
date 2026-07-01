@@ -27,6 +27,7 @@ import { GuidedCampaignSection } from "@/sections/campaigns/wizard/guided-campai
 import { CampaignsSection } from "@/sections/campaigns/campaigns-section";
 import { ArtifactsSection } from "@/sections/artifacts/artifacts-section";
 import { ArtifactScreen } from "@/sections/artifacts/artifact-screen";
+import { StreamDigestDriver } from "@/sections/artifacts/stream-digest-driver";
 import { WorkflowSection } from "@/sections/campaigns/workflow-section";
 import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-screen";
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
@@ -101,6 +102,7 @@ export default function Home() {
 
   return (
     <PromptInputProvider>
+      <StreamDigestDriver />
       <PromptChipsProvider>
       <ChatProvider>
       <WelcomeChatBridge>
