@@ -2,6 +2,23 @@ import type { SignalType } from "@/state/app-state";
 
 export type SourceType = "new" | "stream" | "own";
 
+export type CampaignIntent = "signals" | "signals-comms" | "comms-own";
+export type AnalysisMode = "once" | "stream";
+
+/**
+ * The legacy `sourceType` is kept as a DERIVED value so the ~30 downstream
+ * read-sites (budget, workflow templates, progress, presets, reducer) keep
+ * working unchanged. Intent decides the branch; analysisMode decides
+ * one-time vs streaming.
+ */
+export function deriveSourceType(
+  intent: CampaignIntent,
+  analysisMode: AnalysisMode,
+): SourceType {
+  if (intent === "comms-own") return "own";
+  return analysisMode === "stream" ? "stream" : "new";
+}
+
 export type Channel = "sms" | "push" | "email" | "ivr";
 
 export const CHANNELS = ["sms", "push", "email", "ivr"] as const satisfies readonly Channel[];
@@ -17,6 +34,10 @@ export interface StepData {
   triggers: string[];
   triggerConfig: Record<string, TriggerConfig>;
   sourceType: SourceType;
+  /** Step-2 branch key (A/B/C). Replaces sourceType as the primary branch. */
+  intent: CampaignIntent;
+  /** Разовый / потоковый — only meaningful for intents A and B. */
+  analysisMode: AnalysisMode;
   /** Selected communication channels. Empty array = degenerate campaign (no comms). */
   channels: Channel[];
   budget: number | null;
@@ -57,6 +78,8 @@ export const initialStepData: StepData = {
   triggers: [],
   triggerConfig: {},
   sourceType: "new",
+  intent: "signals-comms",
+  analysisMode: "once",
   channels: [],
   budget: null,
   files: [],

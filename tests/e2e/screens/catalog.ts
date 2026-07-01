@@ -87,6 +87,8 @@ const baseStepData: StepData = {
   triggers: [],
   triggerConfig: {},
   sourceType: "new",
+  intent: "signals-comms",
+  analysisMode: "once",
   channels: [],
   budget: null,
   files: [],
