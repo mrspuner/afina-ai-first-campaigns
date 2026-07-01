@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { useEffect } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
 import {
   AppStateProvider,
@@ -86,30 +86,62 @@ describe("CampaignScreen — #25 «Статус кампании» block removed
   });
 });
 
-describe("CampaignScreen — #26 «Провайдеры данных» gated by phase", () => {
-  it("shows «Провайдеры данных» on an active campaign still in the scoring/collection era (phase !== communicating)", () => {
-    renderCampaign(
-      baseCampaign({
-        id: "cmp_scoring",
-        status: "active",
-        sourceType: "stream",
-        phase: undefined,
-        launchedAt: "2026-06-02T00:00:00.000Z",
-      }),
-    );
-    expect(screen.getByText("Провайдеры данных")).toBeInTheDocument();
-  });
-
-  it("hides «Провайдеры данных» once the campaign phase is communicating", () => {
+describe("CampaignScreen — «Прогресс кампании» canonical progress row", () => {
+  it("shows a collapsed «Прогресс» row whose summary is the current stage; providers are hidden until expanded", () => {
     renderCampaign(
       baseCampaign({
         id: "cmp_comm",
         status: "active",
         sourceType: "new",
+        channels: ["sms"],
         phase: "communicating",
         launchedAt: "2026-06-02T00:00:00.000Z",
       }),
     );
+    // The row is present…
+    expect(screen.getByText("Прогресс")).toBeInTheDocument();
+    // …its collapsed summary is the current stage (comms started)…
+    expect(screen.getByText("Коммуникация по сигналам")).toBeInTheDocument();
+    // …the retired ad-hoc «Провайдеры данных» section is gone…
     expect(screen.queryByText("Провайдеры данных")).not.toBeInTheDocument();
+    // …and providers are not rendered while collapsed.
+    expect(screen.queryByText("Билайн")).not.toBeInTheDocument();
+  });
+
+  it("streaming: current stage «Обработка и коммуникация» reveals providers + a Суммарно line when expanded", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_stream",
+        status: "active",
+        sourceType: "stream",
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    expect(screen.getByText("Обработка и коммуникация")).toBeInTheDocument();
+    // Expand the progress stepper.
+    fireEvent.click(screen.getByRole("button", { name: /Прогресс/ }));
+    // Providers render under the current processing stage, initially pending…
+    expect(screen.getByText("Билайн")).toBeInTheDocument();
+    expect(screen.getAllByText("ожидание подключения").length).toBeGreaterThan(0);
+    // …and streaming shows the running per-day summary line.
+    expect(screen.getByText("Суммарно")).toBeInTheDocument();
+  });
+
+  it("no-comm non-streaming: the stepper omits «Коммуникация по сигналам»", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_nocomm",
+        status: "active",
+        sourceType: "new",
+        channels: [],
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Прогресс/ }));
+    // «Кампания завершена» is the terminal stage (also echoed in the summary).
+    expect(screen.getAllByText("Кампания завершена").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Коммуникация по сигналам")).not.toBeInTheDocument();
   });
 });

@@ -11,8 +11,7 @@ import {
 } from "@/components/ui/entity-card";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
-import { ProviderList } from "./provider-list";
-import { CampaignSignalProgress } from "./campaign-signal-progress";
+import { CampaignProgress } from "./campaign-progress";
 import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
@@ -62,21 +61,17 @@ export function CampaignScreen() {
   const isActive = status === "active";
   const isCompleted = status === "completed";
   const hasStats = isActive || isCompleted;
-  // Data providers connect & generate signals during the scoring/collection
-  // era. Once the campaign moves to `communicating` that block is stale, so
-  // hide it (it only belongs to the signal-search stage).
-  const showProviders = isActive && campaign.phase !== "communicating";
   // Pre-launch collection: a `new` draft is still gathering signals. While
-  // collecting, the card shows progress and «Запустить» stays locked.
+  // collecting, the progress stepper renders «Обработка базы» as the current
+  // stage and «Запустить» stays locked.
   const collectingNow = isCollecting(campaign);
-  // A streaming campaign (active, past the connect era → `communicating`) writes
-  // its signal file continuously — show the real-time signal block instead of
-  // the providers section. Before that (phase still unset) it shows providers.
-  const isStreamActive =
-    isActive &&
-    campaign.sourceType === "stream" &&
-    campaign.phase === "communicating";
   const canLaunch = canLaunchCampaign(campaign);
+  // The «Прогресс кампании» stepper is the canonical progress view — shown once
+  // the campaign has entered its run (a `new` draft collecting signals, active,
+  // paused, or completed). A not-yet-started draft shows the «Запуск» CTA.
+  const started = collectingNow || isActive || status === "paused" || isCompleted;
+  // «Запуск»/«Возобновить» CTA — a ready draft (done collecting) or a paused run.
+  const showLaunch = (status === "draft" && !collectingNow) || status === "paused";
 
   // Artifacts produced by this campaign (newest first).
   const campaignArtifacts = artifacts
@@ -177,30 +172,24 @@ export function CampaignScreen() {
         />
       </CardSection>
 
-      {/* Сбор сигналов (new-черновик) → неэтапный прогресс; запущенный поток →
-          «сигнал в реальном времени»; активная в стадии сбора → провайдеры
-          (скрываются после перехода в `communicating`); завершённая → статус;
-          иначе (готовый черновик/пауза) → CTA «Запустить». */}
-      {collectingNow ? (
-        <CardSection label="Сбор сигналов">
-          <CampaignSignalProgress campaign={campaign} />
+      {/* Прогресс кампании — единый канонический прогресс: раскрываемый степпер
+          этапов (по типу источника и наличию коммуникации), с провайдерами под
+          текущим этапом обработки. Показывается, когда кампания в работе. */}
+      {started && (
+        <CardSection>
+          <CampaignProgress campaign={campaign} />
         </CardSection>
-      ) : isStreamActive ? (
-        <CardSection label="Сигнал">
-          <CampaignSignalProgress campaign={campaign} />
-        </CardSection>
-      ) : showProviders ? (
-        <CardSection label="Провайдеры данных">
-          <ProviderList />
-        </CardSection>
-      ) : isCompleted ? (
+      )}
+
+      {/* Завершённая → статус; готовый черновик/пауза → CTA «Запустить». */}
+      {isCompleted ? (
         <CardSection label="Статус">
           <p className="text-sm text-muted-foreground">
             Кампания завершена. Дублируйте её, чтобы запустить новый прогон или
             A-B-тест.
           </p>
         </CardSection>
-      ) : isActive ? null : (
+      ) : showLaunch ? (
         <CardSection label="Запуск">
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
@@ -218,7 +207,7 @@ export function CampaignScreen() {
             </Button>
           </div>
         </CardSection>
-      )}
+      ) : null}
 
       {/* Статистика — сводка в карточке (дополняет переход в полный отчёт) */}
       {hasStats && (

@@ -1,0 +1,248 @@
+"use client";
+
+import { useState } from "react";
+import { Check, ChevronRight, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { rngFor, seededInt } from "@/state/metrics";
+import type { Campaign } from "@/state/app-state";
+import { ProviderList } from "./provider-list";
+
+// ---------------------------------------------------------------------------
+// Stage model (pure) — the canonical «Прогресс кампании» sequence
+// ---------------------------------------------------------------------------
+
+export type StageStatus = "done" | "current" | "pending";
+
+export interface ProgressStage {
+  /** Stable id. The `process` id marks the stage that hosts the provider list. */
+  id: string;
+  label: string;
+}
+
+export interface CampaignProgress {
+  stages: ProgressStage[];
+  /** Index of the current stage. `=== stages.length` ⇒ every stage is done. */
+  currentIndex: number;
+}
+
+const NON_STREAM_COMM: ProgressStage[] = [
+  { id: "send", label: "Отправка провайдерам" },
+  { id: "verify", label: "Проверка провайдерами" },
+  { id: "process", label: "Обработка базы" },
+  { id: "communicate", label: "Коммуникация по сигналам" },
+  { id: "done", label: "Кампания завершена" },
+];
+
+const NON_STREAM_NO_COMM: ProgressStage[] = [
+  { id: "send", label: "Отправка провайдерам" },
+  { id: "verify", label: "Проверка провайдерами" },
+  { id: "process", label: "Обработка базы" },
+  { id: "done", label: "Кампания завершена" },
+];
+
+const STREAM: ProgressStage[] = [
+  { id: "connect", label: "Подключение к провайдерам" },
+  { id: "process", label: "Обработка и коммуникация" },
+];
+
+type ProgressCampaign = Pick<
+  Campaign,
+  "sourceType" | "channels" | "phase" | "status"
+>;
+
+/**
+ * Derives the canonical progress stepper for a campaign — the stage list (by
+ * source type + whether it communicates) and the current stage index. Pure and
+ * deterministic: driven only by `sourceType`, `channels`, `phase`, `status`.
+ *
+ * Mapping (simulated prototype, mirrors the existing `phase` model):
+ *  - streaming → «Подключение к провайдерам» → «Обработка и коммуникация».
+ *    Current is the connect stage until `phase === "communicating"`.
+ *  - non-streaming → Отправка → Проверка → Обработка → [Коммуникация] → Завершена.
+ *    Current is «Обработка базы» while scoring; on advance to `communicating`
+ *    it is «Коммуникация по сигналам» (with comms) or «Кампания завершена» (none).
+ *  - `status === "completed"` → every stage is done.
+ */
+export function campaignProgressStages(c: ProgressCampaign): CampaignProgress {
+  const streaming = c.sourceType === "stream";
+  const hasComm = (c.channels?.length ?? 0) > 0;
+  const completed = c.status === "completed";
+  const communicating = c.phase === "communicating";
+
+  if (streaming) {
+    const stages = STREAM;
+    const currentIndex = completed ? stages.length : communicating ? 1 : 0;
+    return { stages, currentIndex };
+  }
+
+  const stages = hasComm ? NON_STREAM_COMM : NON_STREAM_NO_COMM;
+  if (completed) return { stages, currentIndex: stages.length };
+
+  const processIndex = stages.findIndex((s) => s.id === "process");
+  // After the scoring→communicating advance the current stage becomes the
+  // communication step, or — with no comms — the terminal «Кампания завершена».
+  const commIndex = stages.findIndex((s) => s.id === "communicate");
+  const communicatingIndex =
+    commIndex >= 0 ? commIndex : stages.findIndex((s) => s.id === "done");
+
+  return { stages, currentIndex: communicating ? communicatingIndex : processIndex };
+}
+
+/** Status of stage `i` within a derived progress (done | current | pending). */
+export function stageStatus(progress: CampaignProgress, i: number): StageStatus {
+  if (i < progress.currentIndex) return "done";
+  if (i === progress.currentIndex) return "current";
+  return "pending";
+}
+
+/** Collapsed-row summary — the current stage label, or «Кампания завершена». */
+export function currentStageLabel(progress: CampaignProgress): string {
+  const { stages, currentIndex } = progress;
+  if (currentIndex >= stages.length) return "Кампания завершена";
+  return stages[currentIndex].label;
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic per-provider signal estimates (no Math.random)
+// ---------------------------------------------------------------------------
+
+/** Deterministic «~N сигналов/день» for a provider on a campaign (seeded). */
+export function providerSignalsPerDay(
+  campaignId: string,
+  providerId: string,
+): number {
+  return seededInt(rngFor("provider-signals", campaignId, providerId), 400, 5200);
+}
+
+/** Sum of the per-day estimates across the currently-connected providers. */
+export function connectedSignalsPerDay(
+  campaignId: string,
+  connectedIds: readonly string[],
+): number {
+  return connectedIds.reduce(
+    (sum, id) => sum + providerSignalsPerDay(campaignId, id),
+    0,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component — the expandable «Прогресс кампании» row + vertical stepper
+// ---------------------------------------------------------------------------
+
+function StatusIcon({ status }: { status: StageStatus }) {
+  if (status === "done") {
+    return (
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500"
+        aria-hidden
+      >
+        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (status === "current") {
+    return (
+      <Loader2
+        className="h-4 w-4 shrink-0 animate-spin text-foreground"
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <span
+      className="h-4 w-4 shrink-0 rounded-full border border-dashed border-muted-foreground/50"
+      aria-hidden
+    />
+  );
+}
+
+interface CampaignProgressProps {
+  campaign: Campaign;
+  /** Start expanded (used by tests / deterministic snapshots). Default collapsed. */
+  defaultExpanded?: boolean;
+}
+
+export function CampaignProgress({
+  campaign,
+  defaultExpanded = false,
+}: CampaignProgressProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const progress = campaignProgressStages(campaign);
+  const summary = currentStageLabel(progress);
+  const streaming = campaign.sourceType === "stream";
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Collapsed row — «Прогресс» + chevron on the left, current stage right. */}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between rounded-[3px] text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      >
+        <span className="flex items-center gap-1 font-medium text-foreground">
+          Прогресс
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground/70 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+        </span>
+        <span className="tabular-nums text-muted-foreground">{summary}</span>
+      </button>
+
+      {expanded && (
+        <ol className="flex flex-col">
+          {progress.stages.map((stage, i) => {
+            const status = stageStatus(progress, i);
+            const showProviders = stage.id === "process" && status === "current";
+            const isLast = i === progress.stages.length - 1;
+            return (
+              <li key={stage.id} className="flex gap-3">
+                {/* Icon rail + connector line */}
+                <div className="flex flex-col items-center">
+                  <StatusIcon status={status} />
+                  {!isLast && (
+                    <div
+                      className={cn(
+                        "w-px flex-1",
+                        status === "done" ? "bg-emerald-500/30" : "bg-border",
+                      )}
+                    />
+                  )}
+                </div>
+
+                {/* Stage label (+ provider detail under the current process stage) */}
+                <div className={cn("flex-1", !isLast && "pb-3")}>
+                  <span
+                    className={cn(
+                      "text-sm",
+                      status === "current"
+                        ? "font-medium text-foreground"
+                        : status === "done"
+                          ? "text-foreground/80"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {stage.label}
+                  </span>
+
+                  {showProviders && (
+                    <div className="mt-2.5 rounded-lg border border-border/60 bg-background/40 px-3 py-1">
+                      <ProviderList
+                        campaignId={campaign.id}
+                        showSummary={streaming}
+                      />
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}

@@ -1,16 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PROVIDERS, type Provider, type ProviderStage } from "@/data/providers";
 import { cn } from "@/lib/utils";
+import {
+  providerSignalsPerDay,
+  connectedSignalsPerDay,
+} from "./campaign-progress";
 
 /**
- * Animated data-provider status list shown on the launched-campaign screen.
- * On mount each provider with a `connectAfterMs` timer walks Подключение →
- * Премодерация → Подключён. Stuck providers (Tele2) freeze on `stuckStage`.
- * Only the status text and dot change — no layout shifts.
+ * Animated data-provider status list shown inside the «Обработка базы» /
+ * «Обработка и коммуникация» stage of the campaign progress stepper. On mount
+ * each provider with a `connectAfterMs` timer walks Подключение → Премодерация →
+ * Подключён; stuck providers (Tele2) freeze on `stuckStage`. Only the status
+ * text and dot change — no layout shifts.
+ *
+ * Per-provider «~N сигналов/день» is a deterministic, seeded estimate keyed by
+ * `campaignId` (never Math.random). When `showSummary` is set (streaming) a
+ * running total across the connected providers is appended.
  */
-export function ProviderList() {
+export function ProviderList({
+  campaignId,
+  showSummary = false,
+}: {
+  campaignId: string;
+  showSummary?: boolean;
+}) {
   const [stages, setStages] = useState<Record<string, ProviderStage>>(() =>
     Object.fromEntries(PROVIDERS.map((p) => [p.id, "Подключение" as ProviderStage]))
   );
@@ -48,14 +63,32 @@ export function ProviderList() {
       timeoutsRef.current = [];
     };
     // PROVIDERS is module-level; intentionally run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const connectedIds = useMemo(
+    () => PROVIDERS.filter((p) => stages[p.id] === "Подключён").map((p) => p.id),
+    [stages]
+  );
+  const summaryTotal = connectedSignalsPerDay(campaignId, connectedIds);
 
   return (
     <div className="flex flex-col">
       {PROVIDERS.map((p) => (
-        <ProviderRow key={p.id} provider={p} stage={stages[p.id] ?? "Подключение"} />
+        <ProviderRow
+          key={p.id}
+          provider={p}
+          stage={stages[p.id] ?? "Подключение"}
+          signalsPerDay={providerSignalsPerDay(campaignId, p.id)}
+        />
       ))}
+      {showSummary && (
+        <div className="flex items-center justify-between border-t border-border/40 pt-2.5 text-sm">
+          <span className="text-muted-foreground">Суммарно</span>
+          <span className="tabular-nums text-foreground/90">
+            ≈ {formatNumber(summaryTotal)} сигналов/день
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -64,11 +97,19 @@ function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
 }
 
-function ProviderRow({ provider, stage }: { provider: Provider; stage: ProviderStage }) {
+function ProviderRow({
+  provider,
+  stage,
+  signalsPerDay,
+}: {
+  provider: Provider;
+  stage: ProviderStage;
+  signalsPerDay: number;
+}) {
   const connected = stage === "Подключён";
   const statusText = connected
-    ? `Подключён · ~${formatNumber(provider.finalSignalsPerDay)} сигналов/день`
-    : `${stage} · до ${formatNumber(provider.potentialSignalsPerDay)} сигналов/день после подключения`;
+    ? `подключено · ~${formatNumber(signalsPerDay)} сигналов/день`
+    : "ожидание подключения";
 
   return (
     <div className="flex items-center gap-3 border-t border-border/40 py-2.5 text-sm first:border-t-0">
@@ -80,7 +121,7 @@ function ProviderRow({ provider, stage }: { provider: Provider; stage: ProviderS
         aria-hidden
       />
       <span className="w-20 shrink-0 font-medium text-foreground">{provider.name}</span>
-      <span className="text-muted-foreground">{statusText}</span>
+      <span className="tabular-nums text-muted-foreground">{statusText}</span>
     </div>
   );
 }
