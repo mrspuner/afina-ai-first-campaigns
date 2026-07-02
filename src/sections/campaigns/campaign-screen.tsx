@@ -16,6 +16,7 @@ import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
+import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
 
 /** Prototype collection window (ms) before a `new` draft auto-advances
@@ -80,6 +81,7 @@ export function CampaignScreen() {
   const campaignArtifact = campaignArtifacts[0];
 
   const scenarioName = campaign.scenario?.name ?? "—";
+  const cadenceLabel = campaignCadenceLabel(campaign.sourceType);
 
   const metaDate =
     status === "active"
@@ -156,6 +158,7 @@ export function CampaignScreen() {
       tags={
         <>
           <CardTag>Сценарий: {scenarioName}</CardTag>
+          {cadenceLabel && <CardTag>{cadenceLabel}</CardTag>}
         </>
       }
       meta={metaDate}
