@@ -57,6 +57,8 @@ next-env.d.ts
 
 .superpowers/
 
-# internal planning / specs / working docs — local only, don't push
-/docs/
+# docs/ is version-controlled for project context (Claude Desktop / repo readers)…
+# …except call transcripts (contain phone numbers) — keep those local only.
+docs/разговоры о афине/
+# /plans is top-level local scratch only.
 /plans/
