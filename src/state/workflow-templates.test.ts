@@ -264,10 +264,28 @@ describe("channel-aware template generation", () => {
     expect(pushCount).toBe(2);
   });
 
-  it("createTemplate with channels still validates ok", () => {
+  it("createTemplate with channels starts needs-attention (шаблоны не выбраны), затем валиден", () => {
     const t = createTemplate("Регистрация", "own", ["sms", "email"]);
+    // Комм-ноды создаются пустыми → needs-attention → блок запуска, пока не
+    // выбран шаблон.
     const v = validateWorkflow(t, true);
-    expect(v.ok).toBe(true);
+    expect(v.ok).toBe(false);
+    expect(v.errors).toContain("needs-attention");
+
+    // Заполняем комм-ноды (пользователь выбрал шаблоны) → граф валиден.
+    const filled = {
+      ...t,
+      nodes: t.nodes.map((n) => {
+        if (n.data.params?.kind === "sms") {
+          return { ...n, data: { ...n.data, params: { ...n.data.params, text: "Привет" } } };
+        }
+        if (n.data.params?.kind === "email") {
+          return { ...n, data: { ...n.data, params: { ...n.data.params, subject: "Тема", body: "Текст" } } };
+        }
+        return n;
+      }),
+    };
+    expect(validateWorkflow(filled, true).ok).toBe(true);
   });
 
   it("createTemplate without channels falls back to legacy template", () => {
