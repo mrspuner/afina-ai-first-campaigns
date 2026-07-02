@@ -11,8 +11,17 @@ import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 // them once the title+subtitle finish typing. Stub it so the interests/triggers
 // body renders synchronously under test.
 vi.mock("@/sections/campaigns/wizard/steps/step-content", () => ({
-  StepContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  StepContent: ({
+    subtitle,
+    children,
+  }: {
+    subtitle?: string;
+    children: React.ReactNode;
+  }) => (
+    <div>
+      {subtitle && <p>{subtitle}</p>}
+      {children}
+    </div>
   ),
 }));
 
@@ -76,6 +85,31 @@ describe("Step2Interests — full interests+triggers step smoke render", () => {
     renderStep();
     expect(
       screen.getByRole("button", { name: "Продолжить" })
+    ).toBeInTheDocument();
+  });
+
+  it("рендерит «Назад» и вызывает onBack по клику", () => {
+    const onBack = vi.fn();
+    render(
+      <AppStateProvider>
+        <PromptInputProvider>
+          <PromptChipsProvider>
+            <TriggerEditRegistryProvider>
+              <Step2Interests data={initialStepData} onNext={vi.fn()} onBack={onBack} />
+            </TriggerEditRegistryProvider>
+          </PromptChipsProvider>
+        </PromptInputProvider>
+      </AppStateProvider>
+    );
+    const back = screen.getByRole("button", { name: "Назад" });
+    back.click();
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("показывает подсказку про чат в подзаголовке, а не в футере", () => {
+    renderStep();
+    expect(
+      screen.getByText(/Если нужного нет в списке — напишите в поле чата\./)
     ).toBeInTheDocument();
   });
 });

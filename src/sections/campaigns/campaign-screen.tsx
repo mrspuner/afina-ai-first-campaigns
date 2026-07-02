@@ -12,10 +12,13 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { CampaignProgress } from "./campaign-progress";
-import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
+import { canLaunchWithGraph, isCollecting } from "./campaign-launch-gate";
+import { getCachedGraph } from "./workflow-graph-cache";
+import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
+import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
 
 /** Prototype collection window (ms) before a `new` draft auto-advances
@@ -65,7 +68,16 @@ export function CampaignScreen() {
   // collecting, the progress stepper renders «Обработка базы» as the current
   // stage and «Запустить» stays locked.
   const collectingNow = isCollecting(campaign);
-  const canLaunch = canLaunchCampaign(campaign);
+  // Гейт «Запустить»: базовый статус-гейт И валидность workflow-графа
+  // (незаполненный шаблон = needs-attention блокирует запуск). Граф берём из
+  // durable-кэша (учитывает ручные правки) либо строим из шаблона по сценарию
+  // — тот же приём, что в campaign-payment-screen.
+  const launchGraph =
+    getCachedGraph(campaign.id) ??
+    (signalType
+      ? createTemplate(signalType, campaign.sourceType, campaign.channels ?? [])
+      : null);
+  const canLaunch = canLaunchWithGraph(campaign, launchGraph);
   // The «Прогресс кампании» stepper is the canonical progress view — shown once
   // the campaign has entered its run (a `new` draft collecting signals, active,
   // paused, or completed). A not-yet-started draft shows the «Запуск» CTA.
@@ -80,6 +92,7 @@ export function CampaignScreen() {
   const campaignArtifact = campaignArtifacts[0];
 
   const scenarioName = campaign.scenario?.name ?? "—";
+  const cadenceLabel = campaignCadenceLabel(campaign.sourceType);
 
   const metaDate =
     status === "active"
@@ -156,6 +169,7 @@ export function CampaignScreen() {
       tags={
         <>
           <CardTag>Сценарий: {scenarioName}</CardTag>
+          {cadenceLabel && <CardTag>{cadenceLabel}</CardTag>}
         </>
       }
       meta={metaDate}

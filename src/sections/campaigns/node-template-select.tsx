@@ -1,6 +1,7 @@
 "use client";
 
-import { Eye, Pencil, Plus } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 import {
   Popover,
@@ -158,7 +159,7 @@ export function NodeTemplateSelect({
                   setOpen(false);
                 }}
               >
-                <Plus aria-hidden className="h-3.5 w-3.5" />
+                <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
                 <span>Создать новый шаблон</span>
               </CommandItem>
             </CommandGroup>

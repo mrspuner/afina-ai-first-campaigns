@@ -349,12 +349,15 @@ function buildLinearChannelTemplate(
   const legacy = TEMPLATE_BY_TYPE[signalType]();
   const signalNode = legacy.nodes[0]; // always the source node
 
-  // Build the comm unit with pre-filled template params (validates ok immediately)
+  // Comm nodes start EMPTY (no template chosen) → needsAttention → жёлтый круг +
+  // блок запуска, пока пользователь не выберет шаблон (правка «обязательный
+  // шаблон»). Интересы/триггеры «магия» пре-заполняет, а коммуникацию выбирает
+  // пользователь через селект шаблонов.
   const unit = buildCommUnit(channels, {
     prefix,
     onEngaged: successId,
     onExhausted: endId,
-    useTemplateParams: true,
+    useTemplateParams: false,
   });
 
   // Build success and end nodes — extract from legacy or use defaults
@@ -460,14 +463,14 @@ function buildSegmentedChannelTemplate(
     const prefix = `${seg}_comm`;
     const yOffset = segYPositions[idx];
 
-    // Each unit's YES path → merge, NO path → end
+    // Comm nodes start EMPTY (needsAttention) — шаблон выбирает пользователь.
     const unit = buildCommUnit(channels, {
       prefix,
       onEngaged: mergeId,      // YES → merge
       onExhausted: endId,      // NO → end (exhausted)
       xOffset: unitStartX,
       yOffset,
-      useTemplateParams: true,
+      useTemplateParams: false,
     });
 
     allUnitNodes.push(...unit.nodes);

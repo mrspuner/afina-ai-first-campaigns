@@ -3,6 +3,14 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { NodeTemplateSelect } from "./node-template-select";
 import type { MessageTemplate } from "@/state/app-state";
 
+// next/image → plain <img> so the mascot icon mounts under jsdom.
+vi.mock("next/image", () => ({
+  default: (props: Record<string, unknown>) => {
+    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+    return <img {...(props as Record<string, string>)} />;
+  },
+}));
+
 // cmdk (Command primitives) needs ResizeObserver + scrollIntoView — jsdom lacks both.
 beforeAll(() => {
   if (!("ResizeObserver" in globalThis)) {
@@ -110,6 +118,24 @@ describe("NodeTemplateSelect", () => {
     open();
     fireEvent.click(screen.getByText("Создать новый шаблон"));
     expect(onCreate).toHaveBeenCalled();
+  });
+
+  it("«Создать новый шаблон» показывает маскот Афина ИИ, а не плюс", () => {
+    render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty={false}
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    open();
+    const row = screen.getByText("Создать новый шаблон").closest("[cmdk-item]");
+    expect(row?.querySelector("img")).toBeTruthy();
+    expect(row?.querySelector("img")).toHaveAttribute("src", "/mascot-icon.svg");
   });
 
   it("empty channel shows the russian empty state", () => {
