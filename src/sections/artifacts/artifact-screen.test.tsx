@@ -30,7 +30,6 @@ function renderScreen(overrides?: Partial<Parameters<typeof ArtifactScreenView>[
       campaign={undefined}
       campaignName="Лето 2026"
       onBack={vi.fn()}
-      onOpenCampaign={vi.fn()}
       onDownload={vi.fn()}
       onDelete={vi.fn()}
       {...overrides}
@@ -39,19 +38,21 @@ function renderScreen(overrides?: Partial<Parameters<typeof ArtifactScreenView>[
 }
 
 describe("ArtifactScreenView", () => {
-  it("shows count, kind label and a CSV file-type indicator", () => {
+  it("shows count and kind label", () => {
     renderScreen();
     expect(screen.getByText(/54\s?321/)).toBeInTheDocument();
     expect(screen.getAllByText(/Сигналы и конверсии/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/CSV/)).toBeInTheDocument();
   });
 
-  it("links to the campaign", () => {
-    const onOpenCampaign = vi.fn();
-    renderScreen({ onOpenCampaign });
-    const link = screen.getByRole("button", { name: /Лето 2026/ });
-    link.click();
-    expect(onOpenCampaign).toHaveBeenCalledWith("cmp_1");
+  it("секция «Об артефакте» удалена", () => {
+    renderScreen({ campaign, campaignName: campaign.name });
+    expect(screen.queryByText("Об артефакте")).not.toBeInTheDocument();
+    expect(screen.queryByText("Тип файла")).not.toBeInTheDocument();
+  });
+
+  it("разовый артефакт → статус «Артефакт собран»", () => {
+    renderScreen();
+    expect(screen.getByText(/Артефакт собран/)).toBeInTheDocument();
   });
 
   it("has no segments row and no launch-campaign action", () => {
@@ -89,7 +90,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={[...dailies]} campaign={undefined} campaignName="ЖК Заря"
-        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDownloadDaily={onDownloadDaily} onDelete={vi.fn()}
+        onBack={vi.fn()} onDownload={vi.fn()} onDownloadDaily={onDownloadDaily} onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText(/Дневные выжимки/)).toBeVisible();
@@ -97,5 +98,63 @@ describe("ArtifactScreenView", () => {
     expect(screen.getByText(/12\s?480/)).toBeVisible();
     fireEvent.click(screen.getAllByRole("button", { name: /Скачать выжимку/i })[0]);
     expect(onDownloadDaily).toHaveBeenCalledWith("d2");
+  });
+
+  const cumulative = {
+    id: "cum", campaignId: "str", kind: "signals_conversions", count: 9999,
+    createdAt: "2026-06-30T09:00:00.000Z", variant: "cumulative",
+  } as Artifact;
+
+  function daily(i: number): Artifact {
+    return {
+      id: `d${i}`, campaignId: "str", kind: "signals_conversions", count: 100 + i,
+      createdAt: `2026-06-${10 + i}T09:00:00.000Z`, variant: "daily", periodDate: `2026-06-${10 + i}`,
+    } as Artifact;
+  }
+
+  it("активная потоковая коллекция → статус «собирается, обновляется каждый день в 00:00»", () => {
+    render(
+      <ArtifactScreenView
+        artifact={cumulative} dailies={[]} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
+        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Артефакт собирается, обновляется каждый день в 00:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/Артефакт собран/)).not.toBeInTheDocument();
+  });
+
+  it("завершённая коллекция → «Артефакт собран»", () => {
+    render(
+      <ArtifactScreenView
+        artifact={cumulative} dailies={[]} campaign={{ id: "str", name: "Поток", status: "completed", createdAt: "x" } as Campaign} campaignName="Поток"
+        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Артефакт собран/)).toBeInTheDocument();
+  });
+
+  it("выжимок >5 → показаны 5 и кнопка «Показать все (7)», клик разворачивает", () => {
+    const dailies = Array.from({ length: 7 }, (_, i) => daily(i));
+    render(
+      <ArtifactScreenView
+        artifact={cumulative} dailies={dailies} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
+        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Показать все (7)" }));
+    expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(7);
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeInTheDocument();
+  });
+
+  it("выжимок ≤5 → кнопки «Показать все» нет", () => {
+    const dailies = Array.from({ length: 4 }, (_, i) => daily(i));
+    render(
+      <ArtifactScreenView
+        artifact={cumulative} dailies={dailies} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
+        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Показать все/ })).not.toBeInTheDocument();
   });
 });
