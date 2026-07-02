@@ -30,6 +30,7 @@ function renderScreen(overrides?: Partial<Parameters<typeof ArtifactScreenView>[
       campaign={undefined}
       campaignName="Лето 2026"
       onBack={vi.fn()}
+      onOpenCampaign={vi.fn()}
       onDownload={vi.fn()}
       onDelete={vi.fn()}
       {...overrides}
@@ -65,6 +66,15 @@ describe("ArtifactScreenView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("ссылка на кампанию — в секции «Настройки кампании-источника»", () => {
+    const onOpenCampaign = vi.fn();
+    renderScreen({ campaign, campaignName: campaign.name, onOpenCampaign });
+    expect(screen.getByText(/Настройки кампании-источника/)).toBeInTheDocument();
+    const link = screen.getByRole("button", { name: /Лето 2026/ });
+    link.click();
+    expect(onOpenCampaign).toHaveBeenCalledWith("cmp_1");
+  });
+
   it("shows campaign settings table when campaign is passed", () => {
     renderScreen({ campaign, campaignName: campaign.name });
     expect(screen.getByText(/Настройки кампании-источника/)).toBeInTheDocument();
@@ -90,7 +100,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={[...dailies]} campaign={undefined} campaignName="ЖК Заря"
-        onBack={vi.fn()} onDownload={vi.fn()} onDownloadDaily={onDownloadDaily} onDelete={vi.fn()}
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDownloadDaily={onDownloadDaily} onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText(/Дневные выжимки/)).toBeVisible();
@@ -116,7 +126,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={[]} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
-        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText(/Артефакт собирается, обновляется каждый день в 00:00/)).toBeInTheDocument();
@@ -127,7 +137,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={[]} campaign={{ id: "str", name: "Поток", status: "completed", createdAt: "x" } as Campaign} campaignName="Поток"
-        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText(/Артефакт собран/)).toBeInTheDocument();
@@ -138,7 +148,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={dailies} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
-        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
       />,
     );
     expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(5);
@@ -152,7 +162,7 @@ describe("ArtifactScreenView", () => {
     render(
       <ArtifactScreenView
         artifact={cumulative} dailies={dailies} campaign={{ id: "str", name: "Поток", status: "active", createdAt: "x" } as Campaign} campaignName="Поток"
-        onBack={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
+        onBack={vi.fn()} onOpenCampaign={vi.fn()} onDownload={vi.fn()} onDelete={vi.fn()}
       />,
     );
     expect(screen.queryByRole("button", { name: /Показать все/ })).not.toBeInTheDocument();

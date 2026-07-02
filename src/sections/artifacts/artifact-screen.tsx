@@ -46,6 +46,7 @@ interface ArtifactScreenViewProps {
   campaignName: string;
   dailies?: Artifact[];
   onBack: () => void;
+  onOpenCampaign: (campaignId: string) => void;
   onDownload: () => void;
   onDownloadDaily?: (id: string) => void;
   onDelete: () => void;
@@ -58,6 +59,7 @@ export function ArtifactScreenView({
   campaignName,
   dailies,
   onBack,
+  onOpenCampaign,
   onDownload,
   onDownloadDaily,
   onDelete,
@@ -133,6 +135,15 @@ export function ArtifactScreenView({
       {campaign && (
         <CardSection label="Настройки кампании-источника">
           <div className="divide-y divide-border">
+            <SummaryRow label="Кампания">
+              <button
+                type="button"
+                onClick={() => onOpenCampaign(artifact.campaignId)}
+                className="rounded underline-offset-2 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {campaignName}
+              </button>
+            </SummaryRow>
             <SummaryRow label="Сценарий">{campaign.scenario?.name ?? "—"}</SummaryRow>
             <SummaryRow label="Источник">{SOURCE_LABEL[campaign.sourceType ?? "new"]}</SummaryRow>
             <SummaryRow label="Интересы">{campaign.interests?.length ? campaign.interests.join(", ") : "—"}</SummaryRow>
@@ -181,6 +192,7 @@ export function ArtifactScreen() {
       campaignName={campaign?.name ?? "—"}
       dailies={dailies}
       onBack={() => dispatch({ type: "sidebar_nav", section: "Артефакты" })}
+      onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
       onDownloadDaily={handleDownloadDaily}
       onDelete={() => dispatch({ type: "artifact_deleted", id: artifact.id })}
