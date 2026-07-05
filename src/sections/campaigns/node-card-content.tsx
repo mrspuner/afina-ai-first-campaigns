@@ -321,7 +321,8 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
   // Единый источник шаблонов (правка 9) — тот же массив, что карточки Артефактов.
   const { templates } = useAppState();
   // Реальный шов блока 6: создание/предпросмотр шаблонов через чат-дровер.
-  const { openTemplateCreate, openTemplatePreview } = useChat();
+  // openSidebar — открыть дровер ИИ для полей сплиттера (спека #1).
+  const { openTemplateCreate, openTemplatePreview, openSidebar } = useChat();
   // Launched/paused/completed campaigns: the card opens for inspection only —
   // every field stays read-only regardless of its manual/ai editability.
   const readOnly = useWorkflowReadOnly();
@@ -357,6 +358,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
     });
   }
 
+  // Сплиттер (спека #1): клик по полю «По»/«Ветки» не только кладёт тег поля в
+  // композер, но и открывает дровер ИИ — там пользователь описывает ветвление
+  // (сколько веток, по какому признаку, куда ведёт новая, что удалить).
+  function handleSplitAiField(field: "По" | "Ветки") {
+    handleAiField(field);
+    openSidebar();
+  }
+
   return (
     <div className="flex flex-col gap-2 text-left">
       {data.attentionReason && (
@@ -371,16 +380,15 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
 
       <div className="text-[10px] text-muted-foreground/50">id: {id}</div>
 
-      {/* A6 — сплиттер: поля «По»/«Ветки» рендерятся селектами (не из общего
-          цикла), т.к. «Ветки» зависят от типа разделения и категорий сигнала. */}
+      {/* Сплиттер (спека #1): поля «По»/«Ветки» — ИИ-редактирование. Клик по
+          строке кладёт тег поля в композер и открывает дровер ИИ (не селект). */}
       {data.params?.kind === "split" && (
         <div className="flex flex-col gap-0.5">
           <SplitFields
-            nodeId={id}
             params={data.params}
             dirtyParams={data.dirtyParams}
             readOnly={readOnly}
-            onAiHandoff={() => handleAiField("По")}
+            onAiHandoff={handleSplitAiField}
           />
         </div>
       )}

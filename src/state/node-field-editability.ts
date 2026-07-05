@@ -63,9 +63,11 @@ export const NODE_FIELD_EDITABILITY: Record<
     "Событие": { editability: "manual", paramKey: "trigger", control: "combo", optionsKey: "eventCatalog" },
   },
   split: {
-    // A6 — сознательное исключение из A7: сплиттер задаётся селектами, не ИИ.
-    "По": { editability: "manual", paramKey: "by", control: "select" },
-    "Ветки": { editability: "manual", paramKey: "branches", control: "select" },
+    // Отмена A6 (спека #1): сплиттер переведён в ИИ-редактирование. Клик по полю
+    // открывает дровер ИИ с вопросами (сколько веток / по какому признаку /
+    // куда ведёт новая ветка / какие пути удалить), а не селект.
+    "По": { editability: "ai", paramKey: "by" },
+    "Ветки": { editability: "ai", paramKey: "branches" },
   },
   merge: {},
   scoring: {

@@ -1,23 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { Pencil } from "lucide-react";
-import { useState } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
-import { useAppDispatch } from "@/state/app-state-context";
 import { splitSegmentBranches } from "@/state/split-segments";
-import type { NodeParams, SplitParams } from "@/types/workflow";
+import type { SplitParams } from "@/types/workflow";
 import { cn } from "@/lib/utils";
 
 const BY_LABELS: Record<SplitParams["by"], string> = {
@@ -26,130 +11,50 @@ const BY_LABELS: Record<SplitParams["by"], string> = {
   segment: "По сегменту",
 };
 
-const BY_OPTIONS: SplitParams["by"][] = ["equal", "random", "segment"];
-const BRANCH_OPTIONS = [2, 3, 4, 5];
-
 const rowGrid =
   "grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 text-[11px]";
 
 /**
- * Поля сплиттера (A6): «По» — селект типа разделения (Поровну / Рандомно /
- * По сегменту + ИИ); «Ветки» — селект 2–5 при equal/random, авто-показ
- * «По категориям сигнала (N)» при segment. Сознательное исключение из A7.
+ * Поля сплиттера — ИИ-редактирование (отмена A6, спека #1). «По» и «Ветки»
+ * показывают текущее значение и несут визуал ассистента (иконка-маскот); клик
+ * открывает дровер ИИ с вопросами о ветвлении, а не селект. При by="segment"
+ * число веток авто-выводится из категорий сигнала.
  */
 export function SplitFields({
-  nodeId,
   params,
   dirtyParams,
   readOnly,
   onAiHandoff,
 }: {
-  nodeId: string;
   params: SplitParams;
   dirtyParams?: string[];
   readOnly: boolean;
-  /** Передаёт поле «По» ассистенту (тег в PromptBar). */
-  onAiHandoff: () => void;
+  /** Открывает дровер ИИ для поля сплиттера («По» / «Ветки»). */
+  onAiHandoff: (field: "По" | "Ветки") => void;
 }) {
-  const dispatch = useAppDispatch();
-  const segmentBranches = splitSegmentBranches();
-  const segmentCount = segmentBranches.length;
+  const segmentCount = splitSegmentBranches().length;
 
-  function patch(p: Partial<SplitParams>) {
-    dispatch({
-      type: "workflow_node_field_set",
-      nodeId,
-      patch: p as Partial<NodeParams>,
-    });
-  }
-
-  function setBy(by: SplitParams["by"]) {
-    // При переходе на «по сегменту» число веток авто-подставляется из сигнала.
-    if (by === "segment") patch({ by, branches: segmentCount });
-    else patch({ by });
-  }
-
-  const byDirty = dirtyParams?.includes("by") ?? false;
-  const branchesDirty = dirtyParams?.includes("branches") ?? false;
+  const branchesValue =
+    params.by === "segment"
+      ? `По категориям сигнала (${segmentCount})`
+      : String(params.branches);
 
   return (
     <>
-      {/* По — тип разделения */}
-      <SelectRow
+      <AiRow
         label="По"
         value={BY_LABELS[params.by]}
-        isDirty={byDirty}
+        isDirty={dirtyParams?.includes("by") ?? false}
         readOnly={readOnly}
-        renderItems={(close) => (
-          <>
-            <CommandGroup>
-              {BY_OPTIONS.map((opt) => (
-                <CommandItem
-                  key={opt}
-                  value={BY_LABELS[opt]}
-                  data-checked={params.by === opt}
-                  onSelect={() => {
-                    setBy(opt);
-                    close();
-                  }}
-                >
-                  {BY_LABELS[opt]}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                value="__ai__"
-                onSelect={() => {
-                  onAiHandoff();
-                  close();
-                }}
-              >
-                <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
-                <span>Сформировать с помощью ИИ</span>
-              </CommandItem>
-            </CommandGroup>
-          </>
-        )}
+        onOpen={() => onAiHandoff("По")}
       />
-
-      {/* Ветки — число (equal/random) либо авто (segment) */}
-      {params.by === "segment" ? (
-        <div className={cn(rowGrid, "px-1 py-0.5")}>
-          <span className="text-muted-foreground">Ветки</span>
-          <span className="truncate text-foreground">
-            По категориям сигнала ({segmentCount})
-          </span>
-          <span className="flex items-center justify-end">
-            {branchesDirty && <DirtyDot />}
-          </span>
-        </div>
-      ) : (
-        <SelectRow
-          label="Ветки"
-          value={String(params.branches)}
-          isDirty={branchesDirty}
-          readOnly={readOnly}
-          renderItems={(close) => (
-            <CommandGroup>
-              {BRANCH_OPTIONS.map((n) => (
-                <CommandItem
-                  key={n}
-                  value={String(n)}
-                  data-checked={params.branches === n}
-                  onSelect={() => {
-                    patch({ branches: n });
-                    close();
-                  }}
-                >
-                  {n}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-        />
-      )}
+      <AiRow
+        label="Ветки"
+        value={branchesValue}
+        isDirty={dirtyParams?.includes("branches") ?? false}
+        readOnly={readOnly}
+        onOpen={() => onAiHandoff("Ветки")}
+      />
     </>
   );
 }
@@ -164,21 +69,23 @@ function DirtyDot() {
   );
 }
 
-function SelectRow({
+/**
+ * Строка поля сплиттера с ИИ-аффордансом. Вся строка — кнопка; клик передаёт
+ * поле ассистенту и открывает дровер. Read-only (после запуска) — просто показ.
+ */
+function AiRow({
   label,
   value,
   isDirty,
   readOnly,
-  renderItems,
+  onOpen,
 }: {
   label: string;
   value: string;
   isDirty: boolean;
   readOnly: boolean;
-  renderItems: (close: () => void) => React.ReactNode;
+  onOpen: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   if (readOnly) {
     return (
       <div className={cn(rowGrid, "px-1 py-0.5")}>
@@ -192,35 +99,33 @@ function SelectRow({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        aria-label={`Изменить поле «${label}»`}
-        className={cn(
-          rowGrid,
-          "group nodrag w-full rounded px-1 py-0.5 text-left transition-colors",
-          "hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none",
-          "data-[popup-open]:bg-white/5"
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <span className="text-muted-foreground">{label}</span>
-        <span className="truncate text-foreground">{value}</span>
-        <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-          {isDirty && <DirtyDot />}
-          {/* Индикатор «поле редактируемо» — клик по нему открывает тот же
-              попап, что и вся строка-триггер (как в NodeFieldCombobox). */}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
-        </span>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-(--anchor-width) min-w-56 p-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Command>
-          <CommandList>{renderItems(() => setOpen(false))}</CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <button
+      type="button"
+      aria-label={`Настроить «${label}» с помощью ИИ`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      className={cn(
+        rowGrid,
+        "group nodrag w-full rounded px-1 py-0.5 text-left transition-colors",
+        "hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none"
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate text-foreground">{value}</span>
+      <span className="ml-1 flex shrink-0 items-center gap-1.5">
+        {isDirty && <DirtyDot />}
+        {/* Маскот = сигнал «ИИ готов вмешаться» (PRODUCT.md, принцип 6). */}
+        <Image
+          src="/mascot-icon.svg"
+          width={14}
+          height={14}
+          alt=""
+          aria-hidden
+          className="opacity-70 transition-opacity group-hover:opacity-100"
+        />
+      </span>
+    </button>
   );
 }
