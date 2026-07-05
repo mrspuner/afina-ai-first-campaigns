@@ -63,13 +63,21 @@ function BottomBarSlot() {
 
 export default function Home() {
   const state = useAppState();
-  const { view, launchFlyoutOpen } = state;
+  const { view, launchFlyoutOpen, surveyStatus } = state;
   const dispatch = useAppDispatch();
 
   // Dev/test-only: apply a Playwright-injected state seed (no-op in production).
   useSeedFromWindow(dispatch);
 
-  const isFullscreen = view.kind === "survey";
+  // Спека #3 — первый вход в «Настройки» (анкета ещё не пройдена) монтирует тот
+  // же канонический Survey вместо настроек. Тот же fullscreen-режим, что и у
+  // обычного входа в анкету.
+  const settingsSurvey =
+    view.kind === "section" &&
+    view.name === "Настройки" &&
+    surveyStatus !== "completed";
+
+  const isFullscreen = view.kind === "survey" || settingsSurvey;
 
   // Routing key for the renderMain animation.
   const viewKey = view.kind;
@@ -82,7 +90,7 @@ export default function Home() {
       return (
         <SurveySection
           withOnboardingScreens
-          onComplete={() => { /* start_campaign_flow routes the user from here */ }}
+          onComplete={() => dispatch({ type: "start_campaign_flow" })}
         />
       );
     }
@@ -95,7 +103,22 @@ export default function Home() {
       if (view.name === "Статистика") return <StatisticsSection />;
       if (view.name === "Кампании") return <CampaignsSection />;
       if (view.name === "Артефакты") return <ArtifactsSection />;
-      if (view.name === "Настройки") return <SettingsSection />;
+      if (view.name === "Настройки") {
+        // Первый вход — прогоняем канонический Survey (тот же флоу, без развилок).
+        // По завершении surveyStatus → "completed", ветка перерисует настройки,
+        // уже заполненные проверенными данными.
+        if (settingsSurvey) {
+          return (
+            <SurveySection
+              withOnboardingScreens
+              onComplete={() => {
+                /* surveyStatus flips to "completed" → re-render shows Настройки */
+              }}
+            />
+          );
+        }
+        return <SettingsSection />;
+      }
     }
     return null;
   }

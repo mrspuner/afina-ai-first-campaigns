@@ -10,13 +10,13 @@ import type { Survey } from "@/types/survey";
 
 import { SurveyAwaiting } from "./survey-awaiting";
 import { SurveyForm } from "./survey-form";
-import { OnboardingInterestsScreen } from "./onboarding-interests-screen";
+import { OnboardingReviewScreen } from "./onboarding-review-screen";
 import { OnboardingScenariosScreen } from "./onboarding-scenarios-screen";
 
 type Phase =
   | { kind: "form" }
   | { kind: "awaiting"; survey: Survey }
-  | { kind: "interests"; survey: Survey }
+  | { kind: "review"; survey: Survey }
   | { kind: "matching"; survey: Survey }
   | { kind: "scenarios"; survey: Survey };
 
@@ -25,7 +25,7 @@ interface SurveySectionProps {
   // scenario catalog from inside this section; gate-mode flows just need the
   // user handed off to the wizard. The caller decides what to do next.
   onComplete: () => void;
-  // When true, run the full 3-screen onboarding (form → enrich → interests →
+  // When true, run the full onboarding (form → enrich → review → matching →
   // scenarios → caller). When false (legacy gate before the wizard), stop
   // after the enrich animation and hand off to the wizard.
   withOnboardingScreens?: boolean;
@@ -59,20 +59,22 @@ export function SurveySection({
   function handleAwaitingDone() {
     if (phase.kind !== "awaiting") return;
     if (withOnboardingScreens) {
-      setPhase({ kind: "interests", survey: phase.survey });
+      setPhase({ kind: "review", survey: phase.survey });
       return;
     }
     dispatch({ type: "survey_completed", survey: phase.survey });
     onComplete();
   }
 
-  function handleInterestsContinue() {
-    if (phase.kind !== "interests") return;
+  // Экран review сам применяет проверенные данные (account_review_confirmed);
+  // здесь только переход к подбору сценариев.
+  function handleReviewContinue() {
+    if (phase.kind !== "review") return;
     setPhase({ kind: "matching", survey: phase.survey });
   }
 
-  function handleInterestsBack() {
-    if (phase.kind !== "interests") return;
+  function handleReviewBack() {
+    if (phase.kind !== "review") return;
     setPhase({ kind: "form" });
   }
 
@@ -84,7 +86,8 @@ export function SurveySection({
   function handleChooseScenario() {
     if (phase.kind !== "scenarios") return;
     dispatch({ type: "survey_completed", survey: phase.survey });
-    dispatch({ type: "start_campaign_flow" });
+    // Куда вести после завершения — решает вызвавший (onComplete): первый вход
+    // «Подобрать сценарии» → запуск кампании; вход из настроек → сами настройки.
     onComplete();
   }
 
@@ -140,18 +143,18 @@ export function SurveySection({
             <SurveyAwaiting onDone={handleAwaitingDone} />
           </motion.div>
         )}
-        {phase.kind === "interests" && (
+        {phase.kind === "review" && (
           <motion.div
-            key="interests"
+            key="review"
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
             className="flex w-full justify-center"
           >
-            <OnboardingInterestsScreen
-              onContinue={handleInterestsContinue}
-              onBack={handleInterestsBack}
+            <OnboardingReviewScreen
+              onContinue={handleReviewContinue}
+              onBack={handleReviewBack}
             />
           </motion.div>
         )}

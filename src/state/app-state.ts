@@ -347,6 +347,9 @@ export type Action =
   | { type: "open_survey" }
   | { type: "survey_reset" }
   | { type: "settings_updated"; patch: Partial<AccountSettings> }
+  // Спека #3 — подтверждение экрана review в Survey: проверенные данные
+  // применяются в accountSettings РАЗОМ (отложенный коммит, а не молча при парсинге).
+  | { type: "account_review_confirmed"; settings: AccountSettings }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
   | { type: "artifact_opened"; id: string }
@@ -1025,6 +1028,15 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         accountSettings: { ...state.accountSettings, ...action.patch },
+      };
+
+    case "account_review_confirmed":
+      // Проверенные на экране review данные пишутся целиком, один раз.
+      // clientDirection синхронизируется с подтверждённым направлением.
+      return {
+        ...state,
+        accountSettings: action.settings,
+        clientDirection: businessDirectionFromSurvey(action.settings.directionId),
       };
 
     case "campaign_launched": {
