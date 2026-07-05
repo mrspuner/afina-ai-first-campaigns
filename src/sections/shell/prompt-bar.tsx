@@ -95,6 +95,7 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
             type="button"
             onClick={onOpenDrawer}
             aria-label="Открыть в drawer"
+            data-onboarding="prompt-panel"
             className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
           >
             <PanelRightOpen className="h-4 w-4" />

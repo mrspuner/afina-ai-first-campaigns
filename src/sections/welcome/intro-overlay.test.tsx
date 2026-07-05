@@ -17,8 +17,8 @@ describe("IntroOverlay — no skip button", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the first step title unchanged", () => {
+  it("shows the first step title with canonical «афина ИИ» naming", () => {
     render(<IntroOverlay onDismiss={() => {}} />);
-    expect(screen.getByText("Знакомьтесь — ИИ афина")).toBeInTheDocument();
+    expect(screen.getByText("Знакомьтесь — афина ИИ")).toBeInTheDocument();
   });
 });
