@@ -80,8 +80,6 @@ function registrationTemplate(): Template {
         { kind: "push", title: "Новости от бренда", body: "Есть что посмотреть", deeplink: "brand://home" }),
       n("success", "Успех", "success", STEP * 4, 0, "Активирован", { isSuccess: true },
         { kind: "success", goal: "Активация" }),
-      n("end", "Конец", "end", STEP * 4, 120, "Без конверсии", undefined,
-        { kind: "end", reason: "Без активации" }),
     ],
     edges: [
       e("signal", "email"),
@@ -131,20 +129,18 @@ function upsellTemplate(): Template {
         { kind: "sms", text: "Скидка 20% для вашего сегмента.", alphaName: "BRAND", scheduledAt: "immediate" }),
       n("end", "Конец", "end", STEP * 2, 120, "Low", undefined,
         { kind: "end", reason: "Без апсейла" }),
-      n("merge", "Слияние", "merge", STEP * 3, -40, undefined, undefined,
-        { kind: "merge" }),
-      n("success", "Успех", "success", STEP * 4, -40, "Купил", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 3, -40, "Купил", { isSuccess: true },
         { kind: "success", goal: "Апсейл" }),
     ],
     edges: [
       e("signal", "split"),
-      e("split", "merge", "Макс"),
+      // Слияние удалено: ветки High/Mid и «горячий» Макс сходятся стрелками в Успех.
+      e("split", "success", "Макс"),
       e("split", "email", "Выс"),
       e("split", "sms", "Ср"),
       e("split", "end", "Низ"),
-      e("email", "merge"),
-      e("sms", "merge"),
-      e("merge", "success"),
+      e("email", "success"),
+      e("sms", "success"),
     ],
   };
 }
@@ -220,11 +216,9 @@ function retentionTemplate(): Template {
         { kind: "email", subject: "Ваш дайджест", body: "Самое важное за неделю.", sender: "digest@brand.com" }),
       n("push", "Push", "push", STEP * 2, 100, "Напомни", undefined,
         { kind: "push", title: "Не забудьте заглянуть", body: "Есть новое" }),
-      n("merge", "Слияние", "merge", STEP * 3, 0, undefined, undefined,
-        { kind: "merge" }),
-      n("wait", "Задержка", "wait", STEP * 4, 0, "7 дней", undefined,
+      n("wait", "Задержка", "wait", STEP * 3, 0, "7 дней", undefined,
         { kind: "wait", mode: "duration", durationHours: 168 }),
-      n("success", "Успех", "success", STEP * 5, 0, "Активен", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 4, 0, "Активен", { isSuccess: true },
         { kind: "success", goal: "Удержание" }),
     ],
     edges: [
@@ -232,10 +226,10 @@ function retentionTemplate(): Template {
       e("split", "ivr", "Выс"),
       e("split", "email", "Ср"),
       e("split", "push", "Низ"),
-      e("ivr", "merge"),
-      e("email", "merge"),
-      e("push", "merge"),
-      e("merge", "wait"),
+      // Слияние удалено: три канала сходятся стрелками в «Задержку».
+      e("ivr", "wait"),
+      e("email", "wait"),
+      e("push", "wait"),
       e("wait", "success"),
     ],
   };
@@ -321,7 +315,8 @@ function withSignalPath(t: Template, sourceType: SourceType): Template {
 /**
  * Rough estimate of the x-width a comm unit occupies, to help position
  * success/end nodes. For 1 channel: STEP * 5 (entry→cond→wait→repeat→cond2).
- * For N channels: add STEP for split + STEP for merge.
+ * For N channels: add a column for the split (Слияние удалено). A small
+ * over-estimate is fine — it only adds slack before success/end, never overlap.
  */
 function estimateUnitWidth(channels: Channel[]): number {
   const channelBlockWidth = channels.length > 1 ? STEP * 2 : STEP;
@@ -412,7 +407,8 @@ function buildLinearChannelTemplate(
 
 /**
  * Builds a segmented channel-aware template (Апсейл, Удержание).
- * Structure: source → split(by segment) → [comm unit per active segment] → merge → success
+ * Structure: source → split(by segment) → [comm unit per active segment] → success
+ * (Слияние удалено — ветки сегментов сходятся стрелками в Успех напрямую.)
  * Lowest segment (low) → end (no comm unit).
  */
 function buildSegmentedChannelTemplate(
@@ -432,7 +428,6 @@ function buildSegmentedChannelTemplate(
   };
 
   const splitId = "seg_split";
-  const mergeId = "seg_merge";
   const successId = "success";
   const endId = "end";
 
@@ -460,10 +455,10 @@ function buildSegmentedChannelTemplate(
     const prefix = `${seg}_comm`;
     const yOffset = segYPositions[idx];
 
-    // Each unit's YES path → merge, NO path → end
+    // Each unit's YES path → success (напрямую, без Слияния), NO path → end
     const unit = buildCommUnit(channels, {
       prefix,
-      onEngaged: mergeId,      // YES → merge
+      onEngaged: successId,    // YES → Успех напрямую
       onExhausted: endId,      // NO → end (exhausted)
       xOffset: unitStartX,
       yOffset,
@@ -478,9 +473,8 @@ function buildSegmentedChannelTemplate(
   // Lowest segment → end directly
   splitEdges.push(e(splitId, endId, SEGMENT_LABELS["low"]));
 
-  // Position merge + success after units
-  const mergeX = unitStartX + unitWidth + STEP * 2;
-  const mergeNode = n(mergeId, "Слияние", "merge", mergeX, -40, undefined, undefined, { kind: "merge" });
+  // Position success after units (Слияние удалено — сегменты сходятся в Успех)
+  const successX = unitStartX + unitWidth + STEP;
 
   const legacySuccess = legacy.nodes.find((nd) => nd.data.isSuccess) ?? legacy.nodes[legacy.nodes.length - 1];
   const legacyEnd = legacy.nodes.find((nd) => nd.data.nodeType === "end");
@@ -489,7 +483,7 @@ function buildSegmentedChannelTemplate(
     successId,
     legacySuccess.data.label,
     "success",
-    mergeX + STEP,
+    successX,
     -40,
     legacySuccess.data.sublabel,
     { isSuccess: true },
@@ -499,7 +493,7 @@ function buildSegmentedChannelTemplate(
     endId,
     legacyEnd?.data.label ?? "Конец",
     "end",
-    unitStartX + unitWidth + STEP,
+    successX,
     120,
     legacyEnd?.data.sublabel,
     undefined,
@@ -510,7 +504,6 @@ function buildSegmentedChannelTemplate(
     { ...signalNode, position: { x: 0, y: 0 } },
     splitNode,
     ...allUnitNodes,
-    mergeNode,
     successNode,
     endNode,
   ];
@@ -519,7 +512,6 @@ function buildSegmentedChannelTemplate(
     e(signalNode.id, splitId),
     ...splitEdges,
     ...allUnitEdges,
-    e(mergeId, successId),
   ];
 
   return { nodes, edges };

@@ -4,7 +4,7 @@
  * Single source of truth for:
  * - Channel type (re-export from types/campaign to avoid circular deps)
  * - Channel labels, colors, and default params
- * - buildChannelBlock: parallel split→channels→merge (or single node)
+ * - buildChannelBlock: parallel split→channels (Слияние удалено) or single node
  * - buildCommUnit: channel block + condition + retry + second condition
  *
  * Deduplicate targets:
@@ -174,16 +174,21 @@ export interface ChannelBlock {
   edges: WorkflowEdge[];
   /** ID of the entry point (split node for multi-channel, channel node for single). */
   entryId: string;
-  /** ID of the exit point (merge node for multi-channel, channel node for single). */
-  exitId: string;
+  /**
+   * IDs of the block's exit points. Слияние удалено: для нескольких каналов
+   * каждый канал — самостоятельный выход (все ведут напрямую в следующую ноду);
+   * для одного канала — сам канал; для пустого блока — пусто.
+   */
+  exitIds: string[];
 }
 
 /**
  * Builds a channel communication block.
  *
- * - Multiple channels: split → [channels in parallel] → merge
- * - Single channel: single channel node (no split/merge)
- * - Zero channels: empty block (entryId/exitId will be dummy strings)
+ * - Multiple channels: split → [channels in parallel]; каждый канал — выход
+ *   (Слияние удалено — ветки сходятся стрелками в следующую ноду напрямую).
+ * - Single channel: single channel node (no split)
+ * - Zero channels: empty block (entryId dummy, exitIds empty)
  *
  * All node IDs are prefixed with `idPrefix` (default: "comm").
  */
@@ -191,7 +196,7 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
   const prefix = idPrefix ?? "comm";
 
   if (channels.length === 0) {
-    return { nodes: [], edges: [], entryId: `${prefix}_empty`, exitId: `${prefix}_empty` };
+    return { nodes: [], edges: [], entryId: `${prefix}_empty`, exitIds: [] };
   }
 
   if (channels.length === 1) {
@@ -200,12 +205,11 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
     const nodeId = `${prefix}_${ch}`;
     const params = useTemplateParams ? channelTemplateParams(ch) : entry.defaultParams;
     const node = makeNode(nodeId, entry.label, ch, 0, 0, undefined, params);
-    return { nodes: [node], edges: [], entryId: nodeId, exitId: nodeId };
+    return { nodes: [node], edges: [], entryId: nodeId, exitIds: [nodeId] };
   }
 
-  // Multiple channels: split → channels → merge
+  // Multiple channels: split → channels (each channel is an exit; no merge)
   const splitId = `${prefix}_split`;
-  const mergeId = `${prefix}_merge`;
 
   const splitNode = makeNode(
     splitId,
@@ -227,18 +231,13 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
     return makeNode(nodeId, entry.label, ch, STEP, startY + i * CHANNEL_Y_SPACING, undefined, params);
   });
 
-  const mergeNode = makeNode(mergeId, "Слияние", "merge", STEP * 2, 0, undefined, { kind: "merge" });
-
-  const edges: WorkflowEdge[] = [
-    ...channels.map((ch) => makeEdge(splitId, `${prefix}_${ch}`)),
-    ...channels.map((ch) => makeEdge(`${prefix}_${ch}`, mergeId)),
-  ];
+  const edges: WorkflowEdge[] = channels.map((ch) => makeEdge(splitId, `${prefix}_${ch}`));
 
   return {
-    nodes: [splitNode, ...channelNodes, mergeNode],
+    nodes: [splitNode, ...channelNodes],
     edges,
     entryId: splitId,
-    exitId: mergeId,
+    exitIds: channels.map((ch) => `${prefix}_${ch}`),
   };
 }
 
@@ -296,8 +295,10 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
   }));
 
   // 2. First condition node ("взаимодействовал?")
+  // Слияние удалено — условие идёт сразу за каналами (split col0, channels col1,
+  // cond col2 для нескольких каналов), без пустой колонки на месте Слияния.
   const cond1Id = `${prefix}_cond`;
-  const cond1X = ox + (channels.length > 1 ? STEP * 3 : STEP);
+  const cond1X = ox + (channels.length > 1 ? STEP * 2 : STEP);
   const cond1 = makeNode(
     cond1Id,
     "Условие",
@@ -357,8 +358,8 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
   const edges: WorkflowEdge[] = [
     // First block's internal edges (already built)
     ...firstBlock.edges,
-    // First block exit → first condition
-    makeEdge(firstBlock.exitId, cond1Id),
+    // Каждый выход блока (канал или единственная нода) → первое условие напрямую
+    ...firstBlock.exitIds.map((exit) => makeEdge(exit, cond1Id)),
     // First condition YES → onEngaged
     makeEdge(cond1Id, onEngaged, "ДА"),
     // First condition NO → wait
@@ -367,8 +368,8 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
     makeEdge(waitId, repeatBlock.entryId),
     // Repeat block's internal edges
     ...repeatBlock.edges,
-    // Repeat block exit → second condition
-    makeEdge(repeatBlock.exitId, cond2Id),
+    // Каждый выход повторного блока → второе условие напрямую
+    ...repeatBlock.exitIds.map((exit) => makeEdge(exit, cond2Id)),
     // Second condition YES → onEngaged
     makeEdge(cond2Id, onEngaged, "ДА"),
     // Second condition NO → onExhausted

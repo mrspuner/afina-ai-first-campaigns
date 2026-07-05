@@ -6,7 +6,7 @@ import { CHANNEL_NODE_MAP } from "@/state/channel-nodes";
 /** Типы, доступные модели при пересборке. Без legacy и без signal —
  *  сигнальную ноду билдер всегда ставит сам первой. */
 export const rebuildNodeTypeSchema = z.enum([
-  "sms", "email", "push", "ivr", "wait", "condition", "split", "merge",
+  "sms", "email", "push", "ivr", "wait", "condition", "split",
   "success", "end",
 ]);
 
@@ -42,7 +42,6 @@ function defaultParams(nodeType: z.infer<typeof rebuildNodeTypeSchema>): NodePar
     case "wait": return { kind: "wait", mode: "duration", durationHours: 24 };
     case "condition": return { kind: "condition", trigger: "opened" };
     case "split": return { kind: "split", by: "equal", branches: 2 };
-    case "merge": return { kind: "merge" };
     case "success": return { kind: "success", goal: "Конверсия" };
     case "end": return { kind: "end", reason: "Без конверсии" };
   }
