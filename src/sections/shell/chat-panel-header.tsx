@@ -17,7 +17,7 @@ export function ChatPanelHeader({ mode, onOpenSidebar, onCloseSidebar }: ChatPan
     <div className="flex w-full items-center justify-between px-1 py-0.5">
       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Image src="/mascot-icon.svg" alt="" width={14} height={14} aria-hidden className="shrink-0" />
-        Афина ИИ
+        афина ИИ
       </span>
       <div className="flex items-center">
         {inSidebar ? (

@@ -259,7 +259,7 @@ export type AppState = {
   // Owned by stats-promptbar-queries: filters for the Statistics view
   stats: StatisticsFilters;
   /**
-   * Whether the first-run «Знакомство с ИИ афина» overlay has been seen
+   * Whether the first-run «Знакомство с афина ИИ» overlay has been seen
    * (completed or skipped). Drives the IntroOverlay on the welcome screen:
    * it renders only while this is `false`. Prototype state isn't persisted,
    * so a fresh load re-shows the overlay — acceptable per the spec.
