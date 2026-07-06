@@ -216,9 +216,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, mode: "collapsed", scoringDrawer: INITIAL_SCORING_DRAWER };
     }
     case "open_scoring_drawer": {
+      // НЕ трогаем mode: слой «Интересы и триггеры» независим от ИИ-дровера/
+      // нижнего бара — они остаются на своих местах (два независимых слоя).
       return {
         ...state,
-        mode: "sidebar",
         scoringDrawer: {
           open: true,
           editable: action.editable,
@@ -230,7 +231,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "close_scoring_drawer": {
       return {
         ...state,
-        mode: "collapsed",
         scoringDrawer: INITIAL_SCORING_DRAWER,
       };
     }

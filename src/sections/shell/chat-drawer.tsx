@@ -14,9 +14,6 @@ import {
 import { DraftQueueList } from "./draft-queue-list";
 
 const SIDEBAR_WIDTH_PX = 420;
-// Скоринг-дровер (второй уровень «Интересы и триггеры») шире общего чата;
-// см. scoring-drawer.tsx. chat-drawer — единый владелец --chat-sidebar-width.
-const SCORING_DRAWER_WIDTH_PX = 480;
 
 function EmptyHistory() {
   return (
@@ -39,27 +36,21 @@ export function ChatDrawer({ placeholder }: { placeholder: string }) {
   // Когда открыт редактор письма (A5), дровер встаёт на левую границу
   // предпросмотра, а канвас резервирует справа сумму обеих ширин.
   const emailPreviewOpen = chat.emailEditor.open;
-  // Интересы/триггеры скоринга открываются отдельным дровером (scoring-drawer),
-  // а не внутри чата — тогда общий ИИ-чат не показываем.
-  const scoringOpen = chat.scoringDrawer.open;
 
   useLayoutEffect(() => {
     const root = document.documentElement;
     const reserved =
-      (scoringOpen
-        ? SCORING_DRAWER_WIDTH_PX
-        : isSidebar
-          ? SIDEBAR_WIDTH_PX
-          : 0) + (emailPreviewOpen ? EMAIL_PREVIEW_WIDTH_PX : 0);
+      (isSidebar ? SIDEBAR_WIDTH_PX : 0) +
+      (emailPreviewOpen ? EMAIL_PREVIEW_WIDTH_PX : 0);
     root.style.setProperty("--chat-sidebar-width", `${reserved}px`);
     return () => {
       root.style.removeProperty("--chat-sidebar-width");
     };
-  }, [isSidebar, scoringOpen, emailPreviewOpen]);
+  }, [isSidebar, emailPreviewOpen]);
 
   return (
     <AnimatePresence>
-      {isSidebar && !scoringOpen && (
+      {isSidebar && (
         <motion.aside
           key="chat-drawer"
           data-testid="chat-drawer"

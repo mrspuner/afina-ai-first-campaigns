@@ -1,31 +1,39 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useRef } from "react";
+import { useLayoutEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChat } from "@/state/chat-context";
-import {
-  PromptComposer,
-  DRAWER_INPUT_CLASS,
-  type PromptComposerHandle,
-} from "./prompt-composer";
 import { ScoringInterestsPanel } from "./scoring-interests-panel";
 
+const SCORING_DRAWER_WIDTH_PX = 480;
+
 /**
- * Отдельный дровер второго уровня «Интересы и триггеры» скоринг-ноды.
+ * Самостоятельный слой «Интересы и триггеры» скоринг-ноды — чистая панель
+ * ВЫБОРА (чипы интересов + карточки триггеров), по образцу предпросмотра
+ * шаблона: БЕЗ композера и чата внутри.
  *
- * Раньше редактор интересов/триггеров вставлялся ПРЯМО в общий ИИ-дровер
- * (chat-drawer), захватывая чат. Теперь он открывается как самостоятельная
- * боковая панель (по образцу предпросмотра шаблона / email-редактора) —
- * взаимоисключаемо с ИИ-чатом. Резервирование места справа
- * (--chat-sidebar-width) остаётся за chat-drawer (единый владелец).
- * Редактируемо только в незапущенной кампании (флаг `editable`): тогда снизу
- * свой промпт-бар «Настроить триггер»; в запущенной — read-only, без композера.
+ * Независим от ИИ-дровера (два независимых слоя): резервирует место справа
+ * через --email-preview-width (тот же шов, что предпросмотр/email-редактор), а
+ * ИИ-дровер, если открыт, встаёт СЛЕВА от него (он читает эту же переменную).
+ * AI-настройка триггеров («добавить домен») идёт через отдельный ИИ-бар/дровер,
+ * не внутри этого слоя.
  */
 export function ScoringDrawer() {
   const chat = useChat();
-  const composerRef = useRef<PromptComposerHandle>(null);
-  const { open, editable } = chat.scoringDrawer;
+  const { open } = chat.scoringDrawer;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    root.style.setProperty(
+      "--email-preview-width",
+      `${SCORING_DRAWER_WIDTH_PX}px`,
+    );
+    return () => {
+      root.style.removeProperty("--email-preview-width");
+    };
+  }, [open]);
 
   return (
     <AnimatePresence>
@@ -39,7 +47,7 @@ export function ScoringDrawer() {
           transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
           className="fixed right-0 top-0 z-40 flex h-screen w-[480px] flex-col border-l border-white/10 bg-[rgba(14,14,12,0.96)] p-4 backdrop-blur-[2px]"
         >
-          {/* Шапка второго уровня: подпись + закрыть (стиль предпросмотра). */}
+          {/* Шапка слоя: подпись + закрыть (стиль предпросмотра). */}
           <div className="mb-1 flex items-center justify-between gap-3">
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
               Скоринг · нода
@@ -54,18 +62,8 @@ export function ScoringDrawer() {
             </button>
           </div>
 
-          {/* Тело — тот же общий редактор интересов/триггеров. */}
+          {/* Тело — общий редактор интересов/триггеров (только выбор). */}
           <ScoringInterestsPanel />
-
-          {/* Промпт-бар «Настроить триггер» — только для редактируемой (черновик)
-              кампании; в запущенной панель read-only, композер не нужен. */}
-          {editable && (
-            <PromptComposer
-              ref={composerRef}
-              placeholder="Настроить триггер…"
-              inputClassName={DRAWER_INPUT_CLASS}
-            />
-          )}
         </motion.aside>
       )}
     </AnimatePresence>

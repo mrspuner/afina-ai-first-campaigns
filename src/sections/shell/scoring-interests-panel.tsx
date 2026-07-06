@@ -11,7 +11,6 @@ import {
 } from "@/sections/campaigns/wizard/steps/interests-triggers-editor";
 import { useScreenHints } from "@/hooks/use-screen-hints";
 import { interestsScreenHints } from "@/sections/campaigns/wizard/steps/screen-hints";
-import { ChatHistoryList } from "./chat-history-list";
 import type { NodeParams } from "@/types/workflow";
 
 /**
@@ -125,14 +124,6 @@ export function ScoringInterestsPanel() {
             readOnly={!editable}
             onChange={editable ? persist : undefined}
           />
-
-          {/* История диалога — В ТОМ ЖЕ скролле, что и редактор (единый элемент,
-              как inline-визуализации в чате): настройка сверху, диалог ниже. */}
-          {chat.messages.length > 0 && (
-            <div className="border-t border-white/5 pt-4">
-              <ChatHistoryList messages={chat.messages} />
-            </div>
-          )}
         </div>
       </div>
     </div>

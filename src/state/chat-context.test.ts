@@ -334,14 +334,15 @@ describe("chatReducer — scoringDrawer slice", () => {
     expect(INITIAL_CHAT_STATE.scoringDrawer.campaignId).toBeNull();
   });
 
-  it("open_scoring_drawer opens the sidebar bound to node + campaign", () => {
+  it("open_scoring_drawer binds the slice to node + campaign (mode не трогает — независимый слой)", () => {
     const s = chatReducer(empty, {
       type: "open_scoring_drawer",
       nodeId: "n_scoring",
       campaignId: "cmp_1",
       editable: true,
     });
-    expect(s.mode).toBe("sidebar");
+    // Слой «Интересы и триггеры» независим от ИИ-дровера — mode остаётся как был.
+    expect(s.mode).toBe(empty.mode);
     expect(s.scoringDrawer).toEqual({
       open: true,
       editable: true,
