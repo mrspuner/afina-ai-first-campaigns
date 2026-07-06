@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import {
@@ -9,6 +9,8 @@ import {
   resolveSelectionIds,
   type InterestsTriggersEditorSelection,
 } from "@/sections/campaigns/wizard/steps/interests-triggers-editor";
+import { useScreenHints } from "@/hooks/use-screen-hints";
+import { interestsScreenHints } from "@/sections/campaigns/wizard/steps/screen-hints";
 import { ChatHistoryList } from "./chat-history-list";
 import type { NodeParams } from "@/types/workflow";
 
@@ -24,11 +26,34 @@ export function ScoringInterestsPanel() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const chat = useChat();
-  const { nodeId, campaignId, editable } = chat.scoringDrawer;
+  const { nodeId, campaignId, editable, open } = chat.scoringDrawer;
 
   const campaign = useMemo(
     () => state.campaigns.find((c) => c.id === campaignId),
     [state.campaigns, campaignId]
+  );
+
+  // Текущий выбор (LABELS) для со-локейтед подсказок «Интересы и триггеры» —
+  // как в шаге визарда. Сеется из сохранённого выбора кампании (панель
+  // ремаунтится при переоткрытии дровера), обновляется через onChange редактора.
+  const [selection, setSelection] = useState<InterestsTriggersEditorSelection>(
+    () => ({
+      interests: campaign?.interests ?? [],
+      triggers: campaign?.triggers ?? [],
+      triggerConfig: {},
+    }),
+  );
+
+  // Пока дровер открыт — публикуем СВОИ подсказки интересов (перекрывают общие
+  // подсказки экрана через owner-механизм screenHints), чтобы бар подсказывал
+  // именно про интересы/триггеры.
+  useScreenHints(
+    open
+      ? interestsScreenHints({
+          hasInterests: selection.interests.length > 0,
+          hasDomains: selection.triggers.length > 0,
+        })
+      : null,
   );
 
   // Seed from the campaign's saved interests/triggers LABELS, resolved to the
@@ -44,6 +69,7 @@ export function ScoringInterestsPanel() {
 
   const persist = useCallback(
     (next: InterestsTriggersEditorSelection) => {
+      setSelection(next);
       // Durable source of truth — survives a graph rebuild (applyCampaignContext
       // re-overlays these onto the scoring node).
       if (campaignId) {
@@ -99,14 +125,16 @@ export function ScoringInterestsPanel() {
             readOnly={!editable}
             onChange={editable ? persist : undefined}
           />
+
+          {/* История диалога — В ТОМ ЖЕ скролле, что и редактор (единый элемент,
+              как inline-визуализации в чате): настройка сверху, диалог ниже. */}
+          {chat.messages.length > 0 && (
+            <div className="border-t border-white/5 pt-4">
+              <ChatHistoryList messages={chat.messages} />
+            </div>
+          )}
         </div>
       </div>
-
-      {chat.messages.length > 0 && (
-        <div className="flex max-h-[38%] min-h-0 shrink-0 flex-col border-t border-white/5 pt-2">
-          <ChatHistoryList messages={chat.messages} />
-        </div>
-      )}
     </div>
   );
 }
