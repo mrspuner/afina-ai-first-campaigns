@@ -22,8 +22,6 @@ interface EntityCardShellProps {
   /** Label for the back button (e.g. "К сигналам"). */
   backLabel?: string;
   badge?: ReactNode;
-  /** Action rendered inline next to the title (e.g. the campaign status button). */
-  headerAction?: ReactNode;
   tags?: ReactNode;
   meta?: ReactNode;
   children?: ReactNode;
@@ -37,7 +35,6 @@ export function EntityCardShell({
   onBack,
   backLabel = "Назад",
   badge,
-  headerAction,
   tags,
   meta,
   children,
@@ -60,17 +57,13 @@ export function EntityCardShell({
         {/* Header */}
         <section className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              {onRename ? (
-                <InlineEditableTitle title={title} onRename={onRename} />
-              ) : (
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {title}
-                </h1>
-              )}
-              {/* Статус-кнопка кампании — рядом с названием (#4). */}
-              {headerAction}
-            </div>
+            {onRename ? (
+              <InlineEditableTitle title={title} onRename={onRename} />
+            ) : (
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                {title}
+              </h1>
+            )}
             {badge}
           </div>
           {tags && <div className="flex flex-wrap items-center gap-2">{tags}</div>}
