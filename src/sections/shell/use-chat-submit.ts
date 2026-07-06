@@ -32,6 +32,7 @@ import { isAiParserEnabled, appendAiLogEntry } from "@/state/dev-config";
 import { getCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
 import { summarizeGraph } from "@/lib/ai/graph-summary";
 import { useAssistRunner, buildAiLogEntry } from "./use-assist-runner";
+import { isNodeQuestion, nodeQuestionReply } from "./node-prompt-intent";
 
 /** Текст + сегменты (тег + текст после него), отправляемые в чат. */
 export interface ChatSubmitPayload {
@@ -277,6 +278,29 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
         });
         const id = chat.append({ role: "assistant", text: "", pending: true });
         schedule(() => chat.updatePending(id, READ_ONLY_WORKFLOW_REPLY), 400);
+        return;
+      }
+    }
+
+    // #7 — различение намерения по тегу узла. В РЕДАКТИРУЕМОМ воркфлоу вопрос ПО
+    // ноде (при активном теге) не должен уходить в оркестратор и перерисовывать
+    // граф — отвечаем информационно. Запрос на изменение падает дальше обычным
+    // путём (структурные команды / ИИ-оркестратор).
+    if (appState.view.kind === "workflow" && !readOnlyWorkflow) {
+      const nodeSeg = segments.find(
+        (s) => s.chip.kind === "node" && s.text.trim().length > 0
+      );
+      if (nodeSeg && isNodeQuestion(nodeSeg.text)) {
+        chat.append({
+          role: "user",
+          text: nodeSeg.text,
+          triggerLabel: nodeSeg.chip.label,
+        });
+        const id = chat.append({ role: "assistant", text: "", pending: true });
+        schedule(
+          () => chat.updatePending(id, nodeQuestionReply(nodeSeg.chip.label)),
+          400
+        );
         return;
       }
     }

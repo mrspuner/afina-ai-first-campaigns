@@ -56,11 +56,13 @@ describe("EmailEditorPanel — preview mode (#32)", () => {
     expect(screen.queryByRole("button", { name: "Картинка" })).toBeNull();
   });
 
-  it("shows «Сохранить» when opened without preview in a non-launched view", () => {
+  it("has no «Сохранить» — «Готово» applies-and-closes in edit mode (#7)", () => {
     renderPanel(false);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
+    // «Сохранить» убрана: изменения применяются автоматически при закрытии.
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Сохранить" }),
+      screen.getByRole("button", { name: "Готово" }),
     ).toBeInTheDocument();
   });
 });
