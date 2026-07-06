@@ -73,6 +73,8 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
     <div className="fixed left-[120px] right-0 bottom-5 z-30 flex justify-center px-6">
       <div
         ref={cardRef}
+        // data-onboarding: цель дыры-затемнения онбординга на весь блок (спека #5).
+        data-onboarding="prompt-block"
         className={cn(
           "flex w-full max-w-[720px] flex-col gap-2 rounded-[16px] p-3",
           "bg-[rgba(10,10,10,0.75)] shadow-[0_0_17px_9px_rgba(0,0,0,0.19)] backdrop-blur-[2px]",

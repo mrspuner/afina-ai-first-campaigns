@@ -34,8 +34,9 @@ export async function dismissIntroOverlay(page: Page): Promise<void> {
   // are constantly mid-animation — force the clicks and gate each step on the
   // next title appearing (this is still the real first-run dismissal path).
   const STEP_TITLES = [
-    "Знакомьтесь — ИИ афина",
-    "Спрашивайте в любой момент",
+    "Знакомьтесь — афина ИИ",
+    "Спрашивайте своими словами",
+    "Или начните с подсказки",
     "Сложное — в боковой панели",
   ];
   const firstTitle = page.getByText(STEP_TITLES[0]);
