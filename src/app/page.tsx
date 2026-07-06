@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
@@ -33,6 +33,7 @@ import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-scr
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
 import { StatisticsSection } from "@/sections/statistics/statistics-section";
 import { SettingsSection } from "@/sections/settings/settings-section";
+import { SettingsEmptyState } from "@/sections/settings/settings-empty-state";
 import { DevPanel } from "@/components/dev/dev-panel";
 import { useSeedFromWindow } from "@/components/dev/use-seed-from-window";
 
@@ -66,6 +67,10 @@ export default function Home() {
   const { view, launchFlyoutOpen, surveyStatus } = state;
   const dispatch = useAppDispatch();
 
+  // #11: первый вход в «Настройки» показывает пустое состояние; опрос
+  // запускается только по кнопке (не авто).
+  const [settingsSurveyStarted, setSettingsSurveyStarted] = useState(false);
+
   // Dev/test-only: apply a Playwright-injected state seed (no-op in production).
   useSeedFromWindow(dispatch);
 
@@ -77,7 +82,8 @@ export default function Home() {
     view.name === "Настройки" &&
     surveyStatus !== "completed";
 
-  const isFullscreen = view.kind === "survey" || settingsSurvey;
+  const isFullscreen =
+    view.kind === "survey" || (settingsSurvey && settingsSurveyStarted);
 
   // Routing key for the renderMain animation.
   const viewKey = view.kind;
@@ -104,16 +110,21 @@ export default function Home() {
       if (view.name === "Кампании") return <CampaignsSection />;
       if (view.name === "Артефакты") return <ArtifactsSection />;
       if (view.name === "Настройки") {
-        // Первый вход — прогоняем канонический Survey (тот же флоу, без развилок).
-        // По завершении surveyStatus → "completed", ветка перерисует настройки,
-        // уже заполненные проверенными данными.
+        // Первый вход (анкета не пройдена): пустое состояние с подводкой; опрос
+        // стартует по кнопке. По завершении surveyStatus → "completed" →
+        // перерисовка покажет заполненные настройки.
         if (settingsSurvey) {
+          if (!settingsSurveyStarted) {
+            return (
+              <SettingsEmptyState
+                onStart={() => setSettingsSurveyStarted(true)}
+              />
+            );
+          }
           return (
             <SurveySection
               withOnboardingScreens
-              onComplete={() => {
-                /* surveyStatus flips to "completed" → re-render shows Настройки */
-              }}
+              onComplete={() => setSettingsSurveyStarted(false)}
             />
           );
         }
