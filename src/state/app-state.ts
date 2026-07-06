@@ -316,7 +316,7 @@ export type Action =
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
-  | { type: "campaign_duplicated"; id: string }
+  | { type: "campaign_duplicated"; id: string; newId?: string }
   | { type: "campaigns_query_set"; statuses: CampaignStatus[]; sort: CampaignSort }
   | { type: "campaigns_filter_remove"; status: CampaignStatus }
   | { type: "campaigns_filter_clear" }
@@ -688,12 +688,28 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "campaign_duplicated": {
       const original = state.campaigns.find((c) => c.id === action.id);
       if (!original) return state;
+      // Дубль «один в один» (#10): копия несёт ВСЕ поля оригинала, задающие
+      // граф воркфлоу (sourceType, channels, interests, triggers, budget,
+      // templateIds, scenario…), а не только имя. Отличаются лишь id/name/status.
+      // Плюс перенос точного (отредактированного) графа из кэша — на стороне
+      // диспетчера через `copyCachedGraph(id, newId)`.
       const dup: Campaign = {
-        id: `cmp_${nanoid(6)}`,
+        ...original,
+        id: action.newId ?? `cmp_${nanoid(6)}`,
         name: `Копия — ${original.name}`,
         status: "draft",
         createdAt: new Date().toISOString(),
-        scenario: original.scenario,
+        // Свежий черновик — сбрасываем стадийные метки времени оригинала.
+        launchedAt: undefined,
+        pausedAt: undefined,
+        completedAt: undefined,
+        // Глубокая копия коллекций: правки копии не должны трогать оригинал.
+        channels: original.channels ? [...original.channels] : undefined,
+        interests: original.interests ? [...original.interests] : undefined,
+        triggers: original.triggers ? [...original.triggers] : undefined,
+        files: original.files ? original.files.map((f) => ({ ...f })) : undefined,
+        templateIds: original.templateIds ? [...original.templateIds] : undefined,
+        scenario: original.scenario ? { ...original.scenario } : undefined,
       };
       return {
         ...state,

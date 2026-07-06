@@ -26,3 +26,21 @@ export function setCachedGraph(
 ): void {
   if (campaignId) graphs.set(campaignId, graph);
 }
+
+/**
+ * Deep-copy the cached graph of `fromId` onto `toId` — used by campaign
+ * duplication (#10) so the copy carries the original's exact, edited
+ * nodes/edges/params, not just a scenario-template rebuild. No-op when the
+ * source has no cached graph or the target id is missing.
+ */
+export function copyCachedGraph(
+  fromId: string | undefined,
+  toId: string | undefined,
+): void {
+  const src = getCachedGraph(fromId);
+  if (!src || !toId) return;
+  graphs.set(toId, {
+    nodes: src.nodes.map((n) => structuredClone(n)),
+    edges: src.edges.map((e) => structuredClone(e)),
+  });
+}
