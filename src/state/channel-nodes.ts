@@ -78,10 +78,13 @@ export function channelDefaultParams(channel: Channel): NodeParams {
 export function channelTemplateParams(channel: Channel): NodeParams {
   switch (channel) {
     case "sms":
+      // #2 — совпадает по тексту с пресетом `tpl_sms_reminder` («SMS —
+      // напоминание»), поэтому селект «Шаблон» сразу показывает имя привязанного
+      // шаблона (а не «—») и работает постоянный глазик превью (#6).
       return {
         kind: "sms",
-        text: "Специальное предложение только для вас.",
-        alphaName: "BRAND",
+        text: "Ваше предложение ждёт. Подробности на сайте.",
+        alphaName: "AFINA",
         scheduledAt: "immediate",
       };
     case "email":
@@ -92,7 +95,8 @@ export function channelTemplateParams(channel: Channel): NodeParams {
         sender: "noreply@brand.com",
       };
     case "push":
-      return { kind: "push", title: "Новость от нас", body: "Есть что-то интересное для вас" };
+      // #2 — совпадает по body с пресетом `tpl_push_back` («Push — возвращение»).
+      return { kind: "push", title: "Давно вас не видели", body: "Загляните — у нас есть кое-что для вас." };
     case "ivr":
       return { kind: "ivr", scenario: "Персональное предложение", voiceType: "neutral" };
   }

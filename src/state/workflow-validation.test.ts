@@ -12,6 +12,7 @@ describe("validateWorkflow", () => {
     const result = validateWorkflow(baseGraph(), true);
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
   });
 
   it("reports no-signal when signalBound=false", () => {
@@ -20,7 +21,7 @@ describe("validateWorkflow", () => {
     expect(result.errors).toContain("no-signal");
   });
 
-  it("reports needs-attention when a communication node has an empty required field", () => {
+  it("does NOT block launch on needs-attention — surfaces it as a non-blocking warning (#2)", () => {
     const g = baseGraph();
     g.nodes.push({
       id: "sms-empty",
@@ -33,8 +34,11 @@ describe("validateWorkflow", () => {
       },
     });
     const result = validateWorkflow(g, true);
-    expect(result.ok).toBe(false);
-    expect(result.errors).toContain("needs-attention");
+    // #2 — пустой текст больше не блокирует запуск: launch разрешён, а нода
+    // остаётся подсвеченной («проверьте текст») через warnings.
+    expect(result.ok).toBe(true);
+    expect(result.errors).not.toContain("needs-attention");
+    expect(result.warnings).toContain("needs-attention");
   });
 
   it("reports no-success-path when no node is isSuccess", () => {
