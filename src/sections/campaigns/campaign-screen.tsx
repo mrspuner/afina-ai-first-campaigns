@@ -145,13 +145,30 @@ export function CampaignScreen() {
     });
   }
   secondaryActions.push(duplicateAction);
-  if (isActive) {
-    secondaryActions.push({
-      label: "Остановить",
-      onClick: stop,
-      icon: <Square className="h-4 w-4" />,
-    });
-  }
+
+  // #4 — статус-кнопка (Запустить / Приостановить / Возобновить) переезжает в
+  // шапку карточки рядом с названием. Логика доступности сохранена: «Запустить»
+  // заблокирован, пока кампания не готова (canLaunch).
+  const statusButton = isCompleted ? null : status === "active" ? (
+    <Button
+      variant="outline"
+      className="gap-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+      onClick={stop}
+    >
+      <Square className="h-4 w-4" />
+      Приостановить
+    </Button>
+  ) : status === "paused" ? (
+    <Button className="gap-2" onClick={launch}>
+      <Play className="h-4 w-4" />
+      Возобновить
+    </Button>
+  ) : showLaunch ? (
+    <Button className="gap-2" onClick={launch} disabled={!canLaunch}>
+      <Play className="h-4 w-4" />
+      Запустить
+    </Button>
+  ) : null;
 
   return (
     <EntityCardShell
@@ -162,6 +179,7 @@ export function CampaignScreen() {
       onBack={() => dispatch({ type: "sidebar_nav", section: "Кампании" })}
       backLabel="К кампаниям"
       badge={<StatusBadge status={status} />}
+      headerAction={statusButton}
       tags={
         <>
           <CardTag>Сценарий: {scenarioName}</CardTag>
@@ -200,21 +218,11 @@ export function CampaignScreen() {
         </CardSection>
       ) : showLaunch ? (
         <CardSection label="Запуск">
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">
-              {status === "paused"
-                ? "Кампания остановлена. Возобновите её, чтобы снова подключить провайдеров."
-                : "Запустите кампанию — провайдеры начнут подключаться после оплаты."}
-            </p>
-            <Button
-              onClick={launch}
-              disabled={!canLaunch}
-              className="gap-2 self-start"
-            >
-              <Play className="h-4 w-4" />
-              Запустить
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {status === "paused"
+              ? "Кампания остановлена. Возобновите её, чтобы снова подключить провайдеров."
+              : "Запустите кампанию — провайдеры начнут подключаться после оплаты."}
+          </p>
         </CardSection>
       ) : null}
 
