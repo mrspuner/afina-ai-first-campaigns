@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildAccountInterestSeed,
+  buildInterestDirectory,
   moveSuggestionToActive,
 } from "./account-interests";
 import type { AccountSettings } from "@/types/account-settings";
@@ -81,5 +82,21 @@ describe("moveSuggestionToActive", () => {
     });
     const next = moveSuggestionToActive(settings, "mortgage");
     expect(next.companyName).toBe("Acme");
+  });
+});
+
+describe("buildInterestDirectory", () => {
+  it("returns direction interests as {id,label}, excluding already-active ids", () => {
+    const dir = buildInterestDirectory("banking", ["credit"]);
+    const ids = dir.map((d) => d.id);
+    expect(ids).not.toContain("credit"); // активный исключён
+    expect(ids).toContain("mortgage"); // из banking-набора
+    expect(
+      dir.every((d) => typeof d.label === "string" && d.label.length > 0),
+    ).toBe(true);
+  });
+
+  it("returns empty list for null direction", () => {
+    expect(buildInterestDirectory(null, [])).toEqual([]);
   });
 });

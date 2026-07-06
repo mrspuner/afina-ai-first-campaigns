@@ -452,23 +452,26 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
             onSkip={chat.closeTemplateDrawer}
           />
         )}
-        <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
-          <ChipEditableInput
-            ref={editorRef}
-            className="px-3 py-2"
-            placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
-            onTagSwap={parkPreviousIfNeeded}
-            captureGlobalTyping={captureGlobalTyping}
-          />
-          <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputButton tooltip="Голосовой ввод">
-                <Mic className="h-4 w-4" />
-              </PromptInputButton>
-            </PromptInputTools>
-            <PromptInputSubmit />
-          </PromptInputFooter>
-        </PromptInput>
+        {/* data-onboarding — цель точечной подсветки онбординга (спека #5). */}
+        <div data-onboarding="prompt-input">
+          <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
+            <ChipEditableInput
+              ref={editorRef}
+              className="px-3 py-2"
+              placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
+              onTagSwap={parkPreviousIfNeeded}
+              captureGlobalTyping={captureGlobalTyping}
+            />
+            <PromptInputFooter>
+              <PromptInputTools>
+                <PromptInputButton tooltip="Голосовой ввод">
+                  <Mic className="h-4 w-4" />
+                </PromptInputButton>
+              </PromptInputTools>
+              <PromptInputSubmit />
+            </PromptInputFooter>
+          </PromptInput>
+        </div>
         <SuggestionBar resolution={resolution} onPick={handlePickSuggestion} />
       </>
     );

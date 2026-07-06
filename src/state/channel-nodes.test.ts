@@ -25,15 +25,18 @@ describe("CHANNEL_NODE_MAP", () => {
 });
 
 describe("buildChannelBlock", () => {
-  it("creates split-channels-merge for multiple channels", () => {
-    const { nodes, edges } = buildChannelBlock(["sms", "email"], "comm1");
+  it("creates split→channels with NO merge for multiple channels", () => {
+    const { nodes, edges, exitIds } = buildChannelBlock(["sms", "email"], "comm1");
     const ids = nodes.map((n) => n.id);
     expect(ids).toContain("comm1_split");
     expect(ids).toContain("comm1_sms");
     expect(ids).toContain("comm1_email");
-    expect(ids).toContain("comm1_merge");
-    // split→sms, split→email, sms→merge, email→merge
-    expect(edges.length).toBe(4);
+    // Слияние удалено — каналы становятся выходами блока.
+    expect(ids).not.toContain("comm1_merge");
+    // split→sms, split→email only
+    expect(edges.length).toBe(2);
+    // each channel node is an exit
+    expect(exitIds).toEqual(["comm1_sms", "comm1_email"]);
   });
 
   it("creates single node (no split/merge) for one channel", () => {
@@ -54,9 +57,9 @@ describe("buildChannelBlock", () => {
     expect(ids).toContain("comm3_email");
     expect(ids).toContain("comm3_push");
     expect(ids).toContain("comm3_ivr");
-    expect(ids).toContain("comm3_merge");
-    // split→4 channels + 4 channels→merge = 8 edges
-    expect(edges.length).toBe(8);
+    expect(ids).not.toContain("comm3_merge");
+    // split→4 channels only = 4 edges
+    expect(edges.length).toBe(4);
   });
 
   it("node IDs are deterministic and prefixed", () => {
@@ -90,12 +93,15 @@ describe("buildCommUnit", () => {
     expect(types.filter((t) => t === "condition").length).toBe(2);
   });
 
-  it("includes split/merge for multiple channels", () => {
-    const { nodes } = buildCommUnit(["sms", "email"], { prefix: "unit2", onEngaged: "success", onExhausted: "end" });
+  it("includes split (no merge) for multiple channels", () => {
+    const { nodes, edges } = buildCommUnit(["sms", "email"], { prefix: "unit2", onEngaged: "success", onExhausted: "end" });
     const types = nodes.map((n) => n.data.nodeType);
     expect(types).toContain("split");
-    expect(types).toContain("merge");
+    expect(types).not.toContain("merge");
     expect(types.filter((t) => t === "condition").length).toBe(2);
+    // both channel nodes converge directly into the first condition
+    const intoCond1 = edges.filter((e) => e.target === "unit2_cond").map((e) => e.source).sort();
+    expect(intoCond1).toEqual(["unit2_email", "unit2_sms"]);
   });
 
   it("has two channel blocks (original + repeat)", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
@@ -33,6 +33,7 @@ import { CampaignPaymentScreen } from "@/sections/campaigns/campaign-payment-scr
 import { CampaignScreen } from "@/sections/campaigns/campaign-screen";
 import { StatisticsSection } from "@/sections/statistics/statistics-section";
 import { SettingsSection } from "@/sections/settings/settings-section";
+import { SettingsEmptyState } from "@/sections/settings/settings-empty-state";
 import { DevPanel } from "@/components/dev/dev-panel";
 import { useSeedFromWindow } from "@/components/dev/use-seed-from-window";
 
@@ -63,13 +64,26 @@ function BottomBarSlot() {
 
 export default function Home() {
   const state = useAppState();
-  const { view, launchFlyoutOpen } = state;
+  const { view, launchFlyoutOpen, surveyStatus } = state;
   const dispatch = useAppDispatch();
+
+  // #11: первый вход в «Настройки» показывает пустое состояние; опрос
+  // запускается только по кнопке (не авто).
+  const [settingsSurveyStarted, setSettingsSurveyStarted] = useState(false);
 
   // Dev/test-only: apply a Playwright-injected state seed (no-op in production).
   useSeedFromWindow(dispatch);
 
-  const isFullscreen = view.kind === "survey";
+  // Спека #3 — первый вход в «Настройки» (анкета ещё не пройдена) монтирует тот
+  // же канонический Survey вместо настроек. Тот же fullscreen-режим, что и у
+  // обычного входа в анкету.
+  const settingsSurvey =
+    view.kind === "section" &&
+    view.name === "Настройки" &&
+    surveyStatus !== "completed";
+
+  const isFullscreen =
+    view.kind === "survey" || (settingsSurvey && settingsSurveyStarted);
 
   // Routing key for the renderMain animation.
   const viewKey = view.kind;
@@ -82,7 +96,7 @@ export default function Home() {
       return (
         <SurveySection
           withOnboardingScreens
-          onComplete={() => { /* start_campaign_flow routes the user from here */ }}
+          onComplete={() => dispatch({ type: "start_campaign_flow" })}
         />
       );
     }
@@ -95,7 +109,27 @@ export default function Home() {
       if (view.name === "Статистика") return <StatisticsSection />;
       if (view.name === "Кампании") return <CampaignsSection />;
       if (view.name === "Артефакты") return <ArtifactsSection />;
-      if (view.name === "Настройки") return <SettingsSection />;
+      if (view.name === "Настройки") {
+        // Первый вход (анкета не пройдена): пустое состояние с подводкой; опрос
+        // стартует по кнопке. По завершении surveyStatus → "completed" →
+        // перерисовка покажет заполненные настройки.
+        if (settingsSurvey) {
+          if (!settingsSurveyStarted) {
+            return (
+              <SettingsEmptyState
+                onStart={() => setSettingsSurveyStarted(true)}
+              />
+            );
+          }
+          return (
+            <SurveySection
+              withOnboardingScreens
+              onComplete={() => setSettingsSurveyStarted(false)}
+            />
+          );
+        }
+        return <SettingsSection />;
+      }
     }
     return null;
   }

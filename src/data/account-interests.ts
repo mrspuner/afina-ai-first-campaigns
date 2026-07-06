@@ -68,3 +68,23 @@ export function moveActiveToSuggestion(
       : [...settings.suggestedInterests, picked],
   };
 }
+
+/**
+ * Справочник интересов для комбобокса «Добавить интерес» (спека #6): интересы,
+ * релевантные направлению компании, минус уже активные. Контролируемый набор —
+ * произвольные интересы не вводятся (маппятся на триггеры).
+ */
+export function buildInterestDirectory(
+  directionId: DirectionId | null,
+  activeIds: string[]
+): { id: string; label: string }[] {
+  if (!directionId) return [];
+  const active = new Set(activeIds);
+  const out: { id: string; label: string }[] = [];
+  for (const id of getInterestsForDirection(directionId)) {
+    if (active.has(id)) continue;
+    const interest = getInterestById(id);
+    if (interest) out.push({ id: interest.id, label: interest.label });
+  }
+  return out;
+}
