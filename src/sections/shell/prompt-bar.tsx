@@ -91,7 +91,7 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
               aria-hidden
               className="shrink-0"
             />
-            Афина ИИ
+            афина ИИ
           </span>
           <button
             type="button"

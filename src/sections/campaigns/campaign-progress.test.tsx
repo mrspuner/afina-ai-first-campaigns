@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import {
+  CampaignProgress,
   campaignProgressStages,
   currentStageLabel,
   stageStatus,
@@ -139,5 +141,18 @@ describe("providerSignalsPerDay / connectedSignalsPerDay — deterministic estim
       providerSignalsPerDay("cmp_1", ids[0]) + providerSignalsPerDay("cmp_1", ids[1]);
     expect(connectedSignalsPerDay("cmp_1", ids)).toBe(expected);
     expect(connectedSignalsPerDay("cmp_1", [])).toBe(0);
+  });
+});
+
+describe("CampaignProgress — providers persist after the connection stage (#8)", () => {
+  it("keeps provider names visible under the completed process stage", () => {
+    // Streaming + completed ⇒ the «Обработка и коммуникация» (process) stage is
+    // `done`; providers must remain visible (in the settled/collapsed form),
+    // not vanish along with the live connection list.
+    const c = campaign({ sourceType: "stream", status: "completed" });
+    render(<CampaignProgress campaign={c} defaultExpanded />);
+    for (const p of PROVIDERS) {
+      expect(screen.getByText(p.name)).toBeInTheDocument();
+    }
   });
 });

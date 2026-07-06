@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { nanoid } from "nanoid";
 import { BarChart3, Copy, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/entity-card";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
+import { copyCachedGraph } from "./workflow-graph-cache";
 import { CampaignProgress } from "./campaign-progress";
 import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
 import { CampaignStatsBlock } from "./campaign-stats-block";
@@ -122,7 +124,14 @@ export function CampaignScreen() {
 
   const duplicateAction: EntityCardAction = {
     label: "Дублировать",
-    onClick: () => dispatch({ type: "campaign_duplicated", id: campaign.id }),
+    onClick: () => {
+      // Pre-generate the copy's id so we can carry the original's exact,
+      // edited graph from the module cache (#10 — «один в один»), not just a
+      // scenario-template rebuild. The reducer honours the passed newId.
+      const newId = `cmp_${nanoid(6)}`;
+      copyCachedGraph(campaign.id, newId);
+      dispatch({ type: "campaign_duplicated", id: campaign.id, newId });
+    },
     icon: <Copy className="h-4 w-4" />,
   };
 

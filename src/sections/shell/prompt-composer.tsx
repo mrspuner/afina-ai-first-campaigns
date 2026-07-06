@@ -43,6 +43,7 @@ import { useScopeReset } from "@/state/use-scope-reset";
 import { cn } from "@/lib/utils";
 import { SuggestionBar } from "./suggestion-bar";
 import { useChatSubmit } from "./use-chat-submit";
+import { isNodeQuestion } from "./node-prompt-intent";
 import { VariantPicker } from "./variant-picker";
 import { useTemplateFlow } from "./use-template-flow";
 
@@ -99,7 +100,7 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
     const welcomeChat = useWelcomeChat();
     const chipsApi = usePromptChips();
     const { drafts, parkDraft, removeDraft, clearQueue } = useDraftQueue();
-    const { submit: chatSubmit } = useChatSubmit();
+    const { submit: chatSubmit, aiAvailable } = useChatSubmit();
     const templateFlow = useTemplateFlow();
     const { textInput } = usePromptInputController();
 
@@ -360,6 +361,21 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
             : undefined,
           text: s.text,
         }));
+
+      // #7 гибрид: когда LLM НЕДОСТУПЕН (офлайн-прототип), вопрос ПО ноде не
+      // должен применяться как правка — отдаём его в чат-пайплайн
+      // (информационный ответ), а не в node-command. Онлайн этот детектор не
+      // участвует: node-command идёт к оркестратору, и намерение решает LLM.
+      if (
+        !aiAvailable &&
+        structural.ops.length === 0 &&
+        nodeCommands.length > 0 &&
+        nodeCommands.every((c) => isNodeQuestion(c.text))
+      ) {
+        chatSubmit({ text: rawText, segments });
+        resetEditor();
+        return;
+      }
 
       if (nodeCommands.length > 0) {
         for (const s of segments) {

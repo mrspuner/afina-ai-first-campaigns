@@ -131,12 +131,14 @@ export function NodeTemplateSelect({
                     }}
                     className="flex items-center justify-between gap-2"
                   >
-                    <span className="truncate">{t.name}</span>
+                    {/* #6 — min-w-0 позволяет длинному названию усекаться, а не
+                        выталкивать закреплённый глазик за границу узкой выпадашки. */}
+                    <span className="min-w-0 truncate">{t.name}</span>
                     <button
                       type="button"
                       aria-label="Предпросмотр"
                       title="Предпросмотр"
-                      className="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground"
+                      className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                       onClick={(e) => {
                         // Не выбираем шаблон и не закрываем попап — только превью.
                         e.stopPropagation();

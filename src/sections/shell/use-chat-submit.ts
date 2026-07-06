@@ -50,7 +50,11 @@ const READ_ONLY_WORKFLOW_REPLY =
   "и ноды снова можно будет править.";
 
 /** Общий обработчик сабмита чата — используется и collapsed-баром, и drawer. */
-export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void } {
+export function useChatSubmit(): {
+  submit: (payload: ChatSubmitPayload) => void;
+  /** LLM-парсер реально доступен (для гибрида #7: офлайн-fallback различения намерения). */
+  aiAvailable: boolean;
+} {
   const chat = useChat();
   const triggerEdit = useTriggerEdit();
   const appState = useAppState();
@@ -436,5 +440,6 @@ export function useChatSubmit(): { submit: (payload: ChatSubmitPayload) => void 
     })();
   }
 
-  return { submit };
+  const aiAvailable = isAiParserEnabled() && assistAvailable;
+  return { submit, aiAvailable };
 }

@@ -467,27 +467,48 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   (t.content as Record<string, unknown>)[paramKey] === current
               );
               return (
-                <NodeTemplateSelect
-                  key={row.label}
-                  label={row.label}
-                  templates={opts}
-                  selectedName={selected?.name ?? ""}
-                  isDirty={isDirty}
-                  readOnly={readOnly}
-                  onSelect={(t) => {
-                    // Применяем компонент шаблона в params ноды (path-1 модели):
-                    // нода реально несёт текст шаблона через существующий reducer.
-                    const next = (t.content as Record<string, unknown>)[paramKey];
-                    applyFieldValue(
-                      paramKey,
-                      typeof next === "string" ? next : t.name
-                    );
-                  }}
-                  onPreview={(templateId) => openTemplatePreview(templateId)}
-                  onCreate={() => {
-                    if (channel) openTemplateCreate(channel);
-                  }}
-                />
+                // #6 — постоянный глазик превью рядом с полем «Шаблон» для ВСЕХ
+                // каналов (по образцу IVR): виден при выбранном шаблоне и открывает
+                // предпросмотр, не раскрывая селект. Работает и в read-only (осмотр
+                // запущенной кампании).
+                <div key={row.label} className="flex items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <NodeTemplateSelect
+                      label={row.label}
+                      templates={opts}
+                      selectedName={selected?.name ?? ""}
+                      isDirty={isDirty}
+                      readOnly={readOnly}
+                      onSelect={(t) => {
+                        // Применяем компонент шаблона в params ноды (path-1 модели):
+                        // нода реально несёт текст шаблона через существующий reducer.
+                        const next = (t.content as Record<string, unknown>)[paramKey];
+                        applyFieldValue(
+                          paramKey,
+                          typeof next === "string" ? next : t.name
+                        );
+                      }}
+                      onPreview={(templateId) => openTemplatePreview(templateId)}
+                      onCreate={() => {
+                        if (channel) openTemplateCreate(channel);
+                      }}
+                    />
+                  </div>
+                  {selected && (
+                    <button
+                      type="button"
+                      aria-label="Предпросмотр"
+                      title="Предпросмотр"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTemplatePreview(selected.id);
+                      }}
+                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             }
 
@@ -531,7 +552,7 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                         e.stopPropagation();
                         openTemplatePreview(ivrNodePreviewTemplate(id, ivrParams));
                       }}
-                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>
