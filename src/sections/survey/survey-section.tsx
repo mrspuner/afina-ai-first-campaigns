@@ -153,6 +153,7 @@ export function SurveySection({
             className="flex w-full justify-center"
           >
             <OnboardingReviewScreen
+              survey={phase.survey}
               onContinue={handleReviewContinue}
               onBack={handleReviewBack}
             />
