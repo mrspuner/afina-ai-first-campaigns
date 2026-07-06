@@ -53,6 +53,7 @@ export function buildSystemPrompt(context: AssistContext): string {
     ...(context.selectedNode
       ? [
           `Выбрана нода: [${context.selectedNode.id}] "${context.selectedNode.label}" (${context.selectedNode.nodeType}). ` +
+            `Сам определи намерение: если пользователь СПРАШИВАЕТ о ноде (как работает, что делает, почему так, какой шаблон) — отвечай через answer и НЕ меняй граф; правь граф только на явный запрос изменения. ` +
             `Текст и заголовок коммуникационных нод задаются ШАБЛОНОМ через интерфейс, а не правкой полей через чат — на вопрос о тексте отвечай (answer), не предлагай node-params.`,
         ]
       : []),
