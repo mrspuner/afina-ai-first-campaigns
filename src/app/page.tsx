@@ -9,6 +9,7 @@ import { TriggerEditRegistryProvider } from "@/state/trigger-edit-context";
 import { DraftQueueProvider } from "@/state/draft-queue-context";
 import { ChatPanel } from "@/sections/shell/chat-panel";
 import { ChatDrawer } from "@/sections/shell/chat-drawer";
+import { ScoringDrawer } from "@/sections/shell/scoring-drawer";
 import { EmailEditorPanel } from "@/sections/campaigns/email-editor-panel";
 import { TemplatePreviewDrawer } from "@/sections/campaigns/template-preview-drawer";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
@@ -196,6 +197,7 @@ export default function Home() {
               )}
             </AnimatePresence>
             <ChatDrawer placeholder="Введите ваши параметры или задайте вопрос" />
+            <ScoringDrawer />
             <EmailEditorPanel />
             <TemplatePreviewDrawer />
             <DevPanel />

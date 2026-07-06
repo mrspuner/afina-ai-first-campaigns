@@ -12,9 +12,11 @@ import {
   type PromptComposerHandle,
 } from "./prompt-composer";
 import { DraftQueueList } from "./draft-queue-list";
-import { ScoringInterestsPanel } from "./scoring-interests-panel";
 
 const SIDEBAR_WIDTH_PX = 420;
+// Скоринг-дровер (второй уровень «Интересы и триггеры») шире общего чата;
+// см. scoring-drawer.tsx. chat-drawer — единый владелец --chat-sidebar-width.
+const SCORING_DRAWER_WIDTH_PX = 480;
 
 function EmptyHistory() {
   return (
@@ -37,21 +39,27 @@ export function ChatDrawer({ placeholder }: { placeholder: string }) {
   // Когда открыт редактор письма (A5), дровер встаёт на левую границу
   // предпросмотра, а канвас резервирует справа сумму обеих ширин.
   const emailPreviewOpen = chat.emailEditor.open;
+  // Интересы/триггеры скоринга открываются отдельным дровером (scoring-drawer),
+  // а не внутри чата — тогда общий ИИ-чат не показываем.
+  const scoringOpen = chat.scoringDrawer.open;
 
   useLayoutEffect(() => {
     const root = document.documentElement;
     const reserved =
-      (isSidebar ? SIDEBAR_WIDTH_PX : 0) +
-      (emailPreviewOpen ? EMAIL_PREVIEW_WIDTH_PX : 0);
+      (scoringOpen
+        ? SCORING_DRAWER_WIDTH_PX
+        : isSidebar
+          ? SIDEBAR_WIDTH_PX
+          : 0) + (emailPreviewOpen ? EMAIL_PREVIEW_WIDTH_PX : 0);
     root.style.setProperty("--chat-sidebar-width", `${reserved}px`);
     return () => {
       root.style.removeProperty("--chat-sidebar-width");
     };
-  }, [isSidebar, emailPreviewOpen]);
+  }, [isSidebar, scoringOpen, emailPreviewOpen]);
 
   return (
     <AnimatePresence>
-      {isSidebar && (
+      {isSidebar && !scoringOpen && (
         <motion.aside
           key="chat-drawer"
           data-testid="chat-drawer"
@@ -67,27 +75,18 @@ export function ChatDrawer({ placeholder }: { placeholder: string }) {
             onOpenSidebar={chat.openSidebar}
             onCloseSidebar={chat.closeSidebar}
           />
-          {chat.scoringDrawer.open ? (
-            // Scoring node «Интересы и триггеры»: the sidebar hosts the shared
-            // interests/triggers editor above its composer (which serves the
-            // «Настроить триггер» AI bar) — no bare drawer, no second composer.
-            <ScoringInterestsPanel />
+          <DraftQueueList
+            variant="drawer"
+            onTakeDraft={(draft) => composerRef.current?.loadDraft(draft)}
+          />
+          {chat.messages.length === 0 ? (
+            <EmptyHistory />
           ) : (
-            <>
-              <DraftQueueList
-                variant="drawer"
-                onTakeDraft={(draft) => composerRef.current?.loadDraft(draft)}
-              />
-              {chat.messages.length === 0 ? (
-                <EmptyHistory />
-              ) : (
-                <ChatHistoryList messages={chat.messages} />
-              )}
-            </>
+            <ChatHistoryList messages={chat.messages} />
           )}
           <PromptComposer
             ref={composerRef}
-            placeholder={chat.scoringDrawer.open ? "Настроить триггер…" : placeholder}
+            placeholder={placeholder}
             inputClassName={DRAWER_INPUT_CLASS}
           />
         </motion.aside>
