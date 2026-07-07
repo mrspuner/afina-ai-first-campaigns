@@ -43,13 +43,16 @@ function formatRub(value: number): string {
 interface CampaignStatsBlockProps {
   campaign: Campaign;
   artifact?: Artifact;
+  /** false → метрики отправок/кликов/действий/CR пустые («—») до коммуникации. */
+  populated?: boolean;
 }
 
-export function CampaignStatsBlock({ campaign, artifact }: CampaignStatsBlockProps) {
+export function CampaignStatsBlock({ campaign, artifact, populated = true }: CampaignStatsBlockProps) {
   const stats = buildCampaignStats(campaign, artifact);
   if (!stats) return null;
 
   const isDegenerate = (campaign.channels?.length ?? 0) === 0;
+  const dash = "—";
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,18 +64,18 @@ export function CampaignStatsBlock({ campaign, artifact }: CampaignStatsBlockPro
         <>
           {/* Compact funnel: отправки → клики → действия → одобрения */}
           <div className="grid grid-cols-4 gap-2">
-            <Metric label="Отправки" value={formatNumber(stats.sends)} />
+            <Metric label="Отправки" value={populated ? formatNumber(stats.sends) : dash} />
             <Metric
               label="Клики"
-              value={formatNumber(Math.round(stats.sends * 0.18))}
+              value={populated ? formatNumber(Math.round(stats.sends * 0.18)) : dash}
             />
             <Metric
               label="Действия"
-              value={formatNumber(Math.round(stats.sends * 0.07))}
+              value={populated ? formatNumber(Math.round(stats.sends * 0.07)) : dash}
             />
             <Metric
               label="CR"
-              value={`${stats.crPct.toFixed(1)}%`}
+              value={populated ? `${stats.crPct.toFixed(1)}%` : dash}
             />
           </div>
         </>

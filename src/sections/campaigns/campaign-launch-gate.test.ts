@@ -1,32 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canLaunchCampaign, canLaunchWithGraph, isCollecting } from "./campaign-launch-gate";
+import { canLaunchCampaign, canLaunchWithGraph } from "./campaign-launch-gate";
 import { createBaseNodes, createBaseEdges } from "@/types/workflow";
 import type { WorkflowNode } from "@/types/workflow";
 
-describe("isCollecting", () => {
-  it("new draft still scoring → collecting", () => {
-    expect(isCollecting({ status: "draft", sourceType: "new", phase: "scoring" })).toBe(true);
-  });
-  it("new draft with phase omitted defaults to scoring → collecting", () => {
-    expect(isCollecting({ status: "draft", sourceType: "new" })).toBe(true);
-  });
-  it("new draft finished collecting (communicating) → not collecting", () => {
-    expect(isCollecting({ status: "draft", sourceType: "new", phase: "communicating" })).toBe(false);
-  });
-  it("stream draft → not collecting", () => {
-    expect(isCollecting({ status: "draft", sourceType: "stream" })).toBe(false);
-  });
-  it("own draft → not collecting", () => {
-    expect(isCollecting({ status: "draft", sourceType: "own" })).toBe(false);
-  });
-  it("active campaign → not collecting", () => {
-    expect(isCollecting({ status: "active", sourceType: "new", phase: "scoring" })).toBe(false);
-  });
-});
-
 describe("canLaunchCampaign", () => {
-  it("new draft + scoring → cannot launch", () => {
-    expect(canLaunchCampaign({ status: "draft", sourceType: "new", phase: "scoring" })).toBe(false);
+  it("new draft + scoring → can launch (pre-launch collecting removed; graph gate handles readiness)", () => {
+    expect(canLaunchCampaign({ status: "draft", sourceType: "new", phase: "scoring" })).toBe(true);
   });
   it("new draft + communicating → can launch", () => {
     expect(canLaunchCampaign({ status: "draft", sourceType: "new", phase: "communicating" })).toBe(true);

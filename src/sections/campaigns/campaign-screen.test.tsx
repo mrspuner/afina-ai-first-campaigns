@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
 import {
   AppStateProvider,
@@ -87,7 +87,7 @@ describe("CampaignScreen — #25 «Статус кампании» block removed
 });
 
 describe("CampaignScreen — «Прогресс кампании» canonical progress row", () => {
-  it("shows a collapsed «Прогресс» row whose summary is the current stage; providers are hidden until expanded", () => {
+  it("shows the «Прогресс» stepper expanded by default with the current stage + providers", () => {
     renderCampaign(
       baseCampaign({
         id: "cmp_comm",
@@ -100,15 +100,15 @@ describe("CampaignScreen — «Прогресс кампании» canonical pro
     );
     // The row is present…
     expect(screen.getByText("Прогресс")).toBeInTheDocument();
-    // …its collapsed summary is the current stage (comms started)…
-    expect(screen.getByText("Коммуникация по сигналам")).toBeInTheDocument();
+    // …its current stage (comms started) — в summary И в развёрнутом степпере…
+    expect(screen.getAllByText("Коммуникация по сигналам").length).toBeGreaterThan(0);
     // …the retired ad-hoc «Провайдеры данных» section is gone…
     expect(screen.queryByText("Провайдеры данных")).not.toBeInTheDocument();
-    // …and providers are not rendered while collapsed.
-    expect(screen.queryByText("Билайн")).not.toBeInTheDocument();
+    // …и раскрыто по умолчанию — провайдеры («Обработка базы» done → settled) видны.
+    expect(screen.getByText("Билайн")).toBeInTheDocument();
   });
 
-  it("streaming: current stage «Обработка и коммуникация» reveals providers + a Суммарно line when expanded", () => {
+  it("streaming: current «Обработка и коммуникация» reveals providers + Суммарно (expanded by default)", () => {
     renderCampaign(
       baseCampaign({
         id: "cmp_stream",
@@ -118,17 +118,16 @@ describe("CampaignScreen — «Прогресс кампании» canonical pro
         launchedAt: "2026-06-02T00:00:00.000Z",
       }),
     );
-    expect(screen.getByText("Обработка и коммуникация")).toBeInTheDocument();
-    // Expand the progress stepper.
-    fireEvent.click(screen.getByRole("button", { name: /Прогресс/ }));
-    // Providers render under the current processing stage, initially pending…
+    // Лейбл этапа — в summary и в степпере.
+    expect(screen.getAllByText("Обработка и коммуникация").length).toBeGreaterThan(0);
+    // Раскрыто по умолчанию → live-провайдеры под текущим этапом, initially pending…
     expect(screen.getByText("Билайн")).toBeInTheDocument();
     expect(screen.getAllByText("ожидание подключения").length).toBeGreaterThan(0);
-    // …and streaming shows the running per-day summary line.
+    // …и streaming показывает суммарную строку сигналов/день.
     expect(screen.getByText("Суммарно")).toBeInTheDocument();
   });
 
-  it("no-comm non-streaming: the stepper omits «Коммуникация по сигналам»", () => {
+  it("no-comm non-streaming: the stepper omits «Коммуникация по сигналам» (expanded by default)", () => {
     renderCampaign(
       baseCampaign({
         id: "cmp_nocomm",
@@ -139,9 +138,46 @@ describe("CampaignScreen — «Прогресс кампании» canonical pro
         launchedAt: "2026-06-02T00:00:00.000Z",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /Прогресс/ }));
     // «Кампания завершена» is the terminal stage (also echoed in the summary).
     expect(screen.getAllByText("Кампания завершена").length).toBeGreaterThan(0);
     expect(screen.queryByText("Коммуникация по сигналам")).not.toBeInTheDocument();
+  });
+});
+
+describe("CampaignScreen — артефакт скрыт до порога коммуникации (пост-лонч)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("свеже-запущенная (phase scoring) — артефакт скрыт до порога коммуникации", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:10.000Z")); // +10с (< 46с)
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_fresh",
+        status: "active",
+        sourceType: "new",
+        channels: ["sms"],
+        phase: "scoring",
+        launchedAt: "2026-06-01T00:00:00.000Z",
+      }),
+    );
+    expect(screen.queryByText("Артефакты")).not.toBeInTheDocument();
+  });
+});
+
+describe("CampaignScreen — статистика пустая (—) до коммуникации", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("статистика пустая (—) до коммуникации", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:10.000Z")); // scoring, < 46с
+    renderCampaign(baseCampaign({
+      id: "cmp_stat", status: "active", sourceType: "new", channels: ["sms"],
+      phase: "scoring", launchedAt: "2026-06-01T00:00:00.000Z",
+    }));
+    // "Статистика" matches both the secondary-action button and the
+    // CardSection label — use getAllByText like the other multi-match
+    // assertions in this file.
+    expect(screen.getAllByText("Статистика").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
