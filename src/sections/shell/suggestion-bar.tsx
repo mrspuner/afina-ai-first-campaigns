@@ -39,7 +39,10 @@ export function SuggestionBar({ resolution, onPick }: SuggestionBarProps) {
           exit={{ opacity: 0, y: -4 }}
           transition={ZONE_TRANSITION}
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            data-onboarding="prompt-suggestions"
+            className="flex flex-wrap items-center gap-2"
+          >
             {resolution.items.map((item, i) => (
               <motion.div
                 key={item.id}

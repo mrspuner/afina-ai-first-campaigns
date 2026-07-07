@@ -43,6 +43,7 @@ import { useScopeReset } from "@/state/use-scope-reset";
 import { cn } from "@/lib/utils";
 import { SuggestionBar } from "./suggestion-bar";
 import { useChatSubmit } from "./use-chat-submit";
+import { isNodeQuestion } from "./node-prompt-intent";
 import { VariantPicker } from "./variant-picker";
 import { useTemplateFlow } from "./use-template-flow";
 
@@ -99,7 +100,7 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
     const welcomeChat = useWelcomeChat();
     const chipsApi = usePromptChips();
     const { drafts, parkDraft, removeDraft, clearQueue } = useDraftQueue();
-    const { submit: chatSubmit } = useChatSubmit();
+    const { submit: chatSubmit, aiAvailable } = useChatSubmit();
     const templateFlow = useTemplateFlow();
     const { textInput } = usePromptInputController();
 
@@ -361,6 +362,24 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
           text: s.text,
         }));
 
+      // #7 гибрид маршрутизации теговой команды по ноде:
+      // - ОНЛАЙН (LLM доступен): отдаём ввод оркестратору — он САМ решает
+      //   намерение (answer на вопрос / node-params на изменение). Инструменты
+      //   и контекст selectedNode у него есть, runner применяет node-params.
+      //   Раньше теговый ввод всегда шёл в regex-путь (deriveParamsPatch) мимо
+      //   LLM — поэтому онлайн вопрос обрабатывался как правка.
+      // - ОФЛАЙН (LLM нет): вопрос → информационный ответ (regex-детектор),
+      //   изменение → deriveParamsPatch (workflow_node_command_submit ниже).
+      if (nodeCommands.length > 0 && structural.ops.length === 0) {
+        const toOrchestrator =
+          aiAvailable || nodeCommands.every((c) => isNodeQuestion(c.text));
+        if (toOrchestrator) {
+          chatSubmit({ text: rawText, segments });
+          resetEditor();
+          return;
+        }
+      }
+
       if (nodeCommands.length > 0) {
         for (const s of segments) {
           if (s.chip.kind === "node" && s.text.length > 0) {
@@ -452,23 +471,26 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
             onSkip={chat.closeTemplateDrawer}
           />
         )}
-        <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
-          <ChipEditableInput
-            ref={editorRef}
-            className="px-3 py-2"
-            placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
-            onTagSwap={parkPreviousIfNeeded}
-            captureGlobalTyping={captureGlobalTyping}
-          />
-          <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputButton tooltip="Голосовой ввод">
-                <Mic className="h-4 w-4" />
-              </PromptInputButton>
-            </PromptInputTools>
-            <PromptInputSubmit />
-          </PromptInputFooter>
-        </PromptInput>
+        {/* data-onboarding — цель точечной подсветки онбординга (спека #5). */}
+        <div data-onboarding="prompt-input">
+          <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
+            <ChipEditableInput
+              ref={editorRef}
+              className="px-3 py-2"
+              placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
+              onTagSwap={parkPreviousIfNeeded}
+              captureGlobalTyping={captureGlobalTyping}
+            />
+            <PromptInputFooter>
+              <PromptInputTools>
+                <PromptInputButton tooltip="Голосовой ввод">
+                  <Mic className="h-4 w-4" />
+                </PromptInputButton>
+              </PromptInputTools>
+              <PromptInputSubmit />
+            </PromptInputFooter>
+          </PromptInput>
+        </div>
         <SuggestionBar resolution={resolution} onPick={handlePickSuggestion} />
       </>
     );

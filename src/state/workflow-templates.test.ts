@@ -7,6 +7,7 @@ import {
 } from "./workflow-templates";
 import { validateWorkflow } from "./workflow-validation";
 import type { SignalType } from "./app-state";
+import type { Channel } from "@/types/campaign";
 
 const SIGNAL_TYPES: SignalType[] = [
   "Регистрация",
@@ -234,13 +235,14 @@ describe("source-aware generation (A3)", () => {
 });
 
 describe("channel-aware template generation", () => {
-  it("createTemplate with channels=[sms,email] has split, sms, email, merge nodes for Регистрация", () => {
+  it("createTemplate with channels=[sms,email] has split, sms, email and NO merge for Регистрация", () => {
     const t = createTemplate("Регистрация", "own", ["sms", "email"]);
     const types = t.nodes.map((n) => n.data.nodeType);
     expect(types).toContain("split");
     expect(types).toContain("sms");
     expect(types).toContain("email");
-    expect(types).toContain("merge");
+    // Слияние удалено — ветки каналов сходятся напрямую в следующую ноду.
+    expect(types).not.toContain("merge");
   });
 
   it("createTemplate with single channel has no split/merge but has condition", () => {
@@ -264,28 +266,29 @@ describe("channel-aware template generation", () => {
     expect(pushCount).toBe(2);
   });
 
-  it("createTemplate with channels starts needs-attention (шаблоны не выбраны), затем валиден", () => {
+  it("createTemplate with channels авто-заполняет шаблоны → валиден сразу (#2 магия)", () => {
     const t = createTemplate("Регистрация", "own", ["sms", "email"]);
-    // Комм-ноды создаются пустыми → needs-attention → блок запуска, пока не
-    // выбран шаблон.
-    const v = validateWorkflow(t, true);
-    expect(v.ok).toBe(false);
-    expect(v.errors).toContain("needs-attention");
+    // Комм-ноды авто-заполняются шаблонами («магия» #2), поэтому граф валиден
+    // сразу — запуск не блокируется незаполненным текстом.
+    expect(validateWorkflow(t, true).ok).toBe(true);
 
-    // Заполняем комм-ноды (пользователь выбрал шаблоны) → граф валиден.
-    const filled = {
+    // А если пользователь ОЧИСТИТ текст комм-нод — это неблокирующее
+    // предупреждение (needs-attention → warning), запуск всё равно разрешён.
+    const cleared = {
       ...t,
       nodes: t.nodes.map((n) => {
         if (n.data.params?.kind === "sms") {
-          return { ...n, data: { ...n.data, params: { ...n.data.params, text: "Привет" } } };
+          return { ...n, data: { ...n.data, params: { ...n.data.params, text: "" } } };
         }
         if (n.data.params?.kind === "email") {
-          return { ...n, data: { ...n.data, params: { ...n.data.params, subject: "Тема", body: "Текст" } } };
+          return { ...n, data: { ...n.data, params: { ...n.data.params, subject: "", body: "" } } };
         }
         return n;
       }),
     };
-    expect(validateWorkflow(filled, true).ok).toBe(true);
+    const v = validateWorkflow(cleared, true);
+    expect(v.ok).toBe(true);
+    expect(v.warnings).toContain("needs-attention");
   });
 
   it("createTemplate without channels falls back to legacy template", () => {
@@ -298,15 +301,35 @@ describe("channel-aware template generation", () => {
     expect(types).not.toContain("condition");
   });
 
-  it("segmented scenario Апсейл with channels has comm units for non-lowest segments", () => {
+  it("segmented scenario Апсейл with channels has comm units and NO merge", () => {
     const t = createTemplate("Апсейл", "own", ["sms", "email"]);
     const types = t.nodes.map((n) => n.data.nodeType);
-    // Must have split (by segment) and merge
+    // Must have split (by segment); Слияние удалено.
     expect(types).toContain("split");
-    expect(types).toContain("merge");
+    expect(types).not.toContain("merge");
     // Must have conditions (from comm units)
     const condCount = types.filter((t) => t === "condition").length;
     expect(condCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("no built graph contains a merge node (all channel counts, all scenarios)", () => {
+    const channelSets: Channel[][] = [["sms"], ["sms", "email"], ["sms", "email", "push", "ivr"]];
+    for (const s of SIGNAL_TYPES) {
+      for (const chs of channelSets) {
+        const t = createTemplate(s, "new", chs);
+        expect(t.nodes.some((n) => n.data.nodeType === "merge"), `${s}/${chs.join("+")}`).toBe(false);
+      }
+    }
+  });
+
+  it("legacy Регистрация has no orphan node (every non-entry node has an incoming edge)", () => {
+    const t = TEMPLATE_BY_TYPE["Регистрация"]();
+    const entryId = t.nodes[0].id; // signal/source entry
+    const targeted = new Set(t.edges.map((e) => e.target));
+    for (const node of t.nodes) {
+      if (node.id === entryId) continue;
+      expect(targeted.has(node.id), `orphan node: ${node.id}`).toBe(true);
+    }
   });
 
   it("all ids are unique when channels are provided", () => {

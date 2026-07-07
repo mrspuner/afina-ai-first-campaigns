@@ -577,6 +577,75 @@ describe("appReducer — campaign_duplicated", () => {
     const next = appReducer(state, { type: "campaign_duplicated", id: "cmp_missing" });
     expect(next).toBe(state);
   });
+
+  it("copies every graph-driving field onto the copy (1-to-1 workflow, #10)", () => {
+    const original = makeCampaign({
+      id: "cmp_orig",
+      name: "Апсейл",
+      status: "active",
+      sourceType: "new",
+      channels: ["sms", "email"],
+      interests: ["Кредитование", "Ипотека"],
+      triggers: ["trg_1"],
+      budget: 50_000,
+      dailyBudget: 5_000,
+      templateIds: ["tpl_a", "tpl_b"],
+      scenario: { id: "base-upsell", name: "Апсейл" },
+    });
+    const state: AppState = { ...initialState, campaigns: [original] };
+    const dup = appReducer(state, { type: "campaign_duplicated", id: "cmp_orig" })
+      .campaigns[1];
+    expect(dup.sourceType).toBe("new");
+    expect(dup.channels).toEqual(["sms", "email"]);
+    expect(dup.interests).toEqual(["Кредитование", "Ипотека"]);
+    expect(dup.triggers).toEqual(["trg_1"]);
+    expect(dup.budget).toBe(50_000);
+    expect(dup.dailyBudget).toBe(5_000);
+    expect(dup.templateIds).toEqual(["tpl_a", "tpl_b"]);
+    expect(dup.scenario).toEqual({ id: "base-upsell", name: "Апсейл" });
+  });
+
+  it("deep-copies collections so editing the copy never mutates the original", () => {
+    const original = makeCampaign({
+      id: "cmp_orig",
+      channels: ["sms"],
+      interests: ["Кредитование"],
+      scenario: { id: "s", name: "S" },
+    });
+    const state: AppState = { ...initialState, campaigns: [original] };
+    const dup = appReducer(state, { type: "campaign_duplicated", id: "cmp_orig" })
+      .campaigns[1];
+    expect(dup.channels).not.toBe(original.channels);
+    expect(dup.interests).not.toBe(original.interests);
+    expect(dup.scenario).not.toBe(original.scenario);
+  });
+
+  it("sheds launch/pause/complete stamps — the copy is a fresh draft", () => {
+    const original = makeCampaign({
+      id: "cmp_orig",
+      status: "completed",
+      launchedAt: "2026-05-01T00:00:00.000Z",
+      pausedAt: "2026-05-02T00:00:00.000Z",
+      completedAt: "2026-05-03T00:00:00.000Z",
+    });
+    const state: AppState = { ...initialState, campaigns: [original] };
+    const dup = appReducer(state, { type: "campaign_duplicated", id: "cmp_orig" })
+      .campaigns[1];
+    expect(dup.launchedAt).toBeUndefined();
+    expect(dup.pausedAt).toBeUndefined();
+    expect(dup.completedAt).toBeUndefined();
+  });
+
+  it("uses the provided newId (deterministic duplication for cache-copy wiring)", () => {
+    const original = makeCampaign({ id: "cmp_orig" });
+    const state: AppState = { ...initialState, campaigns: [original] };
+    const dup = appReducer(state, {
+      type: "campaign_duplicated",
+      id: "cmp_orig",
+      newId: "cmp_fixed",
+    }).campaigns[1];
+    expect(dup.id).toBe("cmp_fixed");
+  });
 });
 
 describe("appReducer — goto_stats with campaignId", () => {

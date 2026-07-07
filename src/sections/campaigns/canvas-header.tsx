@@ -175,6 +175,46 @@ export function CanvasHeader({
 
   const scenarioLine = campaign.scenario?.name ?? "Сценарий не выбран";
 
+  // #4 — группа статус-кнопок (Запустить / Приостановить / Возобновить) живёт
+  // рядом с названием, а не в дальнем правом углу шапки. Логика доступности
+  // («Запустить» заблокирован до готовности + причина в тултипе) сохранена.
+  const statusActions = (
+    <>
+      {campaign.status === "draft" && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                className={cn(
+                  canLaunch === false ? "cursor-not-allowed" : undefined
+                )}
+              />
+            }
+          >
+            <Button onClick={onLaunch} disabled={canLaunch === false}>
+              Запустить
+            </Button>
+          </TooltipTrigger>
+          {canLaunch === false && launchBlockReason && (
+            <TooltipContent>{launchBlockReason}</TooltipContent>
+          )}
+        </Tooltip>
+      )}
+      {campaign.status === "active" && (
+        <Button
+          variant="outline"
+          className="text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+          onClick={() => setConfirm("pause")}
+        >
+          Приостановить
+        </Button>
+      )}
+      {campaign.status === "paused" && (
+        <Button onClick={onResume}>Возобновить</Button>
+      )}
+    </>
+  );
+
   return (
     <div
       className="sticky top-0 z-20 border-b border-border bg-background/90 py-3 pl-6 backdrop-blur transition-[padding] duration-300"
@@ -198,6 +238,7 @@ export function CanvasHeader({
             </Button>
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-3">
           {editing ? (
             <Input
               ref={inputRef}
@@ -222,6 +263,8 @@ export function CanvasHeader({
               <Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
             </button>
           )}
+          {statusActions}
+          </div>
           {isReadOnly ? (
             <p className="text-xs uppercase tracking-widest text-muted-foreground">
               Просмотр workflow
@@ -270,38 +313,6 @@ export function CanvasHeader({
                 <Image src="/mascot-icon.svg" width={16} height={16} alt="" aria-hidden />
               </button>
             </div>
-          )}
-          {campaign.status === "draft" && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    className={cn(
-                      canLaunch === false ? "cursor-not-allowed" : undefined
-                    )}
-                  />
-                }
-              >
-                <Button onClick={onLaunch} disabled={canLaunch === false}>
-                  Запустить
-                </Button>
-              </TooltipTrigger>
-              {canLaunch === false && launchBlockReason && (
-                <TooltipContent>{launchBlockReason}</TooltipContent>
-              )}
-            </Tooltip>
-          )}
-          {campaign.status === "active" && (
-            <Button
-              variant="outline"
-              className="text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-              onClick={() => setConfirm("pause")}
-            >
-              Приостановить
-            </Button>
-          )}
-          {campaign.status === "paused" && (
-            <Button onClick={onResume}>Возобновить</Button>
           )}
         </div>
       </div>

@@ -209,16 +209,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return state.mode === "sidebar" ? state : { ...state, mode: "sidebar" };
     }
     case "close_sidebar": {
-      // Closing the sidebar also drops any content mode it was hosting (the
-      // scoring «Интересы и триггеры» editor) so it doesn't resurface next time
-      // the sidebar opens for plain chat.
-      if (state.mode === "collapsed" && !state.scoringDrawer.open) return state;
-      return { ...state, mode: "collapsed", scoringDrawer: INITIAL_SCORING_DRAWER };
+      // Слой «Интересы и триггеры» независим от ИИ-дровера (см.
+      // open_scoring_drawer) — закрытие сайдбара его НЕ трогает; он
+      // закрывается своим крестиком через close_scoring_drawer.
+      if (state.mode === "collapsed") return state;
+      return { ...state, mode: "collapsed" };
     }
     case "open_scoring_drawer": {
+      // НЕ трогаем mode: слой «Интересы и триггеры» независим от ИИ-дровера/
+      // нижнего бара — они остаются на своих местах (два независимых слоя).
       return {
         ...state,
-        mode: "sidebar",
         scoringDrawer: {
           open: true,
           editable: action.editable,
@@ -230,7 +231,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "close_scoring_drawer": {
       return {
         ...state,
-        mode: "collapsed",
         scoringDrawer: INITIAL_SCORING_DRAWER,
       };
     }

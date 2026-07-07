@@ -321,7 +321,8 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
   // Единый источник шаблонов (правка 9) — тот же массив, что карточки Артефактов.
   const { templates } = useAppState();
   // Реальный шов блока 6: создание/предпросмотр шаблонов через чат-дровер.
-  const { openTemplateCreate, openTemplatePreview } = useChat();
+  // openSidebar — открыть дровер ИИ для полей сплиттера (спека #1).
+  const { openTemplateCreate, openTemplatePreview, openSidebar } = useChat();
   // Launched/paused/completed campaigns: the card opens for inspection only —
   // every field stays read-only regardless of its manual/ai editability.
   const readOnly = useWorkflowReadOnly();
@@ -357,6 +358,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
     });
   }
 
+  // Сплиттер (спека #1): клик по полю «По»/«Ветки» не только кладёт тег поля в
+  // композер, но и открывает дровер ИИ — там пользователь описывает ветвление
+  // (сколько веток, по какому признаку, куда ведёт новая, что удалить).
+  function handleSplitAiField(field: "По" | "Ветки") {
+    handleAiField(field);
+    openSidebar();
+  }
+
   return (
     <div className="flex flex-col gap-2 text-left">
       {data.attentionReason && (
@@ -371,16 +380,15 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
 
       <div className="text-[10px] text-muted-foreground/50">id: {id}</div>
 
-      {/* A6 — сплиттер: поля «По»/«Ветки» рендерятся селектами (не из общего
-          цикла), т.к. «Ветки» зависят от типа разделения и категорий сигнала. */}
+      {/* Сплиттер (спека #1): поля «По»/«Ветки» — ИИ-редактирование. Клик по
+          строке кладёт тег поля в композер и открывает дровер ИИ (не селект). */}
       {data.params?.kind === "split" && (
         <div className="flex flex-col gap-0.5">
           <SplitFields
-            nodeId={id}
             params={data.params}
             dirtyParams={data.dirtyParams}
             readOnly={readOnly}
-            onAiHandoff={() => handleAiField("По")}
+            onAiHandoff={handleSplitAiField}
           />
         </div>
       )}
@@ -459,27 +467,48 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   (t.content as Record<string, unknown>)[paramKey] === current
               );
               return (
-                <NodeTemplateSelect
-                  key={row.label}
-                  label={row.label}
-                  templates={opts}
-                  selectedName={selected?.name ?? ""}
-                  isDirty={isDirty}
-                  readOnly={readOnly}
-                  onSelect={(t) => {
-                    // Применяем компонент шаблона в params ноды (path-1 модели):
-                    // нода реально несёт текст шаблона через существующий reducer.
-                    const next = (t.content as Record<string, unknown>)[paramKey];
-                    applyFieldValue(
-                      paramKey,
-                      typeof next === "string" ? next : t.name
-                    );
-                  }}
-                  onPreview={(templateId) => openTemplatePreview(templateId)}
-                  onCreate={() => {
-                    if (channel) openTemplateCreate(channel);
-                  }}
-                />
+                // #6 — постоянный глазик превью рядом с полем «Шаблон» для ВСЕХ
+                // каналов (по образцу IVR): виден при выбранном шаблоне и открывает
+                // предпросмотр, не раскрывая селект. Работает и в read-only (осмотр
+                // запущенной кампании).
+                <div key={row.label} className="flex items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <NodeTemplateSelect
+                      label={row.label}
+                      templates={opts}
+                      selectedName={selected?.name ?? ""}
+                      isDirty={isDirty}
+                      readOnly={readOnly}
+                      onSelect={(t) => {
+                        // Применяем компонент шаблона в params ноды (path-1 модели):
+                        // нода реально несёт текст шаблона через существующий reducer.
+                        const next = (t.content as Record<string, unknown>)[paramKey];
+                        applyFieldValue(
+                          paramKey,
+                          typeof next === "string" ? next : t.name
+                        );
+                      }}
+                      onPreview={(templateId) => openTemplatePreview(templateId)}
+                      onCreate={() => {
+                        if (channel) openTemplateCreate(channel);
+                      }}
+                    />
+                  </div>
+                  {selected && (
+                    <button
+                      type="button"
+                      aria-label="Предпросмотр"
+                      title="Предпросмотр"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTemplatePreview(selected.id);
+                      }}
+                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             }
 
@@ -497,6 +526,11 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
+              // IVR — превью сценария звонка из КАЖДОГО варианта выпадашки (тот
+              // же IvrRenderer/дровер, что и «глаз» рядом с полем). Для прочих
+              // combo-полей (sms «Время», condition/wait) превью не нужно.
+              const ivrForPreview =
+                data.params?.kind === "ivr" ? data.params : undefined;
               const combo = (
                 <NodeFieldCombobox
                   label={row.label}
@@ -505,6 +539,17 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   isDirty={isDirty}
                   onSelect={(next) => applyFieldValue(paramKey, next)}
                   onAiHandoff={() => handleAiField(row.label)}
+                  onPreview={
+                    ivrForPreview
+                      ? (opt) =>
+                          openTemplatePreview(
+                            ivrNodePreviewTemplate(id, {
+                              ...ivrForPreview,
+                              scenario: opt,
+                            }),
+                          )
+                      : undefined
+                  }
                 />
               );
               // IVR «Текст» — рядом с полем «глаз»: предпросмотр СЦЕНАРИЯ ноды в
@@ -523,7 +568,7 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                         e.stopPropagation();
                         openTemplatePreview(ivrNodePreviewTemplate(id, ivrParams));
                       }}
-                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
+                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>

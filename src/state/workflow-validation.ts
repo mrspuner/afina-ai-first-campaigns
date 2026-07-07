@@ -49,7 +49,11 @@ export type WorkflowValidationError =
 
 export interface WorkflowValidation {
   ok: boolean;
+  /** Blocking issues — gate the «Запустить» button. */
   errors: WorkflowValidationError[];
+  /** Non-blocking issues — surfaced as a soft «проверьте текст» highlight but
+   *  do NOT gate launch (#2). */
+  warnings: WorkflowValidationError[];
 }
 
 export function validateWorkflow(
@@ -57,11 +61,15 @@ export function validateWorkflow(
   signalBound: boolean
 ): WorkflowValidation {
   const errors: WorkflowValidationError[] = [];
+  const warnings: WorkflowValidationError[] = [];
 
   if (!signalBound) errors.push("no-signal");
 
+  // #2 — «требует внимания» (пустой обязательный текст) больше НЕ блокирует
+  // запуск: это мягкое предупреждение (нода остаётся подсвеченной «проверьте
+  // текст»), кампанию можно запустить с непроверенными текстами.
   if (graph.nodes.some((n) => nodeNeedsAttention(n))) {
-    errors.push("needs-attention");
+    warnings.push("needs-attention");
   }
 
   const successIds = graph.nodes
@@ -92,5 +100,5 @@ export function validateWorkflow(
     if (!reachable) errors.push("no-success-path");
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, warnings };
 }

@@ -148,3 +148,18 @@ const FALLBACK_DOMAINS: string[] = [
 export function getTriggerDomains(triggerId: TriggerId): string[] {
   return TRIGGER_DOMAINS[triggerId] ?? FALLBACK_DOMAINS;
 }
+
+/**
+ * Плоский, дедуплицированный и отсортированный список всех доменов из
+ * TRIGGER_DOMAINS — подсказки для комбобокса «Добавить» в блок-листе доменов
+ * (спека #10). Формат {id,label} — под DirectoryEntry.
+ */
+export function knownTriggerDomains(): { id: string; label: string }[] {
+  const seen = new Set<string>();
+  for (const domains of Object.values(TRIGGER_DOMAINS)) {
+    for (const d of domains) seen.add(d);
+  }
+  return [...seen]
+    .sort((a, b) => a.localeCompare(b))
+    .map((d) => ({ id: d, label: d }));
+}

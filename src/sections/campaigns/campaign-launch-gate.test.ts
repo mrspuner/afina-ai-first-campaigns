@@ -66,10 +66,13 @@ describe("canLaunchWithGraph", () => {
     expect(canLaunchWithGraph(draftStream, graph)).toBe(true);
   });
 
-  it("нода с пустым шаблоном (needs-attention) → запуск заблокирован", () => {
+  it("нода с пустым шаблоном (needs-attention) → запуск НЕ блокируется (#2 — мягкое предупреждение)", () => {
     const graph = { nodes: createBaseNodes("сигнал_test.json"), edges: createBaseEdges() };
     graph.nodes.push(emptySms);
-    expect(canLaunchWithGraph(draftStream, graph)).toBe(false);
+    // #2: пустой текст комм-ноды — неблокирующее предупреждение (validateWorkflow
+    // выносит needs-attention в warnings), запуск разрешён. Реальные структурные
+    // гейты (no-signal / no-success-path) по-прежнему блокируют.
+    expect(canLaunchWithGraph(draftStream, graph)).toBe(true);
   });
 
   it("статус-гейт закрыт (active) → блокируем даже при валидном графе", () => {

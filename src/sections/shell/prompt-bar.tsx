@@ -73,6 +73,8 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
     <div className="fixed left-[120px] right-0 bottom-5 z-30 flex justify-center px-6">
       <div
         ref={cardRef}
+        // data-onboarding: цель дыры-затемнения онбординга на весь блок (спека #5).
+        data-onboarding="prompt-block"
         className={cn(
           "flex w-full max-w-[720px] flex-col gap-2 rounded-[16px] p-3",
           "bg-[rgba(10,10,10,0.75)] shadow-[0_0_17px_9px_rgba(0,0,0,0.19)] backdrop-blur-[2px]",
@@ -89,12 +91,13 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
               aria-hidden
               className="shrink-0"
             />
-            Афина ИИ
+            афина ИИ
           </span>
           <button
             type="button"
             onClick={onOpenDrawer}
             aria-label="Открыть в drawer"
+            data-onboarding="prompt-panel"
             className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
           >
             <PanelRightOpen className="h-4 w-4" />

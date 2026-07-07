@@ -43,7 +43,10 @@ export function EmailEditorPanel() {
     };
   }, [open]);
 
-  function handleSave() {
+  // #7 — «Сохранить» убрана: изменения письма применяются к ноде автоматически
+  // при закрытии редактора (и записываются в справочник писем). Read-only —
+  // просто закрываемся, ничего не применяя.
+  function applyToNode() {
     if (!draft || !nodeId) return;
     // Письмо в справочник: обновляем существующее (по id) или создаём новое.
     const saved = addEmail({
@@ -67,6 +70,10 @@ export function EmailEditorPanel() {
         emailId: saved.id,
       } as Partial<NodeParams>,
     });
+  }
+
+  function handleClose() {
+    if (!readOnly) applyToNode();
     chat.closeEmailEditor();
   }
 
@@ -99,7 +106,7 @@ export function EmailEditorPanel() {
             <button
               type="button"
               aria-label="Закрыть"
-              onClick={() => chat.closeEmailEditor()}
+              onClick={handleClose}
               className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
             >
               <X className="size-4" />
@@ -133,22 +140,24 @@ export function EmailEditorPanel() {
             />
           </div>
 
-          {/* Низ: Сохранить / Закрыть */}
+          {/* #7 — «Сохранить» убрана. Read-only → «Закрыть» (ghost); в режиме
+              правки → «Готово» (акцент): применяет изменения к ноде и закрывает. */}
           <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-4">
-            <button
-              type="button"
-              onClick={() => chat.closeEmailEditor()}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-            >
-              Закрыть
-            </button>
-            {!readOnly && (
+            {readOnly ? (
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={handleClose}
+                className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              >
+                Закрыть
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleClose}
                 className="rounded-lg bg-[#FFEC00] px-4 py-2 text-sm font-medium text-black transition-opacity hover:opacity-90"
               >
-                Сохранить
+                Готово
               </button>
             )}
           </div>

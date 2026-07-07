@@ -5,6 +5,7 @@ import { Check, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rngFor, seededInt } from "@/state/metrics";
 import type { Campaign } from "@/state/app-state";
+import { PROVIDERS } from "@/data/providers";
 import { ProviderList } from "./provider-list";
 
 // ---------------------------------------------------------------------------
@@ -129,6 +130,38 @@ export function connectedSignalsPerDay(
 // Component — the expandable «Прогресс кампании» row + vertical stepper
 // ---------------------------------------------------------------------------
 
+/**
+ * Compact, settled provider strip shown once the connection/process stage is
+ * `done`. The live {@link ProviderList} unmounts, but the providers themselves
+ * stay visible «в свёрнутом виде» — a dot + name per provider, connected
+ * (emerald) or stuck (amber). Static and deterministic: no timers, no layout
+ * shift, mirrors the settled end-state of the live list.
+ */
+function SettledProviders() {
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+      {PROVIDERS.map((p) => {
+        const connected = p.connectAfterMs !== null;
+        return (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                connected ? "bg-emerald-500" : "bg-amber-500/70",
+              )}
+            />
+            {p.name}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function StatusIcon({ status }: { status: StageStatus }) {
   if (status === "done") {
     return (
@@ -197,7 +230,12 @@ export function CampaignProgress({
         <ol className="flex flex-col">
           {progress.stages.map((stage, i) => {
             const status = stageStatus(progress, i);
-            const showProviders = stage.id === "process" && status === "current";
+            const isProcess = stage.id === "process";
+            // While the process stage runs — the live connection list; once it
+            // completes the providers stay visible in a compact settled strip
+            // (#8: они не исчезают вместе с «итоговой строкой»).
+            const showLiveProviders = isProcess && status === "current";
+            const showSettledProviders = isProcess && status === "done";
             const isLast = i === progress.stages.length - 1;
             return (
               <li key={stage.id} className="flex gap-3">
@@ -229,7 +267,7 @@ export function CampaignProgress({
                     {stage.label}
                   </span>
 
-                  {showProviders && (
+                  {showLiveProviders && (
                     <div className="mt-2.5 rounded-lg border border-border/60 bg-background/40 px-3 py-1">
                       <ProviderList
                         campaignId={campaign.id}
@@ -237,6 +275,8 @@ export function CampaignProgress({
                       />
                     </div>
                   )}
+
+                  {showSettledProviders && <SettledProviders />}
                 </div>
               </li>
             );

@@ -12,7 +12,6 @@ import {
   type PromptComposerHandle,
 } from "./prompt-composer";
 import { DraftQueueList } from "./draft-queue-list";
-import { ScoringInterestsPanel } from "./scoring-interests-panel";
 
 const SIDEBAR_WIDTH_PX = 420;
 
@@ -67,27 +66,18 @@ export function ChatDrawer({ placeholder }: { placeholder: string }) {
             onOpenSidebar={chat.openSidebar}
             onCloseSidebar={chat.closeSidebar}
           />
-          {chat.scoringDrawer.open ? (
-            // Scoring node «Интересы и триггеры»: the sidebar hosts the shared
-            // interests/triggers editor above its composer (which serves the
-            // «Настроить триггер» AI bar) — no bare drawer, no second composer.
-            <ScoringInterestsPanel />
+          <DraftQueueList
+            variant="drawer"
+            onTakeDraft={(draft) => composerRef.current?.loadDraft(draft)}
+          />
+          {chat.messages.length === 0 ? (
+            <EmptyHistory />
           ) : (
-            <>
-              <DraftQueueList
-                variant="drawer"
-                onTakeDraft={(draft) => composerRef.current?.loadDraft(draft)}
-              />
-              {chat.messages.length === 0 ? (
-                <EmptyHistory />
-              ) : (
-                <ChatHistoryList messages={chat.messages} />
-              )}
-            </>
+            <ChatHistoryList messages={chat.messages} />
           )}
           <PromptComposer
             ref={composerRef}
-            placeholder={chat.scoringDrawer.open ? "Настроить триггер…" : placeholder}
+            placeholder={placeholder}
             inputClassName={DRAWER_INPUT_CLASS}
           />
         </motion.aside>
