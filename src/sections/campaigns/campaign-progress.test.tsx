@@ -7,6 +7,10 @@ import {
   stageStatus,
   providerSignalsPerDay,
   connectedSignalsPerDay,
+  campaignStageList,
+  campaignStageAt,
+  communicatingThresholdMs,
+  stageBoundariesMs,
 } from "./campaign-progress";
 import { PROVIDERS } from "@/data/providers";
 import type { Campaign } from "@/state/app-state";
@@ -154,5 +158,52 @@ describe("CampaignProgress — providers persist after the connection stage (#8)
     for (const p of PROVIDERS) {
       expect(screen.getByText(p.name)).toBeInTheDocument();
     }
+  });
+});
+
+describe("campaignStageAt — time-derived stage index", () => {
+  const nonStream = campaignStageList({
+    sourceType: "new", channels: ["sms"], phase: "scoring", status: "active",
+  });
+
+  it("walks send→verify→process→communicate by elapsed (non-stream)", () => {
+    expect(campaignStageAt(nonStream, 0)).toBe(0); // Отправка
+    expect(campaignStageAt(nonStream, 7999)).toBe(0);
+    expect(campaignStageAt(nonStream, 8000)).toBe(1); // Проверка
+    expect(campaignStageAt(nonStream, 15999)).toBe(1);
+    expect(campaignStageAt(nonStream, 16000)).toBe(2); // Обработка базы
+    expect(campaignStageAt(nonStream, 45999)).toBe(2);
+    expect(campaignStageAt(nonStream, 46000)).toBe(3); // Коммуникация (терминальный ongoing)
+    expect(campaignStageAt(nonStream, 999999)).toBe(3); // не доходит до «завершена»
+  });
+
+  it("completed (Infinity) → all stages done", () => {
+    expect(campaignStageAt(nonStream, Infinity)).toBe(nonStream.length);
+  });
+
+  it("stream: connect→process(terminal) by elapsed", () => {
+    const stream = campaignStageList({
+      sourceType: "stream", channels: [], phase: "scoring", status: "active",
+    });
+    expect(campaignStageAt(stream, 0)).toBe(0); // Подключение
+    expect(campaignStageAt(stream, 7999)).toBe(0);
+    expect(campaignStageAt(stream, 8000)).toBe(1); // Обработка и коммуникация (terminal)
+    expect(campaignStageAt(stream, 999999)).toBe(1);
+  });
+});
+
+describe("communicatingThresholdMs", () => {
+  it("non-stream = 46000, stream = 8000", () => {
+    const nonStream = campaignStageList({ sourceType: "new", channels: ["sms"], phase: "scoring", status: "active" });
+    const stream = campaignStageList({ sourceType: "stream", channels: [], phase: "scoring", status: "active" });
+    expect(communicatingThresholdMs(nonStream)).toBe(46000);
+    expect(communicatingThresholdMs(stream)).toBe(8000);
+  });
+});
+
+describe("stageBoundariesMs", () => {
+  it("non-stream boundaries = [8000, 16000, 46000]", () => {
+    const nonStream = campaignStageList({ sourceType: "new", channels: ["sms"], phase: "scoring", status: "active" });
+    expect(stageBoundariesMs(nonStream)).toEqual([8000, 16000, 46000]);
   });
 });
