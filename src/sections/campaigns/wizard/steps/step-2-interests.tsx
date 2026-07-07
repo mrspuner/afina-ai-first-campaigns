@@ -18,7 +18,7 @@ import { interestsScreenHints } from "./screen-hints";
  * «Продолжить» footer) and the co-located PromptBar hints. Keeping the editor
  * shared means the wizard and the drawer are visually + functionally identical.
  */
-export function Step2Interests({ data, onNext, active }: StepProps) {
+export function Step2Interests({ data, onNext, onBack, active }: StepProps) {
   // Mirror of the editor's current selection (LABELS), kept fresh via onChange
   // so the footer can gate «Продолжить» and `handleContinue` can serialize the
   // selection into StepData for downstream steps.
@@ -54,7 +54,7 @@ export function Step2Interests({ data, onNext, active }: StepProps) {
   return (
     <StepContent
       title="Какие интересы и триггеры вы ищете?"
-      subtitle="Мы уже сгенерили настройки под вас — выберите интересы и триггеры в любом порядке."
+      subtitle="Мы уже сгенерили настройки под вас — выберите интересы и триггеры в любом порядке. Если нужного нет в списке — напишите в поле чата."
     >
       <div className="flex flex-col gap-6">
         <InterestsTriggersEditor
@@ -66,9 +66,9 @@ export function Step2Interests({ data, onNext, active }: StepProps) {
         />
 
         <StepFooter
+          onBack={onBack}
           onContinue={handleContinue}
           continueDisabled={!canContinue}
-          hint="Если нужного нет в списке — напишите в поле чата"
         />
       </div>
     </StepContent>

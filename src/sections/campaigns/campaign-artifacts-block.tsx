@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { FileText } from "lucide-react";
 import type { Artifact } from "@/state/app-state";
 
@@ -24,6 +25,7 @@ export function CampaignArtifactsBlock({
   forming,
   onOpen,
 }: CampaignArtifactsBlockProps) {
+  const [expanded, setExpanded] = useState(false);
   if (artifacts.length === 0) {
     if (forming) {
       return (
@@ -48,7 +50,7 @@ export function CampaignArtifactsBlock({
         const bp = b.periodDate ?? "";
         return ap < bp ? 1 : ap > bp ? -1 : 0;
       });
-    const shown = dailies.slice(0, 3);
+    const shown = expanded ? dailies : dailies.slice(0, 5);
     return (
       <div className="flex flex-col">
         <button
@@ -76,10 +78,17 @@ export function CampaignArtifactsBlock({
             <span className="tabular-nums text-muted-foreground">{formatNumber(d.count)}</span>
           </button>
         ))}
-        {dailies.length > shown.length && (
-          <p className="border-t border-border/40 py-2.5 text-xs text-muted-foreground">
-            …ещё {dailies.length - shown.length} выжимок
-          </p>
+        {dailies.length > 5 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            className="border-t border-border/40 py-2.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {expanded ? "Свернуть" : `Показать все (${dailies.length})`}
+          </button>
         )}
       </div>
     );
