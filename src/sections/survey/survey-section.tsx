@@ -118,8 +118,11 @@ export function SurveySection({
           экраны центрируются (min-h-full + justify-center). Крестик — вне
           скролла (absolute на внешнем), остаётся на месте. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="flex min-h-full w-full flex-col items-center justify-center px-8 pb-16 pt-[120px]">
-          <AnimatePresence mode="wait">
+        <div className="flex min-h-full w-full flex-col px-8 pt-[120px]">
+          {/* my-auto: центрирует по вертикали когда коротко, схлопывается при
+              переполнении (justify-center «съедал» контент/отступ). */}
+          <div className="my-auto flex w-full justify-center">
+            <AnimatePresence mode="wait">
         {phase.kind === "form" && (
           <motion.div
             key="form"
@@ -195,7 +198,12 @@ export function SurveySection({
             />
           </motion.div>
         )}
-          </AnimatePresence>
+            </AnimatePresence>
+          </div>
+          {/* Нижний отступ спейсером: padding-bottom флекс-контейнера
+              игнорируется при переполнении (Chrome/Safari), а реальный
+              элемент с высотой попадает в scrollHeight. */}
+          <div aria-hidden className="h-40 shrink-0" />
         </div>
       </div>
     </div>
