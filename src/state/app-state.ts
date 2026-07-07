@@ -1075,25 +1075,11 @@ export function appReducer(state: AppState, action: Action): AppState {
         }
       }
 
-      // Signal collection now happens PRE-launch (new drafts run scoring on the
-      // campaign card before «Запустить» unlocks), so launch always transitions
-      // straight to communicating. Artifact is generated only if none exists yet
-      // (idempotent): own/stream get theirs here; new already produced its
-      // collected-signals artifact during pre-launch `campaign_phase_advanced`.
-      const phase: Campaign["phase"] = "communicating";
-      const alreadyHasArtifact = state.artifacts.some((a) => a.campaignId === c.id);
-      const makeArtifact = !alreadyHasArtifact && !isStreamingCampaign(c);
-      const launchMatched = estimateArtifactCount(c);
-      const newArtifacts: Artifact[] = makeArtifact
-        ? [{
-            id: `art_${nanoid(8)}`,
-            campaignId: c.id,
-            kind: artifactKindForCampaign(c),
-            count: launchMatched,
-            createdAt: action.timestamp,
-            variant: "single",
-          }]
-        : [];
+      // Последовательность прогресса теперь ПОСЛЕ запуска: стартуем в «scoring»
+      // (Отправка → Проверка → Обработка базы), а артефакт + переход в
+      // «communicating» ставит пост-лонч campaign_phase_advanced.
+      const phase: Campaign["phase"] = "scoring";
+      const newArtifacts: Artifact[] = [];
 
       return {
         ...state,
@@ -1112,9 +1098,10 @@ export function appReducer(state: AppState, action: Action): AppState {
               }
             : cc
         ),
-        notifications: makeArtifact
-          ? { ...state.notifications, signalsBadge: true }
-          : state.notifications,
+        // No artifact is generated at launch anymore (phase starts at
+        // "scoring"), so the signals badge is left untouched here — it is set
+        // by the post-launch `campaign_phase_advanced` once the artifact lands.
+        notifications: state.notifications,
         view: { kind: "campaign", campaign: { id: c.id, name: c.name } },
         activeSection: null,
       };
@@ -1125,7 +1112,10 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (!c) return state;
       const alreadyHasArtifact = state.artifacts.some((a) => a.campaignId === c.id);
       const advanceMatched = estimateArtifactCount(c);
-      const newArtifacts: Artifact[] = alreadyHasArtifact
+      // Stream campaigns collect via daily digests (`stream_digest_emitted`),
+      // not a single post-launch artifact — guard them out here.
+      const makeArtifact = !alreadyHasArtifact && !isStreamingCampaign(c);
+      const newArtifacts: Artifact[] = !makeArtifact
         ? []
         : [{
             id: `art_${nanoid(8)}`,

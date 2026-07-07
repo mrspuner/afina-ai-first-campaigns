@@ -472,6 +472,78 @@ describe("appReducer — launched campaign screen", () => {
   });
 });
 
+describe("campaign_launched → post-launch sequence", () => {
+  it("launch sets status active + phase scoring and creates NO artifact", () => {
+    const c = makeCampaign({
+      id: "cmp_A",
+      status: "draft",
+      sourceType: "own",
+      channels: ["sms"],
+    });
+    const state: AppState = { ...initialState, campaigns: [c] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_A",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      budget: 1000,
+    });
+    const updated = next.campaigns.find((x) => x.id === "cmp_A");
+    expect(updated?.status).toBe("active");
+    expect(updated?.phase).toBe("scoring");
+    expect(next.artifacts.filter((a) => a.campaignId === "cmp_A")).toHaveLength(0);
+  });
+
+  it("campaign_phase_advanced after launch moves to communicating and creates exactly 1 artifact (non-stream)", () => {
+    const c = makeCampaign({
+      id: "cmp_A",
+      status: "draft",
+      sourceType: "own",
+      channels: ["sms"],
+    });
+    const state: AppState = { ...initialState, campaigns: [c] };
+    const launched = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_A",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      budget: 1000,
+    });
+    const advanced = appReducer(launched, {
+      type: "campaign_phase_advanced",
+      id: "cmp_A",
+    });
+    const updated = advanced.campaigns.find((x) => x.id === "cmp_A");
+    expect(updated?.phase).toBe("communicating");
+    expect(advanced.artifacts.filter((a) => a.campaignId === "cmp_A")).toHaveLength(1);
+  });
+
+  it("campaign_phase_advanced after launch moves to communicating but creates NO 'single' artifact for stream", () => {
+    const c = makeCampaign({
+      id: "cmp_B",
+      status: "draft",
+      sourceType: "stream",
+      channels: [],
+    });
+    const state: AppState = { ...initialState, campaigns: [c] };
+    const launched = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_B",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      budget: 1000,
+    });
+    const advanced = appReducer(launched, {
+      type: "campaign_phase_advanced",
+      id: "cmp_B",
+    });
+    const updated = advanced.campaigns.find((x) => x.id === "cmp_B");
+    expect(updated?.phase).toBe("communicating");
+    expect(
+      advanced.artifacts.filter(
+        (a) => a.campaignId === "cmp_B" && a.variant === "single",
+      ),
+    ).toHaveLength(0);
+  });
+});
+
 describe("appReducer — paused transitions", () => {
   it("active → paused sets pausedAt and preserves launchedAt", () => {
     const state: AppState = {
