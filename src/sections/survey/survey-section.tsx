@@ -97,7 +97,7 @@ export function SurveySection({
   }
 
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <motion.div
         initial={{ opacity: 0, x: 8 }}
         animate={{ opacity: 1, x: 0 }}
@@ -117,7 +117,7 @@ export function SurveySection({
       {/* Скролл-контейнер: длинная форма (review) прокручивается; короткие
           экраны центрируются (min-h-full + justify-center). Крестик — вне
           скролла (absolute на внешнем), остаётся на месте. */}
-      <div className="flex flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex min-h-full w-full flex-col items-center justify-center px-8 pb-16 pt-[120px]">
           <AnimatePresence mode="wait">
         {phase.kind === "form" && (
