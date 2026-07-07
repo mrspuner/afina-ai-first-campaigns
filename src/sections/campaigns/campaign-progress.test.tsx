@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
   CampaignProgress,
@@ -158,6 +158,40 @@ describe("CampaignProgress — providers persist after the connection stage (#8)
     for (const p of PROVIDERS) {
       expect(screen.getByText(p.name)).toBeInTheDocument();
     }
+  });
+});
+
+describe("CampaignProgress — time-driven current stage (fresh launch)", () => {
+  const LAUNCH = "2026-06-01T00:00:00.000Z";
+  const fresh = () =>
+    campaign({
+      id: "cmp_fresh",
+      sourceType: "new",
+      channels: ["sms"],
+      phase: "scoring",
+      status: "active",
+      launchedAt: LAUNCH,
+    });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("~4с после запуска → текущий «Отправка провайдерам», live-провайдеры ещё не показаны", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:04.000Z"));
+    render(<CampaignProgress campaign={fresh()} defaultExpanded />);
+    // «Отправка провайдерам» — текущий (в summary + в степпере).
+    expect(screen.getAllByText("Отправка провайдерам").length).toBeGreaterThan(0);
+    // «Обработка базы» ещё pending → live ProviderList не отрендерен.
+    expect(screen.queryByText("Билайн")).not.toBeInTheDocument();
+  });
+
+  it("~20с после запуска → текущий «Обработка базы», live-провайдеры («Билайн») показаны", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:20.000Z"));
+    render(<CampaignProgress campaign={fresh()} defaultExpanded />);
+    // «Обработка базы» — текущий этап (в summary + в степпере).
+    expect(screen.getAllByText("Обработка базы").length).toBeGreaterThan(0);
+    // Текущий process-этап → live ProviderList виден.
+    expect(screen.getByText("Билайн")).toBeInTheDocument();
   });
 });
 
