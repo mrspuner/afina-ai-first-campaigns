@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 import { render, screen } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
@@ -141,5 +141,25 @@ describe("CampaignScreen — «Прогресс кампании» canonical pro
     // «Кампания завершена» is the terminal stage (also echoed in the summary).
     expect(screen.getAllByText("Кампания завершена").length).toBeGreaterThan(0);
     expect(screen.queryByText("Коммуникация по сигналам")).not.toBeInTheDocument();
+  });
+});
+
+describe("CampaignScreen — артефакт скрыт до порога коммуникации (пост-лонч)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("свеже-запущенная (phase scoring) — артефакт скрыт до порога коммуникации", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:10.000Z")); // +10с (< 46с)
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_fresh",
+        status: "active",
+        sourceType: "new",
+        channels: ["sms"],
+        phase: "scoring",
+        launchedAt: "2026-06-01T00:00:00.000Z",
+      }),
+    );
+    expect(screen.queryByText("Артефакты")).not.toBeInTheDocument();
   });
 });
