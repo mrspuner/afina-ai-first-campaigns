@@ -24,8 +24,10 @@ import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
 
 /** Prototype collection window (ms) before a `new` draft auto-advances
- *  from `scoring` to `communicating` (pre-launch signal collection). */
-const SCORING_WINDOW_MS = 8000;
+ *  from `scoring` to `communicating` (pre-launch signal collection). Держим
+ *  этап «Обработка базы» ~30с, чтобы успели «подключиться» провайдеры и был
+ *  виден процесс (см. connectAfterMs в providers.ts). */
+const SCORING_WINDOW_MS = 30000;
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -200,7 +202,7 @@ export function CampaignScreen() {
           текущим этапом обработки. Показывается, когда кампания в работе. */}
       {started && (
         <CardSection>
-          <CampaignProgress campaign={campaign} />
+          <CampaignProgress campaign={campaign} defaultExpanded />
         </CardSection>
       )}
 
