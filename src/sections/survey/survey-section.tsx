@@ -97,12 +97,12 @@ export function SurveySection({
   }
 
   return (
-    <div className="relative flex flex-1 items-center justify-center px-8 pb-16 pt-[120px]">
+    <div className="relative flex flex-1 flex-col">
       <motion.div
         initial={{ opacity: 0, x: 8 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.28, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
-        className="absolute right-6 top-6"
+        className="absolute right-6 top-6 z-10"
       >
         <Button
           variant="ghost"
@@ -114,7 +114,12 @@ export function SurveySection({
           <X className="h-4 w-4" />
         </Button>
       </motion.div>
-      <AnimatePresence mode="wait">
+      {/* Скролл-контейнер: длинная форма (review) прокручивается; короткие
+          экраны центрируются (min-h-full + justify-center). Крестик — вне
+          скролла (absolute на внешнем), остаётся на месте. */}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="flex min-h-full w-full flex-col items-center justify-center px-8 pb-16 pt-[120px]">
+          <AnimatePresence mode="wait">
         {phase.kind === "form" && (
           <motion.div
             key="form"
@@ -190,7 +195,9 @@ export function SurveySection({
             />
           </motion.div>
         )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }
