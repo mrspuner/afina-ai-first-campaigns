@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -40,6 +40,7 @@ export function NodeFieldCombobox({
   isDirty,
   onSelect,
   onAiHandoff,
+  onPreview,
 }: {
   label: string;
   value: string;
@@ -49,6 +50,9 @@ export function NodeFieldCombobox({
   onSelect: (next: string) => void;
   /** Передаёт поле ассистенту (тег + шаблон в PromptBar/дровер). */
   onAiHandoff: () => void;
+  /** Когда задан — у каждого варианта появляется «глаз» предпросмотра (не
+   *  выбирает вариант). Для IVR — предпросмотр сценария звонка. */
+  onPreview?: (option: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -140,8 +144,26 @@ export function NodeFieldCombobox({
                     value={opt}
                     data-checked={opt === value}
                     onSelect={() => apply(opt)}
+                    className={
+                      onPreview ? "flex items-center justify-between gap-2" : undefined
+                    }
                   >
-                    <span className="truncate">{opt}</span>
+                    <span className="min-w-0 truncate">{opt}</span>
+                    {onPreview && (
+                      <button
+                        type="button"
+                        aria-label="Предпросмотр"
+                        title="Предпросмотр"
+                        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                        onClick={(e) => {
+                          // Не выбираем вариант — только превью.
+                          e.stopPropagation();
+                          onPreview(opt);
+                        }}
+                      >
+                        <Eye aria-hidden className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>

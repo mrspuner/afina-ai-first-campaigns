@@ -526,6 +526,11 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
+              // IVR — превью сценария звонка из КАЖДОГО варианта выпадашки (тот
+              // же IvrRenderer/дровер, что и «глаз» рядом с полем). Для прочих
+              // combo-полей (sms «Время», condition/wait) превью не нужно.
+              const ivrForPreview =
+                data.params?.kind === "ivr" ? data.params : undefined;
               const combo = (
                 <NodeFieldCombobox
                   label={row.label}
@@ -534,6 +539,17 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   isDirty={isDirty}
                   onSelect={(next) => applyFieldValue(paramKey, next)}
                   onAiHandoff={() => handleAiField(row.label)}
+                  onPreview={
+                    ivrForPreview
+                      ? (opt) =>
+                          openTemplatePreview(
+                            ivrNodePreviewTemplate(id, {
+                              ...ivrForPreview,
+                              scenario: opt,
+                            }),
+                          )
+                      : undefined
+                  }
                 />
               );
               // IVR «Текст» — рядом с полем «глаз»: предпросмотр СЦЕНАРИЯ ноды в
