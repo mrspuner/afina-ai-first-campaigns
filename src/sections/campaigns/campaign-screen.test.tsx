@@ -163,3 +163,21 @@ describe("CampaignScreen — артефакт скрыт до порога ко�
     expect(screen.queryByText("Артефакты")).not.toBeInTheDocument();
   });
 });
+
+describe("CampaignScreen — статистика пустая (—) до коммуникации", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("статистика пустая (—) до коммуникации", () => {
+    vi.setSystemTime(new Date("2026-06-01T00:00:10.000Z")); // scoring, < 46с
+    renderCampaign(baseCampaign({
+      id: "cmp_stat", status: "active", sourceType: "new", channels: ["sms"],
+      phase: "scoring", launchedAt: "2026-06-01T00:00:00.000Z",
+    }));
+    // "Статистика" matches both the secondary-action button and the
+    // CardSection label — use getAllByText like the other multi-match
+    // assertions in this file.
+    expect(screen.getAllByText("Статистика").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+});

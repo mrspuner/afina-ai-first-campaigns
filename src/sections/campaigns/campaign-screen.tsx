@@ -235,7 +235,11 @@ export function CampaignScreen() {
       {/* Статистика — сводка в карточке (дополняет переход в полный отчёт) */}
       {hasStats && (
         <CardSection label="Статистика">
-          <CampaignStatsBlock campaign={campaign} artifact={campaignArtifact} />
+          <CampaignStatsBlock
+            campaign={campaign}
+            artifact={campaignArtifact}
+            populated={campaign.phase === "communicating" || isCompleted}
+          />
         </CardSection>
       )}
 
