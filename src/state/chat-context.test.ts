@@ -374,7 +374,7 @@ describe("chatReducer — scoringDrawer slice", () => {
     expect(s.scoringDrawer.nodeId).toBeNull();
   });
 
-  it("close_sidebar also drops the scoring content mode", () => {
+  it("close_sidebar НЕ трогает слой интересов (независимые слои)", () => {
     let s = chatReducer(empty, {
       type: "open_scoring_drawer",
       nodeId: "n_scoring",
@@ -382,7 +382,8 @@ describe("chatReducer — scoringDrawer slice", () => {
       editable: true,
     });
     s = chatReducer(s, { type: "close_sidebar" });
-    expect(s.mode).toBe("collapsed");
-    expect(s.scoringDrawer.open).toBe(false);
+    // Закрытие ИИ-дровера не должно закрывать слой «Интересы и триггеры».
+    expect(s.scoringDrawer.open).toBe(true);
+    expect(s.scoringDrawer.nodeId).toBe("n_scoring");
   });
 });
