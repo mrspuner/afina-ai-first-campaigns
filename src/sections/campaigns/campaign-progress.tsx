@@ -7,6 +7,7 @@ import { rngFor, seededInt } from "@/state/metrics";
 import type { Campaign } from "@/state/app-state";
 import { PROVIDERS } from "@/data/providers";
 import { ProviderList } from "./provider-list";
+import { useCampaignClock } from "@/hooks/use-campaign-clock";
 
 // ---------------------------------------------------------------------------
 // Stage model (pure) — the canonical «Прогресс кампании» sequence
@@ -262,7 +263,12 @@ export function CampaignProgress({
   defaultExpanded = false,
 }: CampaignProgressProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const progress = campaignProgressStages(campaign);
+  const elapsed = useCampaignClock(campaign);
+  const stages = campaignStageList(campaign);
+  const progress: CampaignProgress = {
+    stages,
+    currentIndex: campaignStageAt(stages, elapsed),
+  };
   const summary = currentStageLabel(progress);
   const streaming = campaign.sourceType === "stream";
 
