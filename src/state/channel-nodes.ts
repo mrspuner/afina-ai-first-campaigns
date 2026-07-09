@@ -114,7 +114,7 @@ export const CHANNEL_NODE_MAP: Record<Channel, ChannelNodeEntry> = {
   sms:   { label: CHANNEL_LABEL.sms,   defaultParams: channelDefaultParams("sms"),   color: CHANNEL_COLORS.sms   },
   email: { label: CHANNEL_LABEL.email, defaultParams: channelDefaultParams("email"), color: CHANNEL_COLORS.email },
   push:  { label: CHANNEL_LABEL.push,  defaultParams: channelDefaultParams("push"),  color: CHANNEL_COLORS.push  },
-  ivr:   { label: CHANNEL_LABEL.ivr,   defaultParams: channelDefaultParams("ivr"),   color: CHANNEL_COLORS.ivr   },
+  ivr:   { label: "IVR",   defaultParams: channelDefaultParams("ivr"),   color: CHANNEL_COLORS.ivr   },
 };
 
 // ── Node factory ─────────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
 
   const splitNode = makeNode(
     splitId,
-    "Сплиттер",
+    "Ветвление",
     "split",
     0,
     0,
@@ -305,7 +305,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
   const cond1X = ox + (channels.length > 1 ? STEP * 2 : STEP);
   const cond1 = makeNode(
     cond1Id,
-    "Условие",
+    "Взаимодействие",
     "condition",
     cond1X,
     oy,
@@ -341,7 +341,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
   const cond2X = repeatStartX + (channels.length > 1 ? STEP * 2 : STEP);
   const cond2 = makeNode(
     cond2Id,
-    "Условие",
+    "Взаимодействие",
     "condition",
     cond2X,
     waitY,
