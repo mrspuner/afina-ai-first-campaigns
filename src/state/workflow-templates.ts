@@ -560,6 +560,29 @@ function minimalTemplate(signalType: SignalType): Template {
   };
 }
 
+const STATISTICS_ID = "statistics";
+
+/**
+ * 12b — appends the single terminal «Статистика» sink: every `success`/`end`
+ * node fans into ONE `statistics` node (fan-in, not one-per-branch). No-op when
+ * the graph has no terminal or already has a statistics node. Positioned one
+ * STEP right of the rightmost node so the layout stays non-overlapping.
+ */
+export function withStatisticsSink(t: Template): Template {
+  if (t.nodes.some((nd) => nd.data.nodeType === "statistics")) return t;
+  const terminals = t.nodes.filter(
+    (nd) => nd.data.nodeType === "success" || nd.data.nodeType === "end",
+  );
+  if (terminals.length === 0) return t;
+  const maxX = t.nodes.reduce((m, nd) => Math.max(m, nd.position.x), 0);
+  const statsNode = n(
+    STATISTICS_ID, "Статистика", "statistics", maxX + STEP, 0,
+    undefined, undefined, { kind: "statistics" },
+  );
+  const statsEdges = terminals.map((term) => e(term.id, STATISTICS_ID));
+  return { nodes: [...t.nodes, statsNode], edges: [...t.edges, ...statsEdges] };
+}
+
 export function createTemplate(
   signalType: SignalType,
   sourceType: SourceType = "new",
@@ -586,7 +609,8 @@ export function createTemplate(
   // Graph root: Скоринг → Сигнал → Коммуникация (new/stream) or Сигнал →
   // Коммуникация (own). The standalone «Файл» entry node is folded into the
   // root — new/stream carry «Файлы» on the scoring node, own on the signal node.
-  return withSignalPath(base, sourceType);
+  // 12b — every success/end fans into a single terminal «Статистика» sink.
+  return withStatisticsSink(withSignalPath(base, sourceType));
 }
 
 /** Short human summary of the uploaded bases, e.g. «2 базы · ~14 000 строк». */
