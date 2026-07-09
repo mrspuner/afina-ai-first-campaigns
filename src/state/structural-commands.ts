@@ -277,6 +277,7 @@ const TYPE_LABEL: Record<WorkflowNodeType, string> = {
   signal: "Сигнал",
   success: "Успех",
   end: "Конец",
+  statistics: "Статистика",
   split: "Сплиттер",
   wait: "Задержка",
   condition: "Условие",

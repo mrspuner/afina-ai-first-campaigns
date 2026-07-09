@@ -25,6 +25,7 @@ export function nodeNeedsAttention(node: WorkflowNode): boolean {
     case "end":
     case "signal":
     case "scoring":
+    case "statistics":
       return false;
     default:
       return false;

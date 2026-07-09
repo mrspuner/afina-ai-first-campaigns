@@ -200,6 +200,7 @@ function fallbackParamsPatch(
     case "merge":
     case "signal":
     case "scoring":
+    case "statistics":
       return null;
   }
 }

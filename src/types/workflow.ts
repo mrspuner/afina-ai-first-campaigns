@@ -7,6 +7,7 @@ export type WorkflowNodeType =
   | "scoring"  // quality/segment selection (new/stream only)
   | "success"
   | "end"
+  | "statistics" // terminal sink — all success/end fan into it; click → goto_stats (12b)
   // Logic / Flow
   | "split"
   | "wait"
@@ -83,6 +84,9 @@ export type SplitParams = {
 
 export type MergeParams = { kind: "merge" };
 
+/** Terminal statistics sink — no params (footprint symmetric to the removed merge). */
+export type StatisticsParams = { kind: "statistics" };
+
 export type SignalParams = {
   kind: "signal";
   fileName: string;
@@ -129,7 +133,8 @@ export type EndParams = {
 export type NodeParams =
   | SmsParams | EmailParams | PushParams | IvrParams
   | WaitParams | ConditionParams | SplitParams | MergeParams
-  | SignalParams | ScoringParams | SuccessParams | EndParams;
+  | SignalParams | ScoringParams | SuccessParams | EndParams
+  | StatisticsParams;
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   label: string;
@@ -176,6 +181,7 @@ export const NODE_CATEGORY: Record<WorkflowNodeType, NodeCategory> = {
   scoring: "endpoint",
   success: "endpoint",
   end: "endpoint",
+  statistics: "endpoint",
   split: "logic",
   wait: "logic",
   condition: "logic",

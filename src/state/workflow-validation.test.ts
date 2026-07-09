@@ -105,6 +105,9 @@ describe("nodeNeedsAttention (per-kind required fields)", () => {
   it("never flags structural nodes (merge)", () => {
     expect(nodeNeedsAttention(paramNode("m", { kind: "merge" }))).toBe(false);
   });
+  it("never flags the statistics terminal", () => {
+    expect(nodeNeedsAttention(paramNode("stat", { kind: "statistics" }))).toBe(false);
+  });
 });
 
 describe("computeNeedsAttention", () => {
