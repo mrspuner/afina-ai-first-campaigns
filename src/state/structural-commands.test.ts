@@ -5,6 +5,7 @@ import {
   normalizeNodeRef,
   diffChangedNodeIds,
   relayoutGraph,
+  isDeletableNodeType,
 } from "./structural-commands";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
@@ -789,5 +790,48 @@ describe("applyOps — сценарий пользователя «замени 
     // success достижим (первая ветка подключена к нему через keepTarget)
     const reachableTargets = new Set(res.graph.edges.map((e) => e.target));
     expect(reachableTargets.has("ok")).toBe(true);
+  });
+});
+
+// ── Task 2: deletion contract (isDeletableNodeType + applyRemove guard) ────────
+
+describe("isDeletableNodeType (deletion contract for spec B)", () => {
+  it("marks channel/logic nodes deletable", () => {
+    for (const t of ["sms", "email", "push", "ivr", "wait", "split", "condition"] as const) {
+      expect(isDeletableNodeType(t)).toBe(true);
+    }
+  });
+  it("marks entry/terminal nodes non-deletable", () => {
+    for (const t of ["source", "signal", "scoring", "success", "end", "statistics"] as const) {
+      expect(isDeletableNodeType(t)).toBe(false);
+    }
+  });
+});
+
+describe("applyOps — remove guard covers scoring and statistics", () => {
+  function graphWith(node: WorkflowNode): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
+    const success: WorkflowNode = {
+      id: "success", type: "workflowNode", position: { x: 200, y: 0 },
+      data: { label: "Успех", nodeType: "success", isSuccess: true, params: { kind: "success", goal: "x" } },
+    };
+    return { nodes: [node, success], edges: [{ id: "e", source: node.id, target: "success", type: "default" }] };
+  }
+  it("refuses to remove the scoring node (entry point)", () => {
+    const g = graphWith({
+      id: "sc", type: "workflowNode", position: { x: 0, y: 0 },
+      data: { label: "Скоринг", nodeType: "scoring", params: { kind: "scoring", interests: [], triggers: [], files: [] } },
+    });
+    const r = applyOps(g, [{ kind: "remove", ref: "sc" }]);
+    expect(r.applied).toHaveLength(0);
+    expect(r.skipped[0].reason).toContain("точка входа");
+  });
+  it("refuses to remove the statistics terminal", () => {
+    const g = graphWith({
+      id: "stat", type: "workflowNode", position: { x: 0, y: 0 },
+      data: { label: "Статистика", nodeType: "statistics", params: { kind: "statistics" } },
+    });
+    const r = applyOps(g, [{ kind: "remove", ref: "stat" }]);
+    expect(r.applied).toHaveLength(0);
+    expect(r.skipped[0].reason).toContain("финальная нода");
   });
 });

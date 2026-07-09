@@ -575,6 +575,17 @@ function describePlacement(p: Placement): string {
   }
 }
 
+/** Единый источник «какие типы узлов можно удалять» (контракт для спеки B —
+ *  видимость кнопки-корзины). Удаляемы: sms/email/push/ivr/wait/split/condition.
+ *  Неудаляемы: source/signal (вход), scoring, success/end/statistics (терминалы). */
+const DELETABLE_NODE_TYPES: ReadonlySet<WorkflowNodeType> = new Set([
+  "sms", "email", "push", "ivr", "wait", "split", "condition",
+]);
+
+export function isDeletableNodeType(type: WorkflowNodeType): boolean {
+  return DELETABLE_NODE_TYPES.has(type);
+}
+
 function applyRemove(
   graph: GraphState,
   op: Extract<StructuralOp, { kind: "remove" }>
@@ -582,11 +593,11 @@ function applyRemove(
   const node = findNodeByRef(graph.nodes, op.ref);
   if (!node) return { error: `«${op.ref}» — нет такой ноды` };
   const nodeType = (node.data as { nodeType: WorkflowNodeType }).nodeType;
-  if (nodeType === "source" || nodeType === "signal") {
+  if (!isDeletableNodeType(nodeType)) {
+    if (nodeType === "success" || nodeType === "end" || nodeType === "statistics") {
+      return { error: `${TYPE_LABEL[nodeType]} — финальная нода, удалять нельзя` };
+    }
     return { error: `Сигнал — точка входа, удалять нельзя` };
-  }
-  if (nodeType === "success" || nodeType === "end") {
-    return { error: `${TYPE_LABEL[nodeType]} — финальная нода, удалять нельзя` };
   }
   const incoming = graph.edges.filter((e) => e.target === node.id);
   const outgoing = graph.edges.filter((e) => e.source === node.id);
