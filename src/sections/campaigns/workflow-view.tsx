@@ -19,6 +19,7 @@ import type { SignalType } from "@/state/app-state";
 import type { SourceType, Channel } from "@/types/campaign";
 import { createTemplate, applyCampaignContext } from "@/state/workflow-templates";
 import { computeNeedsAttention } from "@/state/workflow-validation";
+import { computeSublabels } from "@/state/node-sublabel";
 import { getFieldOptions } from "@/state/field-directory";
 import { matchActions } from "@/state/node-actions";
 import {
@@ -78,68 +79,29 @@ function initialGraph(
   // for new/stream, «Сигнал» for own) — no-op when there is no campaign context.
   const base = ctx ? applyCampaignContext(template, ctx) : template;
   // A1: template graphs must start with correct needs-attention flags so the
-  // launch gate reflects empty required fields immediately.
-  return { ...base, nodes: computeNeedsAttention(base.nodes) };
-}
-
-function computeDynamicSublabel(
-  kind: NodeParams["kind"],
-  patch: Partial<NodeParams>
-): string | null {
-  // Wait → show "N ч / N дней / N мин" based on durationHours.
-  if (kind === "wait" && "durationHours" in patch && patch.durationHours !== undefined) {
-    const h = patch.durationHours as number;
-    if (h < 1) return `${Math.round(h * 60)} мин`;
-    if (h < 24) return `${h} ч`;
-    const days = Math.round(h / 24);
-    return `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`;
-  }
-  // Condition → событие-метка (легаси-enum маппится, событие справочника — как есть).
-  if (kind === "condition" && "trigger" in patch && patch.trigger !== undefined) {
-    const t = patch.trigger as string;
-    const map: Record<string, string> = {
-      opened: "Открыл?",
-      not_opened: "Не открыл?",
-      clicked: "Кликнул?",
-      not_clicked: "Не кликнул?",
-      delivered: "Доставлено?",
-      not_delivered: "Не доставлено?",
-    };
-    return map[t] ?? t;
-  }
-  // Split → reflect mode.
-  if (kind === "split" && "by" in patch && patch.by !== undefined) {
-    return patch.by === "segment"
-      ? "По сегменту"
-      : patch.by === "random"
-        ? "Рандомно"
-        : "Поровну";
-  }
-  return null;
+  // launch gate reflects empty required fields immediately. 12c: content-derived
+  // sublabels are supplied by computeSublabels (after needs-attention so they
+  // reflect the campaign-overlaid params).
+  return {
+    ...base,
+    nodes: computeSublabels(computeNeedsAttention(base.nodes)),
+  };
 }
 
 function deriveParamsPatch(
   text: string,
   currentParams: NodeParams | undefined
-): { sublabel?: string; paramsPatch?: Partial<NodeParams> } {
-  // Unified: iterate every NODE_ACTIONS entry for this node kind and merge
-  // all matching patches. The sublabel we mutate is intentionally narrow:
-  // it stays in sync with a *visible* parameter (wait duration, condition
-  // trigger, split mode). For every other field (sms text, email subject,
-  // push title, ...) we do NOT overwrite sublabel — the user already sees
-  // the real value in the node's params section, and the generic "Текст
-  // обновлён" стрингует ноду без пользы.
+): { paramsPatch?: Partial<NodeParams> } {
+  // Unified: iterate every NODE_ACTIONS entry for this node kind and merge all
+  // matching patches. Sublabels are no longer produced here — they are owned by
+  // the computeSublabels pass (12c), which derives them from the node content.
   if (!currentParams) {
     return {};
   }
 
   const matched = matchActions(text, currentParams);
   if (matched) {
-    const dynamic = computeDynamicSublabel(currentParams.kind, matched.paramsPatch);
-    return {
-      paramsPatch: matched.paramsPatch,
-      ...(dynamic ? { sublabel: dynamic } : {}),
-    };
+    return { paramsPatch: matched.paramsPatch };
   }
 
   // Nothing matched the structured parsers — but a prompt-bar edit should
@@ -147,8 +109,7 @@ function deriveParamsPatch(
   // the user's words, enum/numeric fields get a near-random sensible value.
   const fb = fallbackParamsPatch(currentParams, text);
   if (fb) {
-    const dynamic = computeDynamicSublabel(currentParams.kind, fb);
-    return { paramsPatch: fb, ...(dynamic ? { sublabel: dynamic } : {}) };
+    return { paramsPatch: fb };
   }
 
   return {};
@@ -434,11 +395,11 @@ export function WorkflowView({
         // которые пользователь мог изменить вручную пока цикл «думал».
         const plans = nodeCommand.map(({ nodeId, text }) => {
           const currentNode = prev.nodes.find((x) => x.id === nodeId);
-          const { sublabel, paramsPatch } = deriveParamsPatch(
+          const { paramsPatch } = deriveParamsPatch(
             text,
             currentNode?.data.params
           );
-          return { nodeId, sublabel, paramsPatch };
+          return { nodeId, paramsPatch };
         });
 
         let nodes = prev.nodes;
@@ -453,7 +414,6 @@ export function WorkflowView({
             : existingDirty;
           nodes = patchNode(nodes, p.nodeId, {
             attentionReason: undefined,
-            ...(p.sublabel ? { sublabel: p.sublabel } : {}),
             ...(p.paramsPatch ? { dirtyParams } : {}),
           });
           if (p.paramsPatch) {
@@ -462,7 +422,9 @@ export function WorkflowView({
           changedIds.add(p.nodeId);
         }
         // A1: пересчёт needs-attention от итоговых params после AI-правок.
+        // 12c: подзаголовки пересчитываем из контента после needs-attention.
         nodes = computeNeedsAttention(nodes);
+        nodes = computeSublabels(nodes);
         return { graph: { ...prev, nodes }, changedIds };
       },
       finalReply: `${finalReply}: ${ids}.`,
@@ -491,7 +453,9 @@ export function WorkflowView({
       nodes = patchNodeParams(nodes, nodeFieldPatch.nodeId, nodeFieldPatch.patch);
       // A1: пересчитываем needs-attention от итоговых params — правка поля в
       // пустоту снова поднимает флаг, заполнение — снимает.
+      // 12c: и подзаголовок из нового контента.
       nodes = computeNeedsAttention(nodes);
+      nodes = computeSublabels(nodes);
       return { ...prev, nodes };
     });
     onNodeFieldPatchHandled?.();

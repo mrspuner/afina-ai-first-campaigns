@@ -221,7 +221,7 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
     "split",
     0,
     0,
-    "Равномерно",
+    undefined,
     { kind: "split", by: "equal", branches: channels.length }
   );
 
@@ -309,7 +309,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
     "condition",
     cond1X,
     oy,
-    "Взаимодействовал?",
+    undefined,
     { kind: "condition", trigger: "opened" }
   );
 
@@ -323,7 +323,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
     "wait",
     waitX,
     waitY,
-    "2 дня",
+    undefined,
     { kind: "wait", mode: "duration", durationHours: 48 }
   );
 
@@ -345,7 +345,7 @@ export function buildCommUnit(channels: Channel[], opts: CommUnitOptions): CommU
     "condition",
     cond2X,
     waitY,
-    "Взаимодействовал?",
+    undefined,
     { kind: "condition", trigger: "opened" }
   );
 

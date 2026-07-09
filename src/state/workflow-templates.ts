@@ -70,15 +70,15 @@ const STEP = 210;
 function registrationTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Регистрация", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_регистрация.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("email", "Email", "email", STEP, 0, "Welcome", undefined,
+      n("email", "Email", "email", STEP, 0, undefined, undefined,
         { kind: "email", subject: "Добро пожаловать", body: "Мы рады видеть вас в нашем сервисе.", sender: "noreply@brand.com", link: "https://brand.com/welcome" }),
-      n("wait", "Задержка", "wait", STEP * 2, 0, "1 день", undefined,
+      n("wait", "Задержка", "wait", STEP * 2, 0, undefined, undefined,
         { kind: "wait", mode: "duration", durationHours: 24 }),
-      n("push", "Push", "push", STEP * 3, 0, "Напоминание", undefined,
+      n("push", "Push", "push", STEP * 3, 0, undefined, undefined,
         { kind: "push", title: "Новости от бренда", body: "Есть что посмотреть", deeplink: "brand://home" }),
-      n("success", "Успех", "success", STEP * 4, 0, "Активирован", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 4, 0, undefined, { isSuccess: true },
         { kind: "success", goal: "Активация" }),
     ],
     edges: [
@@ -93,15 +93,15 @@ function registrationTemplate(): Template {
 function firstDealTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Первая сделка", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_первая-сделка.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("sms", "СМС", "sms", STEP, 0, "Промо", undefined,
+      n("sms", "СМС", "sms", STEP, 0, undefined, undefined,
         { kind: "sms", text: "Готовы к первой покупке? Подарок внутри.", alphaName: "BRAND", scheduledAt: "immediate", link: "https://brand.com/first" }),
-      n("condition", "Взаимодействие", "condition", STEP * 2, 0, "Открыл?", undefined,
+      n("condition", "Взаимодействие", "condition", STEP * 2, 0, undefined, undefined,
         { kind: "condition", trigger: "opened" }),
-      n("push", "Push", "push", STEP * 3, 80, "Напомни", undefined,
+      n("push", "Push", "push", STEP * 3, 80, undefined, undefined,
         { kind: "push", title: "Первая сделка", body: "Не пропустите" }),
-      n("success", "Успех", "success", STEP * 3, -80, "Конверсия", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 3, -80, undefined, { isSuccess: true },
         { kind: "success", goal: "Первая покупка" }),
       n("end", "Конец", "end", STEP * 4, 80, undefined, undefined,
         { kind: "end", reason: "Не открыл" }),
@@ -119,17 +119,17 @@ function firstDealTemplate(): Template {
 function upsellTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Апсейл", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_апсейл.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("split", "Ветвление", "split", STEP, 0, "По сегменту", undefined,
+      n("split", "Ветвление", "split", STEP, 0, undefined, undefined,
         { kind: "split", by: "segment", branches: 3 }),
-      n("email", "Email", "email", STEP * 2, -40, "High", undefined,
+      n("email", "Email", "email", STEP * 2, -40, undefined, undefined,
         { kind: "email", subject: "Персональное предложение", body: "Специально для вас.", sender: "promo@brand.com", link: "https://brand.com/upsell" }),
-      n("sms", "СМС", "sms", STEP * 2, 40, "Mid", undefined,
+      n("sms", "СМС", "sms", STEP * 2, 40, undefined, undefined,
         { kind: "sms", text: "Скидка 20% для вашего сегмента.", alphaName: "BRAND", scheduledAt: "immediate" }),
-      n("end", "Конец", "end", STEP * 2, 120, "Low", undefined,
+      n("end", "Конец", "end", STEP * 2, 120, undefined, undefined,
         { kind: "end", reason: "Без апсейла" }),
-      n("success", "Успех", "success", STEP * 3, -40, "Купил", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 3, -40, undefined, { isSuccess: true },
         { kind: "success", goal: "Апсейл" }),
     ],
     edges: [
@@ -148,17 +148,17 @@ function upsellTemplate(): Template {
 function reactivationTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Реактивация", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_реактивация.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("wait", "Задержка", "wait", STEP, 0, "3 дня", undefined,
+      n("wait", "Задержка", "wait", STEP, 0, undefined, undefined,
         { kind: "wait", mode: "duration", durationHours: 72 }),
-      n("sms", "СМС", "sms", STEP * 2, 0, "Оффер", undefined,
+      n("sms", "СМС", "sms", STEP * 2, 0, undefined, undefined,
         { kind: "sms", text: "Мы скучаем, вот скидка 30% для вас.", alphaName: "BRAND", scheduledAt: "immediate" }),
-      n("condition", "Взаимодействие", "condition", STEP * 3, 0, "Кликнул?", undefined,
+      n("condition", "Взаимодействие", "condition", STEP * 3, 0, undefined, undefined,
         { kind: "condition", trigger: "clicked" }),
-      n("ivr", "IVR", "ivr", STEP * 4, 80, "Голосовой", undefined,
+      n("ivr", "IVR", "ivr", STEP * 4, 80, undefined, undefined,
         { kind: "ivr", scenario: "Возврат", voiceType: "female" }),
-      n("success", "Успех", "success", STEP * 4, -80, "Вернулся", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 4, -80, undefined, { isSuccess: true },
         { kind: "success", goal: "Реактивация" }),
       n("end", "Конец", "end", STEP * 5, 80, undefined, undefined,
         { kind: "end", reason: "Молчание" }),
@@ -177,19 +177,19 @@ function reactivationTemplate(): Template {
 function returnTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Возврат", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_возврат.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("email", "Email", "email", STEP, 0, "Напоминание", undefined,
+      n("email", "Email", "email", STEP, 0, undefined, undefined,
         { kind: "email", subject: "Мы ценим вас", body: "Вернитесь и получите подарок.", sender: "care@brand.com", link: "https://brand.com/return" }),
-      n("wait", "Задержка", "wait", STEP * 2, 0, "3 дня", undefined,
+      n("wait", "Задержка", "wait", STEP * 2, 0, undefined, undefined,
         { kind: "wait", mode: "duration", durationHours: 72 }),
-      n("push", "Push", "push", STEP * 3, 0, "Усилить", undefined,
+      n("push", "Push", "push", STEP * 3, 0, undefined, undefined,
         { kind: "push", title: "Подарок ждёт", body: "Загляните в приложение", deeplink: "brand://return" }),
-      n("condition", "Взаимодействие", "condition", STEP * 4, 0, "Открыл?", undefined,
+      n("condition", "Взаимодействие", "condition", STEP * 4, 0, undefined, undefined,
         { kind: "condition", trigger: "opened" }),
       n("end", "Конец", "end", STEP * 5, 80, undefined, undefined,
         { kind: "end", reason: "Не открыл" }),
-      n("success", "Успех", "success", STEP * 5, -80, "Купил", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 5, -80, undefined, { isSuccess: true },
         { kind: "success", goal: "Возврат" }),
     ],
     edges: [
@@ -206,19 +206,19 @@ function returnTemplate(): Template {
 function retentionTemplate(): Template {
   return {
     nodes: [
-      n("signal", "Сигнал", "source", 0, 0, "Удержание", undefined,
+      n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_удержание.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("split", "Ветвление", "split", STEP, 0, "По сегменту", undefined,
+      n("split", "Ветвление", "split", STEP, 0, undefined, undefined,
         { kind: "split", by: "segment", branches: 3 }),
-      n("ivr", "IVR", "ivr", STEP * 2, -100, "Персональный", undefined,
+      n("ivr", "IVR", "ivr", STEP * 2, -100, undefined, undefined,
         { kind: "ivr", scenario: "Удержание", voiceType: "neutral" }),
-      n("email", "Email", "email", STEP * 2, 0, "Дайджест", undefined,
+      n("email", "Email", "email", STEP * 2, 0, undefined, undefined,
         { kind: "email", subject: "Ваш дайджест", body: "Самое важное за неделю.", sender: "digest@brand.com" }),
-      n("push", "Push", "push", STEP * 2, 100, "Напомни", undefined,
+      n("push", "Push", "push", STEP * 2, 100, undefined, undefined,
         { kind: "push", title: "Не забудьте заглянуть", body: "Есть новое" }),
-      n("wait", "Задержка", "wait", STEP * 3, 0, "7 дней", undefined,
+      n("wait", "Задержка", "wait", STEP * 3, 0, undefined, undefined,
         { kind: "wait", mode: "duration", durationHours: 168 }),
-      n("success", "Успех", "success", STEP * 4, 0, "Активен", { isSuccess: true },
+      n("success", "Успех", "success", STEP * 4, 0, undefined, { isSuccess: true },
         { kind: "success", goal: "Удержание" }),
     ],
     edges: [
@@ -289,7 +289,7 @@ function withSignalPath(t: Template, sourceType: SourceType): Template {
 
   if (hasScoring) {
     newNodes.push(
-      n("scoring", "Скоринг", "scoring", x, y, "Качество базы", undefined,
+      n("scoring", "Скоринг", "scoring", x, y, undefined, undefined,
         { kind: "scoring", interests: [], triggers: [], files: [] })
     );
     prevId = "scoring";
@@ -297,7 +297,7 @@ function withSignalPath(t: Template, sourceType: SourceType): Template {
   }
 
   newNodes.push(
-    n("signal_result", "Сигнал", "signal", x, y, "Готовая аудитория", undefined,
+    n("signal_result", "Сигнал", "signal", x, y, undefined, undefined,
       { kind: "signal", fileName: "", count: 0, segments: EMPTY_SEGMENTS })
   );
   if (prevId) newEdges.push(e(prevId, "signal_result"));
