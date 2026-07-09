@@ -6,6 +6,9 @@
  * четыре дефолтные категории.
  */
 
+import type { SplitParams } from "@/types/workflow";
+import { pluralRu } from "@/lib/plural-ru";
+
 export interface SegmentBranch {
   key: string;
   label: string;
@@ -28,4 +31,18 @@ const DEFAULT_BRANCHES: SegmentBranch[] = SEGMENT_ORDER.map((key) => ({
 
 export function splitSegmentBranches(): SegmentBranch[] {
   return DEFAULT_BRANCHES;
+}
+
+/**
+ * 12c — единый источник сводки сплиттера: «<режим> · N веток». Импортируется
+ * подзаголовком ноды (computeNodeSublabel) и полями сплиттера в спеке B —
+ * логику не дублировать.
+ */
+export function splitSummary(params: SplitParams): string {
+  const by =
+    params.by === "segment" ? "По сегменту"
+    : params.by === "random" ? "Рандомно"
+    : "Поровну";
+  const n = params.branches;
+  return `${by} · ${n} ${pluralRu(n, ["ветка", "ветки", "веток"])}`;
 }
