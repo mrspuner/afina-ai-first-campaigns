@@ -5,7 +5,6 @@ import {
   GitFork,
   Clock,
   GitBranch,
-  Merge,
   MessageSquare,
   Mail,
   Bell,
@@ -40,7 +39,6 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
   split:      { border: "#4c1d95", bg: "#0d0819", color: "#a78bfa" },
   wait:       { border: "#713f12", bg: "#0f0a03", color: "#fbbf24" },
   condition:  { border: "#065f46", bg: "#052e23", color: "#34d399" },
-  merge:      { border: "#3730a3", bg: "#0a0920", color: "#818cf8" },
   // Communication
   sms:        { border: "#134e4a", bg: "#030f0e", color: "#5eead4" },
   email:      { border: "#155e75", bg: "#03141a", color: "#67e8f9" },
@@ -65,7 +63,6 @@ export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
   split: GitFork,
   wait: Clock,
   condition: GitBranch,
-  merge: Merge,
   sms: MessageSquare,
   email: Mail,
   push: Bell,

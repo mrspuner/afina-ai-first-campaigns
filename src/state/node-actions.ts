@@ -241,7 +241,6 @@ export const NODE_ACTIONS: ActionsForAll = {
       },
     },
   ],
-  merge: [],
   statistics: [],
   scoring: [],
   signal: [],

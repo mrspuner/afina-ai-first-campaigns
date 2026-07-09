@@ -3,7 +3,7 @@
  * `nodeType` → `paramLabel | "__node__"` → массив `SuggestionItem`.
  *
  * Покрывает все актуальные `WorkflowNodeType` (signal, success, end, split,
- * wait, condition, merge, sms, email, push, ivr, storefront, landing).
+ * wait, condition, sms, email, push, ivr, storefront, landing).
  * Legacy-типы (`default`, `channel`, `retarget`, `result`, `new`) попадают в
  * GENERIC-fallback.
  */
@@ -203,14 +203,6 @@ const END: ParamSuggestions = {
   ],
 };
 
-const MERGE: ParamSuggestions = {
-  [WHOLE_NODE_KEY]: [
-    howNode("merge-how", "Объясни простыми словами, как работает нода Слияние: что она делает (сводит ветки сценария обратно в одну), как обходится с дублями и когда её стоит применять."),
-    ask("merge-node-dedup", "Без дублей", "при слиянии убери дубли клиентов из веток"),
-    ask("merge-node-priority", "С приоритетом", "при дубле сохрани клиента из ветки с большим весом"),
-  ],
-};
-
 const CATALOG: Partial<Record<WorkflowNodeType, ParamSuggestions>> = {
   sms: SMS,
   email: EMAIL,
@@ -222,7 +214,6 @@ const CATALOG: Partial<Record<WorkflowNodeType, ParamSuggestions>> = {
   signal: SIGNAL,
   success: SUCCESS,
   end: END,
-  merge: MERGE,
 };
 
 const GENERIC: SuggestionItem[] = [

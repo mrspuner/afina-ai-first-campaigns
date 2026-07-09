@@ -86,7 +86,7 @@ describe("computeReach", () => {
       signalNode(4000),
       node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }),
       node("cond", "condition", { kind: "condition", trigger: "opened" }),
-      node("landing", "merge", { kind: "merge" }),
+      node("landing", "statistics", { kind: "statistics" }),
       node("push", "push", { kind: "push", title: "", body: "" }),
     ];
     const edges = [
@@ -177,24 +177,6 @@ describe("computeReach", () => {
     expect(reach.c).toBe(300);
   });
 
-  it("sums incoming reach at a merge node", () => {
-    const nodes = [
-      signalNode(1000),
-      node("split", "split", { kind: "split", by: "random", branches: 2 }),
-      node("a", "email", { kind: "email", subject: "", body: "", sender: "" }),
-      node("b", "push", { kind: "push", title: "", body: "" }),
-      node("merge", "merge", { kind: "merge" }),
-    ];
-    const edges = [
-      edge("signal", "split"),
-      edge("split", "a"),
-      edge("split", "b"),
-      edge("a", "merge"),
-      edge("b", "merge"),
-    ];
-    const { reach } = computeReach(nodes, edges, 1000);
-    expect(reach.merge).toBe(1000); // 500 + 500
-  });
 });
 
 // ── computeCampaignCost ───────────────────────────────────────────────────────
@@ -206,7 +188,7 @@ describe("computeCampaignCost", () => {
       signalNode(4000),
       node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }, "Промо"),
       node("cond", "condition", { kind: "condition", trigger: "opened" }),
-      node("landing", "merge", { kind: "merge" }),
+      node("landing", "statistics", { kind: "statistics" }),
       node("push", "push", { kind: "push", title: "", body: "" }, "Напомни"),
     ];
     const edges = [

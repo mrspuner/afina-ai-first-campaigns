@@ -25,7 +25,6 @@ export const nodeTypeSchema = z.enum([
   "split",
   "wait",
   "condition",
-  "merge",
   "sms",
   "email",
   "push",

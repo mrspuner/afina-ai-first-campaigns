@@ -98,8 +98,6 @@ const REF_SYNONYMS: Record<string, string> = {
   condition: "условие",
   сплиттер: "сплиттер",
   split: "сплиттер",
-  слияние: "слияние",
-  merge: "слияние",
   сигнал: "сигнал",
   signal: "сигнал",
 };
@@ -281,7 +279,6 @@ const TYPE_LABEL: Record<WorkflowNodeType, string> = {
   split: "Сплиттер",
   wait: "Задержка",
   condition: "Условие",
-  merge: "Слияние",
   sms: "СМС",
   email: "Email",
   push: "Push",

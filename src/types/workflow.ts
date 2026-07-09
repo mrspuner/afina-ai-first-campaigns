@@ -12,7 +12,6 @@ export type WorkflowNodeType =
   | "split"
   | "wait"
   | "condition"
-  | "merge"
   // Communication (active)
   | "sms"
   | "email"
@@ -82,8 +81,6 @@ export type SplitParams = {
   branches: number;
 };
 
-export type MergeParams = { kind: "merge" };
-
 /** Terminal statistics sink — no params (footprint symmetric to the removed merge). */
 export type StatisticsParams = { kind: "statistics" };
 
@@ -132,7 +129,7 @@ export type EndParams = {
 
 export type NodeParams =
   | SmsParams | EmailParams | PushParams | IvrParams
-  | WaitParams | ConditionParams | SplitParams | MergeParams
+  | WaitParams | ConditionParams | SplitParams
   | SignalParams | ScoringParams | SuccessParams | EndParams
   | StatisticsParams;
 
@@ -185,7 +182,6 @@ export const NODE_CATEGORY: Record<WorkflowNodeType, NodeCategory> = {
   split: "logic",
   wait: "logic",
   condition: "logic",
-  merge: "logic",
   sms: "communication",
   email: "communication",
   push: "communication",

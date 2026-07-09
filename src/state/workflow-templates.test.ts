@@ -298,7 +298,10 @@ describe("channel-aware template generation", () => {
     for (const s of SIGNAL_TYPES) {
       for (const chs of channelSets) {
         const t = createTemplate(s, "new", chs);
-        expect(t.nodes.some((n) => n.data.nodeType === "merge"), `${s}/${chs.join("+")}`).toBe(false);
+        expect(
+          t.nodes.map((n) => n.data.nodeType),
+          `${s}/${chs.join("+")}`,
+        ).not.toContain("merge");
       }
     }
   });
