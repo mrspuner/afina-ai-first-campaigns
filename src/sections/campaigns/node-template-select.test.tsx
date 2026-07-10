@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { NodeTemplateSelect } from "./node-template-select";
 import type { MessageTemplate } from "@/state/app-state";
 
@@ -142,5 +142,21 @@ describe("NodeTemplateSelect", () => {
     );
     expect(container.querySelector("svg.lucide-chevron-down")).not.toBeNull();
     expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
+
+  it("dirty dot sits next to the label (spec B #5)", () => {
+    const { getByText } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    const labelCell = getByText("Шаблон");
+    expect(within(labelCell).getByTitle("Параметр изменён")).not.toBeNull();
   });
 });

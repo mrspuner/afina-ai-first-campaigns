@@ -22,6 +22,7 @@ import {
   getFieldOptions,
   type FieldOptionsKey,
 } from "@/state/field-directory";
+import { DirtyDot } from "./dirty-dot";
 import { cn } from "@/lib/utils";
 
 /**
@@ -88,7 +89,10 @@ export function NodeFieldCombobox({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {label}
+          {isDirty && <DirtyDot />}
+        </span>
         <span
           className={cn(
             "truncate",
@@ -99,13 +103,6 @@ export function NodeFieldCombobox({
           {displayValue}
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-          {isDirty && (
-            <span
-              aria-hidden
-              title="Параметр изменён"
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-            />
-          )}
           {/* Индикатор «поле редактируемо» — не отдельная кнопка, клик по нему
               открывает тот же дропдаун, что и вся строка-триггер. */}
           <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />

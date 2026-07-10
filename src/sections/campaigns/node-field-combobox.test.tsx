@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 
 vi.mock("@/state/field-directory", () => ({
   getFieldOptions: () => ["Открыто", "Кликнуто"],
@@ -40,5 +40,22 @@ describe("NodeFieldCombobox — chevron affordance (spec B #4)", () => {
     );
     expect(container.querySelector("svg.lucide-chevron-down")).not.toBeNull();
     expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
+
+  it("dirty dot sits in the label column, not the affordance column (spec B #5)", () => {
+    const { getByText, getByTitle } = render(
+      <NodeFieldCombobox
+        label="Событие"
+        value=""
+        optionsKey="eventCatalog"
+        isDirty
+        onSelect={vi.fn()}
+        onAiHandoff={vi.fn()}
+      />
+    );
+    const labelCell = getByText("Событие");
+    expect(within(labelCell).getByTitle("Параметр изменён")).not.toBeNull();
+    // sanity: the title-carrying dot is the same node the label column holds.
+    expect(getByTitle("Параметр изменён")).not.toBeNull();
   });
 });

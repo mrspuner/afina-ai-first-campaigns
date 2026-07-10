@@ -15,6 +15,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import type { MessageTemplate } from "@/state/app-state";
+import { DirtyDot } from "./dirty-dot";
 import { cn } from "@/lib/utils";
 
 /**
@@ -58,23 +59,18 @@ export function NodeTemplateSelect({
     "grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 text-[11px]";
   const displayValue = selectedName || "—";
 
-  const dirtyDot = isDirty ? (
-    <span
-      aria-hidden
-      title="Параметр изменён"
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-    />
-  ) : null;
-
   // Лаунч/пауза/завершено: карточка только для просмотра — текст без попапа.
   if (readOnly) {
     return (
       <div className={cn(rowGrid, "px-1 py-0.5")}>
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {label}
+          {isDirty && <DirtyDot />}
+        </span>
         <span className="truncate text-foreground" title={displayValue}>
           {displayValue}
         </span>
-        <span className="flex items-center justify-end">{dirtyDot}</span>
+        <span className="flex items-center justify-end" />
       </div>
     );
   }
@@ -91,7 +87,10 @@ export function NodeTemplateSelect({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {label}
+          {isDirty && <DirtyDot />}
+        </span>
         <span
           className={cn(
             "truncate",
@@ -102,7 +101,6 @@ export function NodeTemplateSelect({
           {displayValue}
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-          {dirtyDot}
           <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>

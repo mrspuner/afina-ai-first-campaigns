@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { splitSegmentBranches } from "@/state/split-segments";
 import type { SplitParams } from "@/types/workflow";
+import { DirtyDot } from "./dirty-dot";
 import { cn } from "@/lib/utils";
 
 const BY_LABELS: Record<SplitParams["by"], string> = {
@@ -59,16 +60,6 @@ export function SplitFields({
   );
 }
 
-function DirtyDot() {
-  return (
-    <span
-      aria-hidden
-      title="Параметр изменён"
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-    />
-  );
-}
-
 /**
  * Строка поля сплиттера с ИИ-аффордансом. Вся строка — кнопка; клик передаёт
  * поле ассистенту и открывает дровер. Read-only (после запуска) — просто показ.
@@ -89,11 +80,12 @@ function AiRow({
   if (readOnly) {
     return (
       <div className={cn(rowGrid, "px-1 py-0.5")}>
-        <span className="text-muted-foreground">{label}</span>
-        <span className="truncate text-foreground">{value}</span>
-        <span className="flex items-center justify-end">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {label}
           {isDirty && <DirtyDot />}
         </span>
+        <span className="truncate text-foreground">{value}</span>
+        <span className="flex items-center justify-end" />
       </div>
     );
   }
@@ -112,10 +104,12 @@ function AiRow({
         "hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none"
       )}
     >
-      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        {label}
+        {isDirty && <DirtyDot />}
+      </span>
       <span className="truncate text-foreground">{value}</span>
       <span className="ml-1 flex shrink-0 items-center gap-1.5">
-        {isDirty && <DirtyDot />}
         {/* Маскот = сигнал «ИИ готов вмешаться» (PRODUCT.md, принцип 6). */}
         <Image
           src="/mascot-icon.svg"

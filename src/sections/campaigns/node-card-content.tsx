@@ -24,6 +24,7 @@ import { NodeTemplateSelect } from "./node-template-select";
 import { EmailField } from "./email-field";
 import { SplitFields } from "./split-fields";
 import { WaitFields } from "./wait-fields";
+import { DirtyDot } from "./dirty-dot";
 
 type ParamRow = { label: string; value: string };
 
@@ -428,13 +429,6 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
             const isDirty = meta?.paramKey
               ? data.dirtyParams?.includes(meta.paramKey) ?? false
               : false;
-            const dirtyDot = isDirty ? (
-              <span
-                aria-hidden
-                title="Параметр изменён"
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-              />
-            ) : null;
             const rowGrid =
               "grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 text-[11px]";
             const rawValue = row.value === "—" ? "" : row.value;
@@ -517,11 +511,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
               if (readOnly) {
                 return (
                   <div key={row.label} className={cn(rowGrid, "px-1 py-0.5")}>
-                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      {row.label}
+                      {isDirty && <DirtyDot />}
+                    </span>
                     <span className="truncate text-foreground" title={row.value}>
                       {row.value}
                     </span>
-                    <span className="flex items-center justify-end">{dirtyDot}</span>
+                    <span className="flex items-center justify-end" />
                   </div>
                 );
               }
@@ -574,11 +571,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
             if (!interactive) {
               return (
                 <div key={row.label} className={cn(rowGrid, "px-1 py-0.5")}>
-                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    {row.label}
+                    {isDirty && <DirtyDot />}
+                  </span>
                   <span className="truncate text-foreground" title={row.value}>
                     {row.value}
                   </span>
-                  <span className="flex items-center justify-end">{dirtyDot}</span>
+                  <span className="flex items-center justify-end" />
                 </div>
               );
             }
@@ -598,12 +598,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   "hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none"
                 )}
               >
-                <span className="text-muted-foreground">{row.label}</span>
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  {row.label}
+                  {isDirty && <DirtyDot />}
+                </span>
                 <span className="truncate text-foreground" title={row.value}>
                   {row.value}
                 </span>
                 <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-                  {dirtyDot}
                   {icon}
                 </span>
               </button>
