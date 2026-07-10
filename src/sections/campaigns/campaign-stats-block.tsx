@@ -34,13 +34,6 @@ function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
 }
 
-function formatRub(value: number): string {
-  const abs = Math.round(value);
-  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(1)} млн ₽`;
-  if (abs >= 10_000) return `${Math.round(abs / 1_000)} тыс ₽`;
-  return `${abs.toLocaleString("ru-RU")} ₽`;
-}
-
 interface CampaignStatsBlockProps {
   campaign: Campaign;
   artifact?: Artifact;
@@ -85,17 +78,16 @@ export function CampaignStatsBlock({ campaign, artifact, populated = true }: Cam
       <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
         <span className="text-muted-foreground">Бюджет (расчётный)</span>
         <span className="tabular-nums text-foreground">
-          {formatRub(stats.plannedBudget)}
+          {formatRubPlain(Math.round(stats.plannedBudget))}
         </span>
       </div>
       <div className="flex items-baseline justify-between text-sm">
         <span className="text-muted-foreground">Бюджет (факт)</span>
         <span className="tabular-nums text-foreground">
-          {formatRub(stats.actualSpend)}
+          {formatRubPlain(Math.round(stats.actualSpend))}
         </span>
       </div>
-      {/* Потолок, заданный пользователем в визарде (только stream). Точный
-          формат — это введённая сумма, округлять её нельзя. */}
+      {/* Потолок, заданный пользователем в визарде (только stream). */}
       {campaign.maxDailyBudget != null && (
         <div className="flex items-baseline justify-between text-sm">
           <span className="text-muted-foreground">Макс. дневной бюджет</span>

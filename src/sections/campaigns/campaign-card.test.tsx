@@ -80,6 +80,18 @@ describe("CampaignCard — макс. дневной бюджет", () => {
     expect(screen.queryByText("Макс. дневной бюджет")).not.toBeInTheDocument();
   });
 
+  // Все бюджеты на карточке — единый точный формат (целые рубли), без «тыс/млн».
+  it("«Бюджет (расчётный)» показан точным значением, а не компактным", () => {
+    render(
+      <CampaignCard
+        campaign={makeCampaign({ sourceType: "stream", budget: 50_000 })}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/^50\s000\s₽$/)).toBeInTheDocument();
+    expect(screen.queryByText(/тыс ₽|млн ₽/)).not.toBeInTheDocument();
+  });
+
   it("расчётный dailyBudget на карточку НЕ выводится", () => {
     render(
       <CampaignCard
