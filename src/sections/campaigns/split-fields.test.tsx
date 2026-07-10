@@ -6,44 +6,45 @@ import type { SplitParams } from "@/types/workflow";
 
 vi.mock("@/state/split-segments", () => ({
   splitSegmentBranches: () => [],
+  splitSummary: (p: SplitParams) =>
+    p.by === "segment" ? "По сегменту · 4 веток" : `Поровну · ${p.branches}`,
 }));
-// next/image не нужен в этих проверках — иконка-маскот только визуал.
 vi.mock("next/image", () => ({ default: () => null }));
 
 const params: SplitParams = { kind: "split", by: "equal", branches: 2 };
 
-describe("SplitFields — ИИ-редактирование (отмена A6, спека #1)", () => {
-  it("обе строки «По» и «Ветки» — кнопки с ИИ-аффордансом; клик зовёт onAiHandoff с полем", () => {
+describe("SplitFields — одна строка «Ветвление» (spec B #3)", () => {
+  it("renders a single «Ветвление» AI affordance; click hands off to AI", () => {
     const onAiHandoff = vi.fn();
-    const { getByLabelText } = render(
-      <SplitFields params={params} readOnly={false} onAiHandoff={onAiHandoff} />,
+    const { getByLabelText, queryByLabelText } = render(
+      <SplitFields params={params} readOnly={false} onAiHandoff={onAiHandoff} />
     );
-    getByLabelText("Настроить «По» с помощью ИИ").click();
-    expect(onAiHandoff).toHaveBeenCalledWith("По");
-    getByLabelText("Настроить «Ветки» с помощью ИИ").click();
-    expect(onAiHandoff).toHaveBeenCalledWith("Ветки");
-  });
-
-  it("НЕ рендерит кнопки-аффордансы в readonly-режиме (только показ)", () => {
-    const { queryByLabelText } = render(
-      <SplitFields params={params} readOnly onAiHandoff={vi.fn()} />,
-    );
+    // Old two-row layout is gone.
     expect(queryByLabelText("Настроить «По» с помощью ИИ")).toBeNull();
     expect(queryByLabelText("Настроить «Ветки» с помощью ИИ")).toBeNull();
+    getByLabelText("Настроить «Ветвление» с помощью ИИ").click();
+    expect(onAiHandoff).toHaveBeenCalled();
   });
 
-  it("показывает число веток при by=equal и авто-текст «По категориям сигнала» при by=segment", () => {
+  it("summary comes from splitSummary (matches the node subtitle)", () => {
     const { getByText, rerender } = render(
-      <SplitFields params={params} readOnly onAiHandoff={vi.fn()} />,
+      <SplitFields params={params} readOnly onAiHandoff={vi.fn()} />
     );
-    getByText("2");
+    getByText("Поровну · 2");
     rerender(
       <SplitFields
         params={{ kind: "split", by: "segment", branches: 0 }}
         readOnly
         onAiHandoff={vi.fn()}
-      />,
+      />
     );
-    getByText(/По категориям сигнала/);
+    getByText("По сегменту · 4 веток");
+  });
+
+  it("no affordance button in read-only", () => {
+    const { queryByLabelText } = render(
+      <SplitFields params={params} readOnly onAiHandoff={vi.fn()} />
+    );
+    expect(queryByLabelText("Настроить «Ветвление» с помощью ИИ")).toBeNull();
   });
 });
