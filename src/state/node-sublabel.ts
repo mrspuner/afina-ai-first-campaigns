@@ -1,5 +1,6 @@
 import type { NodeParams, WorkflowNode } from "@/types/workflow";
 import { splitSummary } from "./split-segments";
+import { getEmail } from "./email-directory";
 import { pluralRu } from "@/lib/plural-ru";
 
 /** «Открыто»/«Кликнуто»/«Доставлено» из события-триггера condition (12c). */
@@ -47,7 +48,10 @@ export function computeNodeSublabel(params: NodeParams): string | null {
       const name = params.fileName?.trim() || "Готовая аудитория";
       return params.count > 0 ? `${name} · ${params.count.toLocaleString("ru-RU")}` : name;
     }
-    case "email": return params.emailId ? params.emailId : "—";
+    case "email": {
+      if (!params.emailId) return "—";
+      return getEmail(params.emailId)?.name || params.subject.trim() || "—";
+    }
     case "sms":
     case "push": return "—";
     case "statistics": return "Результаты после запуска";
