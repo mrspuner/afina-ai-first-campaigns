@@ -65,6 +65,7 @@ export interface ChipSegment {
 export type PromptChipsAction =
   | { type: "push"; chip: Omit<PromptChip, "id"> & { id?: string } }
   | { type: "remove"; id: string }
+  | { type: "removeForNode"; nodeId: string }
   | { type: "removeLastRemovable" }
   | { type: "clear" };
 
@@ -92,6 +93,14 @@ export function promptChipsReducer(
     }
     case "remove":
       return { chips: state.chips.filter((c) => c.id !== action.id) };
+    case "removeForNode": {
+      const whole = `node_${action.nodeId}`;
+      const fieldPrefix = `nodefield_${action.nodeId}_`;
+      const next = state.chips.filter(
+        (c) => c.id !== whole && !c.id.startsWith(fieldPrefix)
+      );
+      return next.length === state.chips.length ? state : { chips: next };
+    }
     case "removeLastRemovable": {
       for (let i = state.chips.length - 1; i >= 0; i--) {
         if (state.chips[i].removable) {
@@ -111,6 +120,7 @@ interface PromptChipsApi {
   chips: readonly PromptChip[];
   pushChip: (chip: Omit<PromptChip, "id"> & { id?: string }) => string;
   removeChip: (id: string) => void;
+  removeChipsForNode: (nodeId: string) => void;
   clearChips: () => void;
 }
 
@@ -132,6 +142,10 @@ export function PromptChipsProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "remove", id });
   }, []);
 
+  const removeChipsForNode = useCallback((nodeId: string) => {
+    dispatch({ type: "removeForNode", nodeId });
+  }, []);
+
   const clearChips = useCallback(() => dispatch({ type: "clear" }), []);
 
   // Чипы — часть нижнего драйвера: чистятся при смене раздела тем же правилом,
@@ -145,9 +159,10 @@ export function PromptChipsProvider({ children }: { children: ReactNode }) {
       chips: state.chips,
       pushChip,
       removeChip,
+      removeChipsForNode,
       clearChips,
     }),
-    [state.chips, pushChip, removeChip, clearChips]
+    [state.chips, pushChip, removeChip, removeChipsForNode, clearChips]
   );
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
