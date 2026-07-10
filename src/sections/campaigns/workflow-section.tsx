@@ -120,15 +120,6 @@ export function WorkflowSection() {
 
   const handleNodeClick = useCallback(
     (id: string, label: string, nodeType?: string) => {
-      // 12b — «Статистика» — терминал-сток: клик открывает экран статистики
-      // кампании (goto_stats), а не раскрывает карточку ноды.
-      if (nodeType === "statistics") {
-        dispatch({
-          type: "goto_stats",
-          campaignId: currentCampaignIdRef.current ?? undefined,
-        });
-        return;
-      }
       dispatch({ type: "workflow_node_selected", id, label, nodeType });
     },
     [dispatch]

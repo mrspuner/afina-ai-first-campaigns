@@ -802,13 +802,13 @@ describe("isDeletableNodeType (deletion contract for spec B)", () => {
     }
   });
   it("marks entry/terminal nodes non-deletable", () => {
-    for (const t of ["source", "signal", "scoring", "success", "end", "statistics"] as const) {
+    for (const t of ["source", "signal", "scoring", "success", "end"] as const) {
       expect(isDeletableNodeType(t)).toBe(false);
     }
   });
 });
 
-describe("applyOps — remove guard covers scoring and statistics", () => {
+describe("applyOps — remove guard covers scoring", () => {
   function graphWith(node: WorkflowNode): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
     const success: WorkflowNode = {
       id: "success", type: "workflowNode", position: { x: 200, y: 0 },
@@ -824,14 +824,5 @@ describe("applyOps — remove guard covers scoring and statistics", () => {
     const r = applyOps(g, [{ kind: "remove", ref: "sc" }]);
     expect(r.applied).toHaveLength(0);
     expect(r.skipped[0].reason).toContain("точка входа");
-  });
-  it("refuses to remove the statistics terminal", () => {
-    const g = graphWith({
-      id: "stat", type: "workflowNode", position: { x: 0, y: 0 },
-      data: { label: "Статистика", nodeType: "statistics", params: { kind: "statistics" } },
-    });
-    const r = applyOps(g, [{ kind: "remove", ref: "stat" }]);
-    expect(r.applied).toHaveLength(0);
-    expect(r.skipped[0].reason).toContain("финальная нода");
   });
 });

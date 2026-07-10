@@ -69,7 +69,6 @@ export const NODE_FIELD_EDITABILITY: Record<
     "По": { editability: "ai", paramKey: "by" },
     "Ветки": { editability: "ai", paramKey: "branches" },
   },
-  statistics: {},
   scoring: {
     // Block C #8 — интересы/триггеры показываются в дровере скоринга
     // (полноценная правка полей — отдельный трек Блока 7; пока только показ).

@@ -121,7 +121,7 @@ function upsellTemplate(): Template {
     nodes: [
       n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_апсейл.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("split", "Ветвление", "split", STEP, 0, undefined, undefined,
+      n("split", "Сплиттер", "split", STEP, 0, undefined, undefined,
         { kind: "split", by: "segment", branches: 3 }),
       n("email", "Email", "email", STEP * 2, -40, undefined, undefined,
         { kind: "email", subject: "Персональное предложение", body: "Специально для вас.", sender: "promo@brand.com", link: "https://brand.com/upsell" }),
@@ -208,7 +208,7 @@ function retentionTemplate(): Template {
     nodes: [
       n("signal", "Сигнал", "source", 0, 0, undefined, undefined,
         { kind: "signal", fileName: "сигнал_удержание.json", count: 0, segments: EMPTY_SEGMENTS }),
-      n("split", "Ветвление", "split", STEP, 0, undefined, undefined,
+      n("split", "Сплиттер", "split", STEP, 0, undefined, undefined,
         { kind: "split", by: "segment", branches: 3 }),
       n("ivr", "IVR", "ivr", STEP * 2, -100, undefined, undefined,
         { kind: "ivr", scenario: "Удержание", voiceType: "neutral" }),
@@ -435,7 +435,7 @@ function buildSegmentedChannelTemplate(
 
   const splitNode = n(
     splitId,
-    "Ветвление",
+    "Сплиттер",
     "split",
     STEP,
     0,
@@ -563,28 +563,6 @@ function minimalTemplate(signalType: SignalType): Template {
   };
 }
 
-const STATISTICS_ID = "statistics";
-
-/**
- * 12b — appends the single terminal «Статистика» sink: every `success`/`end`
- * node fans into ONE `statistics` node (fan-in, not one-per-branch). No-op when
- * the graph has no terminal or already has a statistics node. Positioned one
- * STEP right of the rightmost node so the layout stays non-overlapping.
- */
-export function withStatisticsSink(t: Template): Template {
-  if (t.nodes.some((nd) => nd.data.nodeType === "statistics")) return t;
-  const terminals = t.nodes.filter(
-    (nd) => nd.data.nodeType === "success" || nd.data.nodeType === "end",
-  );
-  if (terminals.length === 0) return t;
-  const maxX = t.nodes.reduce((m, nd) => Math.max(m, nd.position.x), 0);
-  const statsNode = n(
-    STATISTICS_ID, "Статистика", "statistics", maxX + STEP, 0,
-    undefined, undefined, { kind: "statistics" },
-  );
-  const statsEdges = terminals.map((term) => e(term.id, STATISTICS_ID));
-  return { nodes: [...t.nodes, statsNode], edges: [...t.edges, ...statsEdges] };
-}
 
 export function createTemplate(
   signalType: SignalType,
@@ -612,8 +590,7 @@ export function createTemplate(
   // Graph root: Скоринг → Сигнал → Коммуникация (new/stream) or Сигнал →
   // Коммуникация (own). The standalone «Файл» entry node is folded into the
   // root — new/stream carry «Файлы» on the scoring node, own on the signal node.
-  // 12b — every success/end fans into a single terminal «Статистика» sink.
-  return withStatisticsSink(withSignalPath(base, sourceType));
+  return withSignalPath(base, sourceType);
 }
 
 /** Short human summary of the uploaded bases, e.g. «2 базы · ~14 000 строк». */

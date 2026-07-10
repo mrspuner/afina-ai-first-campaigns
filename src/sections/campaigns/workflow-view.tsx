@@ -126,7 +126,7 @@ function randPick<T>(arr: readonly T[]): T {
  * A best-effort parameter change for prompts that didn't match any structured
  * action. Keeps the prototype's "магия под капотом" feel — the AI always
  * "did something". Returns null only for node kinds that have no editable
- * params (signal, scoring, statistics).
+ * params (signal, scoring).
  */
 function fallbackParamsPatch(
   params: NodeParams,
@@ -158,7 +158,6 @@ function fallbackParamsPatch(
       return null;
     case "signal":
     case "scoring":
-    case "statistics":
       return null;
   }
 }

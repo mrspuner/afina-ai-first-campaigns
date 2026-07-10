@@ -104,9 +104,6 @@ describe("nodeNeedsAttention (per-kind required fields)", () => {
   it("flags an email node missing subject", () => {
     expect(nodeNeedsAttention(paramNode("e", { kind: "email", subject: "", body: "b", sender: "x@y" }))).toBe(true);
   });
-  it("never flags the statistics terminal", () => {
-    expect(nodeNeedsAttention(paramNode("stat", { kind: "statistics" }))).toBe(false);
-  });
 });
 
 describe("computeNeedsAttention", () => {

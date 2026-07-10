@@ -368,7 +368,7 @@ describe("empty-channels «без коммуникации» minimal template (b
     expect(types).toContain("scoring");
     expect(types).toContain("signal");
     expect(types).toContain("success");
-    const allowed = new Set(["scoring", "signal", "success", "statistics"]);
+    const allowed = new Set(["scoring", "signal", "success"]);
     expect(types.every((t) => allowed.has(t))).toBe(true);
   });
 
@@ -408,42 +408,6 @@ describe("empty-channels «без коммуникации» minimal template (b
   });
 });
 
-describe("statistics terminal sink (12b)", () => {
-  it.each(SIGNAL_TYPES)("%s: exactly one statistics node; every success/end fans into it", (type) => {
-    const { nodes, edges } = createTemplate(type, "new");
-    const stats = nodes.filter((n) => n.data.nodeType === "statistics");
-    expect(stats).toHaveLength(1);
-    const statsId = stats[0].id;
-    const terminals = nodes.filter(
-      (n) => n.data.nodeType === "success" || n.data.nodeType === "end",
-    );
-    expect(terminals.length).toBeGreaterThanOrEqual(1);
-    for (const t of terminals) {
-      expect(
-        edges.some((e) => e.source === t.id && e.target === statsId),
-        `${t.id} → statistics`,
-      ).toBe(true);
-    }
-    // pure sink — no outgoing edges
-    expect(edges.some((e) => e.source === statsId)).toBe(false);
-  });
-
-  it("channel-aware (linear) template has a single statistics sink", () => {
-    const { nodes } = createTemplate("Первая сделка", "own", ["sms", "email"]);
-    expect(nodes.filter((n) => n.data.nodeType === "statistics")).toHaveLength(1);
-  });
-
-  it("segmented channel template has a single statistics sink", () => {
-    const { nodes } = createTemplate("Апсейл", "own", ["sms", "email"]);
-    expect(nodes.filter((n) => n.data.nodeType === "statistics")).toHaveLength(1);
-  });
-
-  it("statistics node carries StatisticsParams", () => {
-    const { nodes } = createTemplate("Регистрация", "new");
-    const stat = nodes.find((n) => n.data.nodeType === "statistics")!;
-    expect(stat.data.params).toEqual({ kind: "statistics" });
-  });
-});
 
 describe("applyCampaignContext — signal node files (spec C)", () => {
   it("populates the signal node's files list from the campaign bases", () => {

@@ -86,7 +86,7 @@ describe("computeReach", () => {
       signalNode(4000),
       node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }),
       node("cond", "condition", { kind: "condition", trigger: "opened" }),
-      node("landing", "statistics", { kind: "statistics" }),
+      node("landing", "wait", { kind: "wait", mode: "duration", durationHours: 1 }),
       node("push", "push", { kind: "push", title: "", body: "" }),
     ];
     const edges = [
@@ -188,7 +188,7 @@ describe("computeCampaignCost", () => {
       signalNode(4000),
       node("sms", "sms", { kind: "sms", text: "", alphaName: "", scheduledAt: "immediate" }, "Промо"),
       node("cond", "condition", { kind: "condition", trigger: "opened" }),
-      node("landing", "statistics", { kind: "statistics" }),
+      node("landing", "wait", { kind: "wait", mode: "duration", durationHours: 1 }),
       node("push", "push", { kind: "push", title: "", body: "" }, "Напомни"),
     ];
     const edges = [

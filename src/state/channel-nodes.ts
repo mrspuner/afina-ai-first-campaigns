@@ -217,7 +217,7 @@ export function buildChannelBlock(channels: Channel[], idPrefix?: string, useTem
 
   const splitNode = makeNode(
     splitId,
-    "Ветвление",
+    "Сплиттер",
     "split",
     0,
     0,

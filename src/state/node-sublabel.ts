@@ -51,7 +51,6 @@ export function computeNodeSublabel(params: NodeParams): string | null {
     case "push":
     case "email":
     case "ivr": return null;
-    case "statistics": return "Результаты после запуска";
   }
 }
 

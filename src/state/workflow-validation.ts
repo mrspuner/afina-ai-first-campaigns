@@ -2,7 +2,7 @@ import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 /** Per-kind required-field check. A node "needs attention" when a field a
  *  human must fill is empty. Structural/auto nodes (wait, condition,
- *  split, source, scoring, signal, end, statistics) are never flagged. */
+ *  split, source, scoring, signal, end) are never flagged. */
 export function nodeNeedsAttention(node: WorkflowNode): boolean {
   const p = node.data.params;
   if (!p) return false;
@@ -24,7 +24,6 @@ export function nodeNeedsAttention(node: WorkflowNode): boolean {
     case "end":
     case "signal":
     case "scoring":
-    case "statistics":
       return false;
     default:
       return false;

@@ -15,12 +15,11 @@ const NODE_FIXTURE: Array<{ nodeType: WorkflowNodeType; params: string[] }> = [
   { nodeType: "signal", params: [] },
   { nodeType: "success", params: ["Цель"] },
   { nodeType: "end", params: ["Причина"] },
-  { nodeType: "statistics", params: [] },
 ];
 
 const PARAMS_KINDS = [
   "sms", "email", "push", "ivr", "wait", "condition", "split",
-  "scoring", "signal", "success", "end", "statistics",
+  "scoring", "signal", "success", "end",
 ] as const satisfies ReadonlyArray<NodeParams["kind"]>;
 type _ExhaustiveCheck = Exclude<NodeParams["kind"], (typeof PARAMS_KINDS)[number]>;
 const _verifyExhaustive: _ExhaustiveCheck extends never ? true : false = true;

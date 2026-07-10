@@ -11,7 +11,6 @@ import {
   Phone,
   CheckCircle2,
   CircleStop,
-  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
@@ -34,7 +33,6 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
   scoring:    { border: "#1e3a8a", bg: "#050815", color: "#93c5fd" },
   success:    { border: "#14532d", bg: "#030d06", color: "#4ade80" },
   end:        { border: "#374151", bg: "#0a0a0a", color: "#9ca3af" },
-  statistics: { border: "#44403c", bg: "#0c0b0a", color: "#a8a29e" },
   // Logic
   split:      { border: "#4c1d95", bg: "#0d0819", color: "#a78bfa" },
   wait:       { border: "#713f12", bg: "#0f0a03", color: "#fbbf24" },
@@ -69,7 +67,6 @@ export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
   ivr: Phone,
   success: CheckCircle2,
   end: CircleStop,
-  statistics: BarChart3,
 };
 
 /** Цвет узла по kind. Падает на `default`, если kind неизвестен. */

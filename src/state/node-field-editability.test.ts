@@ -10,7 +10,7 @@ describe("NODE_FIELD_EDITABILITY", () => {
     expect(kinds).toEqual(
       [
         "condition", "email", "end", "ivr", "scoring",
-        "push", "signal", "split", "sms", "success", "wait", "statistics",
+        "push", "signal", "split", "sms", "success", "wait",
       ].sort()
     );
   });

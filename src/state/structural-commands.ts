@@ -275,8 +275,7 @@ const TYPE_LABEL: Record<WorkflowNodeType, string> = {
   signal: "Сигнал",
   success: "Успех",
   end: "Конец",
-  statistics: "Статистика",
-  split: "Ветвление",
+  split: "Сплиттер",
   wait: "Задержка",
   condition: "Взаимодействие",
   sms: "СМС",
@@ -574,7 +573,7 @@ function describePlacement(p: Placement): string {
 
 /** Единый источник «какие типы узлов можно удалять» (контракт для спеки B —
  *  видимость кнопки-корзины). Удаляемы: sms/email/push/ivr/wait/split/condition.
- *  Неудаляемы: source/signal (вход), scoring, success/end/statistics (терминалы). */
+ *  Неудаляемы: source/signal (вход), scoring, success/end (терминалы). */
 const DELETABLE_NODE_TYPES: ReadonlySet<WorkflowNodeType> = new Set([
   "sms", "email", "push", "ivr", "wait", "split", "condition",
 ]);
@@ -591,7 +590,7 @@ function applyRemove(
   if (!node) return { error: `«${op.ref}» — нет такой ноды` };
   const nodeType = (node.data as { nodeType: WorkflowNodeType }).nodeType;
   if (!isDeletableNodeType(nodeType)) {
-    if (nodeType === "success" || nodeType === "end" || nodeType === "statistics") {
+    if (nodeType === "success" || nodeType === "end") {
       return { error: `${TYPE_LABEL[nodeType]} — финальная нода, удалять нельзя` };
     }
     return { error: `Сигнал — точка входа, удалять нельзя` };

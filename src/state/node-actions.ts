@@ -241,7 +241,6 @@ export const NODE_ACTIONS: ActionsForAll = {
       },
     },
   ],
-  statistics: [],
   scoring: [],
   signal: [],
   success: [

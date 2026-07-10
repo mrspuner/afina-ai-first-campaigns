@@ -4,9 +4,7 @@ import type { NodeParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 import { CHANNEL_NODE_MAP } from "@/state/channel-nodes";
 
 /** Типы, доступные модели при пересборке. Без legacy и без signal —
- *  сигнальную ноду билдер всегда ставит сам первой. `statistics` тоже
- *  исключён намеренно: терминал-сток «Статистика» добавляется автоматически
- *  на уровне генерации шаблонов (withStatisticsSink), не через ИИ. */
+ *  сигнальную ноду билдер всегда ставит сам первой. */
 export const rebuildNodeTypeSchema = z.enum([
   "sms", "email", "push", "ivr", "wait", "condition", "split",
   "success", "end",
