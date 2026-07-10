@@ -6,6 +6,7 @@ import { Handle, Position, useUpdateNodeInternals } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useAppDispatch } from "@/state/app-state-context";
+import { usePromptChips } from "@/state/prompt-chips-context";
 import type { WorkflowNode } from "@/types/workflow";
 import { NodeCardBody } from "./node-card-content";
 import { NODE_STYLES, NODE_ICON } from "./node-visuals";
@@ -21,6 +22,7 @@ export function WorkflowNodeComponent({ id, data, selected }: NodeProps<Workflow
   const s = NODE_STYLES[data.nodeType] ?? NODE_STYLES.default;
   const Icon = NODE_ICON[data.nodeType];
   const dispatch = useAppDispatch();
+  const { removeChipsForNode } = usePromptChips();
   const updateNodeInternals = useUpdateNodeInternals();
 
   // Selecting a node resizes it (110→320 wide, taller card), which moves both
@@ -116,6 +118,9 @@ export function WorkflowNodeComponent({ id, data, selected }: NodeProps<Workflow
             aria-label="Закрыть карточку ноды"
             onClick={(e) => {
               e.stopPropagation();
+              // #2 — снимаем теги этой ноды (node_${id} + nodefield_${id}_*).
+              // Направление одностороннее: закрытие ноды → чистка её тегов.
+              removeChipsForNode(id);
               dispatch({ type: "workflow_node_deselected" });
             }}
             className="nodrag -mr-1 -mt-1 rounded-md p-1 text-muted-foreground opacity-70 hover:bg-accent hover:text-foreground hover:opacity-100"
