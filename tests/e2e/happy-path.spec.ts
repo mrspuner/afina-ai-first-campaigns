@@ -88,8 +88,11 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
 
-  // 10. Workflow editor (draft). The header «Запустить» validates the graph and
-  //    routes to the payment screen (it is a routing hop, not the launch).
+  // 10. Campaign card (draft) — the wizard lands here, not in the graph editor.
+  //     Its «Как работает кампания» block carries the mini-graph; the card's
+  //     «Запустить» validates the graph and routes to the payment screen (a
+  //     routing hop, not the launch).
+  await expect(page.getByText("Как работает кампания")).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
   await page
     .locator('[data-slot="button"]')

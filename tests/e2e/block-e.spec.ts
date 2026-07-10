@@ -114,6 +114,12 @@ async function createCampaignViaWizard(page: Page, channel: "sms") {
   ).toBeVisible();
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   await page.getByRole("button", { name: "Далее" }).last().click();
+  // Финал визарда приземляет в КАРТОЧКУ кампании, а не в редактор графа.
+  // Мини-граф карточки рендерит те же ноды, но не кликается — за редактором
+  // идём через «Открыть workflow» (aria-label мини-превью).
+  await expect(page.getByText("Как работает кампания")).toBeVisible({ timeout: 8_000 });
+  await page.getByRole("button", { name: "Открыть workflow" }).click();
+  await expect(page.getByText("Как работает кампания")).toHaveCount(0);
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 8_000 });
 }
 
