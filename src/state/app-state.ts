@@ -72,7 +72,12 @@ export type Campaign = {
    *  surfaced read-only in the scoring node's «Интересы и триггеры» drawer. */
   triggers?: string[];
   files?: CampaignFile[];
+  /** Расчётный дневной бюджет (communication / STREAM_DAYS). Производная от
+   *  стоимости графа — пересчитывается и перезаписывается при запуске. */
   dailyBudget?: number;
+  /** Потолок дневного бюджета, введённый пользователем в визарде (только
+   *  stream). Durable: не пересчитывается. Это то, что показываем в UI. */
+  maxDailyBudget?: number;
   /**
    * Distinguishes "scoring running" from "communication started" — `status`
    * alone ("active") cannot. Drives the in-card progress block (design §4).
@@ -527,6 +532,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         files,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,
+        maxDailyBudget: sd.maxDailyBudget,
         // new drafts collect signals pre-launch — start in the scoring phase so
         // the campaign card shows collection progress and gates «Запустить».
         // stream/own launch immediately, so they carry no pre-launch phase.

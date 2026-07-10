@@ -22,6 +22,34 @@ describe("campaign_created_from_wizard", () => {
     expect((next.view as { kind: "campaign"; campaign: { id: string } }).campaign.id).toBe(next.campaigns.at(-1)!.id);
   });
 
+  // Потолок дневного бюджета вводит пользователь (только stream). Это durable
+  // значение кампании — в отличие от расчётного dailyBudget, который
+  // пересчитывается от стоимости графа.
+  it("переносит введённый maxDailyBudget на кампанию", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: {
+        ...initialStepData,
+        scenario: "registration",
+        sourceType: "stream",
+        channels: ["sms"],
+        budget: 1000,
+        maxDailyBudget: 5000,
+      },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].maxDailyBudget).toBe(5000);
+  });
+
+  it("без введённого потолка maxDailyBudget не выставляется", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "registration", sourceType: "stream", channels: ["sms"] },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].maxDailyBudget).toBeUndefined();
+  });
+
   it("new source starts in the scoring phase (pre-launch collection)", () => {
     const next = appReducer(initialState, {
       type: "campaign_created_from_wizard",

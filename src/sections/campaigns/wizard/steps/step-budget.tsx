@@ -276,9 +276,17 @@ export function StepBudget({ data, onNext, onBack, active }: StepProps) {
   }
 
   function proceed() {
+    // Потолок вводит пользователь (только stream) — durable значение кампании.
+    // Ключ передаём ВСЕГДА: пустое поле должно снимать ранее заданный потолок
+    // (StepData мержится спредом, отсутствующий ключ ничего не затёр бы).
+    const maxDaily =
+      isStream && !isNaN(maxDailyParsed) && maxDailyParsed > 0
+        ? maxDailyParsed
+        : undefined;
     onNext({
       budget: activeValue,
       budgetMode: mode,
+      maxDailyBudget: maxDaily,
       ...(isStream && estimate.dailyBudget !== undefined
         ? { dailyBudget: estimate.dailyBudget }
         : {}),

@@ -93,10 +93,12 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
             value={formatRub(metrics.actualSpend)}
           />
         )}
-        {campaign.sourceType === "stream" && campaign.dailyBudget != null && (
+        {/* Потолок, заданный пользователем. НЕ dailyBudget: тот производный от
+            стоимости графа и перезаписывается при запуске (визуально «скакал»). */}
+        {campaign.maxDailyBudget != null && (
           <StatItem
-            label="Дневной бюджет"
-            value={formatRubPlain(campaign.dailyBudget)}
+            label="Макс. дневной бюджет"
+            value={formatRubPlain(campaign.maxDailyBudget)}
           />
         )}
       </div>

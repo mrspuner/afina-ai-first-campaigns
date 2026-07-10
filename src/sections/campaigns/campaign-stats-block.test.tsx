@@ -1,6 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { buildCampaignStats } from "./campaign-stats-block";
+import { describe, it, expect, afterEach } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+import { buildCampaignStats, CampaignStatsBlock } from "./campaign-stats-block";
 import type { Campaign, Artifact } from "@/state/app-state";
+
+afterEach(cleanup);
 
 function campaign(partial: Partial<Campaign>): Campaign {
   return {
@@ -39,5 +42,31 @@ describe("buildCampaignStats", () => {
     expect(s!.plannedBudget).toBe(5000);
     expect(typeof s!.actualSpend).toBe("number");
     expect(s!.actualSpend).toBeGreaterThan(0);
+  });
+});
+
+// Внутри открытой кампании потолок должен быть виден так же, как на карточке
+// в разделе «Кампании» — раньше строка жила только в CampaignCard.
+describe("CampaignStatsBlock — макс. дневной бюджет", () => {
+  const launched = campaign({
+    status: "active",
+    budget: 5000,
+    launchedAt: new Date(2024, 0, 1).toISOString(),
+  });
+
+  it("показывает введённый потолок точным значением", () => {
+    render(
+      <CampaignStatsBlock
+        campaign={{ ...launched, maxDailyBudget: 12000 }}
+        populated
+      />,
+    );
+    expect(screen.getByText("Макс. дневной бюджет")).toBeInTheDocument();
+    expect(screen.getByText(/^12\s000\s₽$/)).toBeInTheDocument();
+  });
+
+  it("без потолка строки нет", () => {
+    render(<CampaignStatsBlock campaign={launched} populated />);
+    expect(screen.queryByText("Макс. дневной бюджет")).not.toBeInTheDocument();
   });
 });
