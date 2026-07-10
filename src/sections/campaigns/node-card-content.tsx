@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useRef } from "react";
-import { AlertTriangle, Eye, Pencil, Plus, X } from "lucide-react";
+import { AlertTriangle, Eye, Plus, X } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { getFieldMeta } from "@/state/node-field-editability";
@@ -292,7 +292,7 @@ export function ScoringRow({
           className="nodrag flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
         >
           {editable ? (
-            <Pencil className="h-3.5 w-3.5" />
+            <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
           ) : (
             <Eye className="h-3.5 w-3.5" />
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -173,7 +173,7 @@ function ModeRow({
         <span className="truncate text-foreground">{value}</span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
           {isDirty && <DirtyDot />}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent
@@ -247,7 +247,7 @@ function DurationRow({
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
           {isDirty && <DirtyDot />}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent

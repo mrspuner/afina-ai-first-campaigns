@@ -127,4 +127,20 @@ describe("NodeTemplateSelect", () => {
     open();
     expect(screen.getByText("Нет шаблонов для этого канала")).toBeInTheDocument();
   });
+
+  it("uses a chevron affordance, not a pencil (spec B #4)", () => {
+    const { container } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty={false}
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    expect(container.querySelector("svg.lucide-chevron-down")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
 });

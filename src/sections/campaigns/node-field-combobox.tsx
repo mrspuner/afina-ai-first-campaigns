@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Pencil } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -108,7 +108,7 @@ export function NodeFieldCombobox({
           )}
           {/* Индикатор «поле редактируемо» — не отдельная кнопка, клик по нему
               открывает тот же дропдаун, что и вся строка-триггер. */}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent

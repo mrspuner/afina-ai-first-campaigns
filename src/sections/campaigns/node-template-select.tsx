@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Pencil, Plus } from "lucide-react";
+import { ChevronDown, Eye, Plus } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -103,7 +103,7 @@ export function NodeTemplateSelect({
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
           {dirtyDot}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent
