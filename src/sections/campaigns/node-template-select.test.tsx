@@ -159,4 +159,41 @@ describe("NodeTemplateSelect", () => {
     const labelCell = getByText("Шаблон");
     expect(within(labelCell).getByTitle("Параметр изменён")).not.toBeNull();
   });
+
+  it("shows an eye before the chevron when a template is selected; click previews, no popover (spec B #6)", () => {
+    const onPreview = vi.fn();
+    const onSelect = vi.fn();
+    const { getByRole, container } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName="SMS — напоминание"
+        selectedTemplateId="t1"
+        isDirty={false}
+        onSelect={onSelect}
+        onPreview={onPreview}
+        onCreate={vi.fn()}
+      />
+    );
+    const eye = getByRole("button", { name: "Предпросмотр" });
+    expect(container.querySelector("svg.lucide-eye")).not.toBeNull();
+    fireEvent.click(eye);
+    expect(onPreview).toHaveBeenCalledWith("t1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("no eye when nothing selected", () => {
+    const { queryByRole } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty={false}
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    expect(queryByRole("button", { name: "Предпросмотр" })).toBeNull();
+  });
 });

@@ -33,6 +33,7 @@ export function NodeTemplateSelect({
   label,
   templates,
   selectedName,
+  selectedTemplateId,
   isDirty,
   readOnly,
   onSelect,
@@ -44,6 +45,8 @@ export function NodeTemplateSelect({
   templates: MessageTemplate[];
   /** Текущее выбранное имя шаблона (или "" если нет). */
   selectedName: string;
+  /** id выбранного шаблона — для встроенного глазика предпросмотра (#6). */
+  selectedTemplateId?: string;
   isDirty: boolean;
   readOnly?: boolean;
   /** Применяет выбранный шаблон к ноде. */
@@ -59,6 +62,33 @@ export function NodeTemplateSelect({
     "grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 text-[11px]";
   const displayValue = selectedName || "—";
 
+  // #6 — глазик предпросмотра живёт ВНУТРИ дропдауна, перед раскрывающим
+  // шевроном. base-ui PopoverTrigger рендерит нативную <button>, поэтому глазик —
+  // span role="button" (вложенная <button> невалидна). stopPropagation не даёт
+  // клику раскрыть попап.
+  const previewEye = selectedTemplateId ? (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Предпросмотр"
+      title="Предпросмотр"
+      className="nodrag inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPreview(selectedTemplateId);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          onPreview(selectedTemplateId);
+        }
+      }}
+    >
+      <Eye aria-hidden className="h-3.5 w-3.5" />
+    </span>
+  ) : null;
+
   // Лаунч/пауза/завершено: карточка только для просмотра — текст без попапа.
   if (readOnly) {
     return (
@@ -70,7 +100,7 @@ export function NodeTemplateSelect({
         <span className="truncate text-foreground" title={displayValue}>
           {displayValue}
         </span>
-        <span className="flex items-center justify-end" />
+        <span className="flex items-center justify-end">{previewEye}</span>
       </div>
     );
   }
@@ -101,6 +131,7 @@ export function NodeTemplateSelect({
           {displayValue}
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
+          {previewEye}
           <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>

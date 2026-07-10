@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef } from "react";
+import { useRef } from "react";
 import { AlertTriangle, Eye, Plus, X } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
@@ -461,48 +461,31 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   (t.content as Record<string, unknown>)[paramKey] === current
               );
               return (
-                // #6 — постоянный глазик превью рядом с полем «Шаблон» для ВСЕХ
-                // каналов (по образцу IVR): виден при выбранном шаблоне и открывает
-                // предпросмотр, не раскрывая селект. Работает и в read-only (осмотр
-                // запущенной кампании).
-                <div key={row.label} className="flex items-center gap-1">
-                  <div className="min-w-0 flex-1">
-                    <NodeTemplateSelect
-                      label={row.label}
-                      templates={opts}
-                      selectedName={selected?.name ?? ""}
-                      isDirty={isDirty}
-                      readOnly={readOnly}
-                      onSelect={(t) => {
-                        // Применяем компонент шаблона в params ноды (path-1 модели):
-                        // нода реально несёт текст шаблона через существующий reducer.
-                        const next = (t.content as Record<string, unknown>)[paramKey];
-                        applyFieldValue(
-                          paramKey,
-                          typeof next === "string" ? next : t.name
-                        );
-                      }}
-                      onPreview={(templateId) => openTemplatePreview(templateId)}
-                      onCreate={() => {
-                        if (channel) openTemplateCreate(channel);
-                      }}
-                    />
-                  </div>
-                  {selected && (
-                    <button
-                      type="button"
-                      aria-label="Предпросмотр"
-                      title="Предпросмотр"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTemplatePreview(selected.id);
-                      }}
-                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                // #6 — глазик превью живёт ВНУТРИ дропдауна (перед шевроном),
+                // виден при выбранном шаблоне; открывает предпросмотр, не
+                // раскрывая селект. Работает и в read-only (осмотр запущенной).
+                <NodeTemplateSelect
+                  key={row.label}
+                  label={row.label}
+                  templates={opts}
+                  selectedName={selected?.name ?? ""}
+                  selectedTemplateId={selected?.id}
+                  isDirty={isDirty}
+                  readOnly={readOnly}
+                  onSelect={(t) => {
+                    // Применяем компонент шаблона в params ноды (path-1 модели):
+                    // нода реально несёт текст шаблона через существующий reducer.
+                    const next = (t.content as Record<string, unknown>)[paramKey];
+                    applyFieldValue(
+                      paramKey,
+                      typeof next === "string" ? next : t.name
+                    );
+                  }}
+                  onPreview={(templateId) => openTemplatePreview(templateId)}
+                  onCreate={() => {
+                    if (channel) openTemplateCreate(channel);
+                  }}
+                />
               );
             }
 
@@ -523,42 +506,33 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
+              // IVR «Текст» — глазик предпросмотра СЦЕНАРИЯ ноды теперь ВНУТРИ
+              // комбобокса (перед шевроном): тот же дровер/IvrRenderer, что и
+              // sms/email/push. Прочие combo-поля (sms «Время», condition/success/
+              // end) onPreview не передают — глаза нет.
               const combo = (
                 <NodeFieldCombobox
+                  key={row.label}
                   label={row.label}
                   value={rawValue}
                   optionsKey={meta.optionsKey}
                   isDirty={isDirty}
                   onSelect={(next) => applyFieldValue(paramKey, next)}
                   onAiHandoff={() => handleAiField(row.label)}
+                  onPreview={
+                    data.params?.kind === "ivr"
+                      ? () =>
+                          openTemplatePreview(
+                            ivrNodePreviewTemplate(
+                              id,
+                              data.params as Extract<NodeParams, { kind: "ivr" }>
+                            )
+                          )
+                      : undefined
+                  }
                 />
               );
-              // IVR «Текст» — рядом с полем «глаз»: предпросмотр СЦЕНАРИЯ ноды в
-              // том же дровере/IvrRenderer, что и sms/email/push. Контент берём из
-              // текущих params ноды (сценарий/голос живут внутри ноды).
-              if (data.params?.kind === "ivr") {
-                const ivrParams = data.params;
-                return (
-                  <div key={row.label} className="flex items-center gap-1">
-                    <div className="min-w-0 flex-1">{combo}</div>
-                    <button
-                      type="button"
-                      aria-label="Предпросмотр"
-                      title="Предпросмотр"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTemplatePreview(ivrNodePreviewTemplate(id, ivrParams));
-                      }}
-                      className="nodrag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:bg-white/5 focus-visible:outline-none"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                );
-              }
-              // Прочие combo-поля (sms «Время», condition/success/end) — без «глаза»,
-              // DOM неизменен (без обёртки), чтобы не тронуть визуальные снапшоты.
-              return <Fragment key={row.label}>{combo}</Fragment>;
+              return combo;
             }
 
             // ai — иконка-маскот, тег поля улетает ассистенту (без изменений).

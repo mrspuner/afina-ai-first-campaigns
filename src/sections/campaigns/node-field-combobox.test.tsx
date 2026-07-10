@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, it, expect, vi } from "vitest";
-import { render, within } from "@testing-library/react";
+import { render, within, fireEvent } from "@testing-library/react";
 
 vi.mock("@/state/field-directory", () => ({
   getFieldOptions: () => ["Открыто", "Кликнуто"],
@@ -57,5 +57,38 @@ describe("NodeFieldCombobox — chevron affordance (spec B #4)", () => {
     expect(within(labelCell).getByTitle("Параметр изменён")).not.toBeNull();
     // sanity: the title-carrying dot is the same node the label column holds.
     expect(getByTitle("Параметр изменён")).not.toBeNull();
+  });
+
+  it("shows an eye before the chevron only when onPreview is provided; click previews, no popover (spec B #6)", () => {
+    const onPreview = vi.fn();
+    const onSelect = vi.fn();
+    const { getByRole } = render(
+      <NodeFieldCombobox
+        label="Текст"
+        value="Сценарий"
+        optionsKey="eventCatalog"
+        isDirty={false}
+        onSelect={onSelect}
+        onAiHandoff={vi.fn()}
+        onPreview={onPreview}
+      />
+    );
+    fireEvent.click(getByRole("button", { name: "Предпросмотр" }));
+    expect(onPreview).toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("no eye without onPreview (sms Время / condition / wait etc.)", () => {
+    const { queryByRole } = render(
+      <NodeFieldCombobox
+        label="Время"
+        value=""
+        optionsKey="eventCatalog"
+        isDirty={false}
+        onSelect={vi.fn()}
+        onAiHandoff={vi.fn()}
+      />
+    );
+    expect(queryByRole("button", { name: "Предпросмотр" })).toBeNull();
   });
 });

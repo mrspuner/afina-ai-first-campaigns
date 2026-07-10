@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -41,6 +41,7 @@ export function NodeFieldCombobox({
   isDirty,
   onSelect,
   onAiHandoff,
+  onPreview,
 }: {
   label: string;
   value: string;
@@ -50,6 +51,8 @@ export function NodeFieldCombobox({
   onSelect: (next: string) => void;
   /** Передаёт поле ассистенту (тег + шаблон в PromptBar/дровер). */
   onAiHandoff: () => void;
+  /** #6 — если задан, показывает глазик предпросмотра перед шевроном (только IVR). */
+  onPreview?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -103,6 +106,31 @@ export function NodeFieldCombobox({
           {displayValue}
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
+          {/* #6 — глазик предпросмотра перед шевроном (только IVR передаёт
+              onPreview). span role="button", т.к. вложенная <button> в нативную
+              кнопку PopoverTrigger невалидна; stopPropagation не раскрывает попап. */}
+          {onPreview && (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Предпросмотр"
+              title="Предпросмотр"
+              className="nodrag inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPreview();
+                }
+              }}
+            >
+              <Eye aria-hidden className="h-3.5 w-3.5" />
+            </span>
+          )}
           {/* Индикатор «поле редактируемо» — не отдельная кнопка, клик по нему
               открывает тот же дропдаун, что и вся строка-триггер. */}
           <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
