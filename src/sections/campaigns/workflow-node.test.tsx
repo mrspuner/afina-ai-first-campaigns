@@ -13,8 +13,18 @@ vi.mock("@xyflow/react", () => ({
 }));
 vi.mock("motion/react", () => ({
   motion: {
-    div: ({ children, className, style }: any) => (
-      <div className={className} style={style}>{children}</div>
+    div: ({
+      children,
+      className,
+      style,
+    }: Record<string, unknown> & {
+      children?: React.ReactNode;
+      className?: string;
+      style?: React.CSSProperties;
+    }) => (
+      <div className={className} style={style}>
+        {children}
+      </div>
     ),
   },
 }));
@@ -50,5 +60,36 @@ describe("WorkflowNodeComponent — close removes node tags (spec B #2)", () => 
     fireEvent.click(screen.getByRole("button", { name: "Закрыть карточку ноды" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "workflow_node_deselected" });
     expect(removeChipsForNode).toHaveBeenCalledWith("n1");
+  });
+});
+
+describe("WorkflowNodeComponent — delete node (spec B #9)", () => {
+  beforeEach(() => {
+    dispatch.mockClear();
+    removeChipsForNode.mockClear();
+  });
+
+  it("deletable type: trash button present, two-step confirm dispatches remove", () => {
+    renderNode(sms); // nodeType "sms"
+    const trash = screen.getByRole("button", { name: "Удалить узел" });
+    fireEvent.click(trash);
+    // First click arms the confirm; nothing dispatched yet.
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "workflow_structural_commands_submit" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить удаление узла" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "workflow_structural_commands_submit",
+      ops: [{ kind: "remove", ref: "n1" }],
+    });
+  });
+
+  it("non-deletable type (scoring): no trash button", () => {
+    renderNode({
+      label: "Скоринг",
+      nodeType: "scoring",
+      params: { kind: "scoring", interests: [], triggers: [], files: [] },
+    });
+    expect(screen.queryByRole("button", { name: "Удалить узел" })).toBeNull();
   });
 });
