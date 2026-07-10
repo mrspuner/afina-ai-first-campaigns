@@ -63,33 +63,25 @@ describe("WorkflowNodeComponent — close removes node tags (spec B #2)", () => 
   });
 });
 
-describe("WorkflowNodeComponent — delete node (spec B #9)", () => {
+// Кнопка удаления узла временно убрана с ноды (удаление остаётся доступным
+// через структурные команды ассистента). Страхуемся, что она не вернулась в UI.
+describe("WorkflowNodeComponent — кнопки удаления узла нет", () => {
   beforeEach(() => {
     dispatch.mockClear();
     removeChipsForNode.mockClear();
   });
 
-  it("deletable type: trash button present, two-step confirm dispatches remove", () => {
-    renderNode(sms); // nodeType "sms"
-    const trash = screen.getByRole("button", { name: "Удалить узел" });
-    fireEvent.click(trash);
-    // First click arms the confirm; nothing dispatched yet.
-    expect(dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "workflow_structural_commands_submit" })
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Подтвердить удаление узла" }));
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "workflow_structural_commands_submit",
-      ops: [{ kind: "remove", ref: "n1" }],
-    });
+  it("у раскрытого канала корзины нет", () => {
+    renderNode(sms);
+    expect(screen.queryByRole("button", { name: "Удалить узел" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Подтвердить удаление узла" })).toBeNull();
   });
 
-  it("non-deletable type (scoring): no trash button", () => {
-    renderNode({
-      label: "Скоринг",
-      nodeType: "scoring",
-      params: { kind: "scoring", interests: [], triggers: [], files: [] },
-    });
-    expect(screen.queryByRole("button", { name: "Удалить узел" })).toBeNull();
+  it("единственная кнопка в шапке — закрыть карточку", () => {
+    renderNode(sms);
+    expect(screen.getByRole("button", { name: "Закрыть карточку ноды" })).toBeTruthy();
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "workflow_structural_commands_submit" }),
+    );
   });
 });

@@ -1,6 +1,5 @@
 import type { NodeParams, WorkflowNode } from "@/types/workflow";
 import { splitSummary } from "./split-segments";
-import { getEmail } from "./email-directory";
 import { pluralRu } from "@/lib/plural-ru";
 
 /** «Открыто»/«Кликнуто»/«Доставлено» из события-триггера condition (12c). */
@@ -35,7 +34,6 @@ export function computeNodeSublabel(params: NodeParams): string | null {
     case "wait": return waitSublabel(params);
     case "condition": return conditionTriggerLabel(params.trigger);
     case "split": return splitSummary(params);
-    case "ivr": return params.scenario || "—";
     case "success": return params.goal || "—";
     case "end": return params.reason || "—";
     case "scoring": {
@@ -48,12 +46,11 @@ export function computeNodeSublabel(params: NodeParams): string | null {
       const name = params.fileName?.trim() || "Готовая аудитория";
       return params.count > 0 ? `${name} · ${params.count.toLocaleString("ru-RU")}` : name;
     }
-    case "email": {
-      if (!params.emailId) return "—";
-      return getEmail(params.emailId)?.name || params.subject.trim() || "—";
-    }
+    // Коммуникационные ноды — без подзаголовка: заголовок канала самодостаточен.
     case "sms":
-    case "push": return "—";
+    case "push":
+    case "email":
+    case "ivr": return null;
     case "statistics": return "Результаты после запуска";
   }
 }
@@ -64,7 +61,12 @@ export function computeSublabels<N extends WorkflowNode>(nodes: N[]): N[] {
   return nodes.map((n) => {
     if (!n.data.params) return n;
     const next = computeNodeSublabel(n.data.params);
-    if (next === null || n.data.sublabel === next) return n;
+    if (next === null) {
+      // Тип без подзаголовка (каналы): гасим ранее выставленный, если был.
+      if (n.data.sublabel === undefined) return n;
+      return { ...n, data: { ...n.data, sublabel: undefined } };
+    }
+    if (n.data.sublabel === next) return n;
     return { ...n, data: { ...n.data, sublabel: next } };
   });
 }

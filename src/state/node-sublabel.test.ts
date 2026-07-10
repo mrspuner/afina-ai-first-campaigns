@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeNodeSublabel } from "./node-sublabel";
+import { computeNodeSublabel, computeSublabels } from "./node-sublabel";
+import type { NodeParams, WorkflowNode } from "@/types/workflow";
 
 describe("computeNodeSublabel", () => {
   it("wait → duration / until-event", () => {
@@ -16,8 +17,7 @@ describe("computeNodeSublabel", () => {
   it("split → splitSummary", () => {
     expect(computeNodeSublabel({ kind: "split", by: "segment", branches: 4 })).toBe("По сегменту · 4 ветки");
   });
-  it("ivr → scenario, success → goal, end → reason", () => {
-    expect(computeNodeSublabel({ kind: "ivr", scenario: "Возврат", voiceType: "female" })).toBe("Возврат");
+  it("success → goal, end → reason", () => {
     expect(computeNodeSublabel({ kind: "success", goal: "Активация" })).toBe("Активация");
     expect(computeNodeSublabel({ kind: "end", reason: "Молчание" })).toBe("Молчание");
   });
@@ -26,8 +26,12 @@ describe("computeNodeSublabel", () => {
       computeNodeSublabel({ kind: "scoring", interests: ["a", "b"], triggers: ["t"], files: [] }),
     ).toBe("2 интереса · 1 триггер");
   });
-  it("email → имя привязанного шаблона, «—» когда шаблон не выбран", () => {
-    // 12c: подзаголовок канала — привязанный шаблон, а не его id.
+  // Коммуникационные ноды (все 4 канала) подзаголовка не имеют — заголовка
+  // канала достаточно, «—» и имя шаблона только шумели.
+  it("каналы sms/push/email/ivr → без подзаголовка (null)", () => {
+    expect(computeNodeSublabel({ kind: "sms", text: "hi", alphaName: "A", scheduledAt: "immediate" })).toBeNull();
+    expect(computeNodeSublabel({ kind: "push", title: "T", body: "B" })).toBeNull();
+    expect(computeNodeSublabel({ kind: "ivr", scenario: "Возврат", voiceType: "female" })).toBeNull();
     expect(
       computeNodeSublabel({
         kind: "email",
@@ -36,14 +40,36 @@ describe("computeNodeSublabel", () => {
         sender: "a@b.c",
         emailId: "eml_welcome",
       }),
-    ).toBe("Приветственное — онбординг");
+    ).toBeNull();
     expect(
       computeNodeSublabel({ kind: "email", subject: "S", body: "B", sender: "a@b.c" }),
-    ).toBe("—");
+    ).toBeNull();
   });
-  it("sms/push → «—», statistics → placeholder", () => {
-    expect(computeNodeSublabel({ kind: "sms", text: "hi", alphaName: "A", scheduledAt: "immediate" })).toBe("—");
-    expect(computeNodeSublabel({ kind: "push", title: "T", body: "B" })).toBe("—");
-    expect(computeNodeSublabel({ kind: "statistics" })).toBe("Результаты после запуска");
+});
+
+describe("computeSublabels", () => {
+  const node = (params: NodeParams, sublabel?: string): WorkflowNode => ({
+    id: "n1",
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: { label: "L", nodeType: params.kind as WorkflowNode["data"]["nodeType"], params, sublabel },
+  });
+
+  it("null очищает ранее выставленный подзаголовок (канал)", () => {
+    const [out] = computeSublabels([
+      node({ kind: "sms", text: "hi", alphaName: "A", scheduledAt: "immediate" }, "—"),
+    ]);
+    expect(out.data.sublabel).toBeUndefined();
+  });
+
+  it("не трогает ноду, если подзаголовок уже отсутствует", () => {
+    const input = [node({ kind: "push", title: "T", body: "B" })];
+    const [out] = computeSublabels(input);
+    expect(out).toBe(input[0]);
+  });
+
+  it("выставляет подзаголовок из контента", () => {
+    const [out] = computeSublabels([node({ kind: "split", by: "segment", branches: 4 })]);
+    expect(out.data.sublabel).toBe("По сегменту · 4 ветки");
   });
 });
