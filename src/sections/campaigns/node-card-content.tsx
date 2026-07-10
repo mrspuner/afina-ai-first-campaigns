@@ -24,6 +24,7 @@ import { NodeTemplateSelect } from "./node-template-select";
 import { EmailField } from "./email-field";
 import { SplitFields } from "./split-fields";
 import { WaitFields } from "./wait-fields";
+import { SignalFiles } from "./signal-files";
 import { DirtyDot } from "./dirty-dot";
 
 type ParamRow = { label: string; value: string };
@@ -414,9 +415,15 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
         <ScoringRow nodeId={id} params={data.params} />
       )}
 
+      {/* Сигнал (спека C): тело узла — список файлов сигналов + «Посмотреть все»
+          (черновик → заглушка). Спец-кейс минует generic PARAM_RENDERERS, как
+          split/wait/scoring. */}
+      {data.params?.kind === "signal" && <SignalFiles params={data.params} />}
+
       {data.params?.kind !== "split" &&
         data.params?.kind !== "wait" &&
         data.params?.kind !== "scoring" &&
+        data.params?.kind !== "signal" &&
         rows.length > 0 && (
         <div className="flex flex-col gap-0.5">
           {rows.map((row) => {
