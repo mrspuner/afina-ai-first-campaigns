@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { TopUpModal, computeShortfall } from "@/sections/signals/top-up-modal";
 import { cn } from "@/lib/utils";
+import { formatRubPlain } from "@/lib/format-rub";
 import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 import { splitCampaignPayments } from "./campaign-payments";
@@ -30,11 +31,6 @@ type Mode = "recommended" | "custom";
 
 function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
-}
-
-/** «1 234 ₽» / «0,5 ₽» — plain rouble value with a trailing sign. */
-function formatRubPlain(n: number): string {
-  return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 }
 
 function formatRub(n: number): string {
