@@ -252,22 +252,10 @@ export const ChipEditableInput = forwardRef<
         }
         el.remove();
       } else {
-        // Update label if it changed. Trailing text node carries the label;
-        // we mutate it in place so the leading <span aria-hidden> icon
-        // (if any) survives the update. createChipElement always appends
-        // the text as the last child via document.createTextNode().
-        const target = stateById.get(id)!;
-        const last = el.lastChild;
-        if (
-          last &&
-          last.nodeType === Node.TEXT_NODE &&
-          last.textContent !== target.label
-        ) {
-          last.textContent = target.label;
-        } else if (!last || last.nodeType !== Node.TEXT_NODE) {
-          // No text node (shouldn't happen, but fail-safe): append one.
-          el.appendChild(document.createTextNode(target.label));
-        }
+        // Обновляем название на месте: иконка и крестик переживают апдейт.
+        // Label помечен [data-chip-label] — по lastChild искать нельзя, у
+        // removable-чипа там кнопка × (иначе дублировался label).
+        updateChipLabel(el, stateById.get(id)!);
       }
     });
 
@@ -561,7 +549,14 @@ export function createChipElement(
     }
   }
 
-  el.appendChild(document.createTextNode(chip.label));
+  // Label живёт в помеченном span, а НЕ голым текстовым узлом: у removable-чипа
+  // последний ребёнок — кнопка ×, поэтому искать текст через lastChild нельзя
+  // (иначе sync-эффект допишет второй label после крестика). Обновляется через
+  // updateChipLabel().
+  const labelEl = document.createElement("span");
+  labelEl.setAttribute("data-chip-label", "");
+  labelEl.textContent = chip.label;
+  el.appendChild(labelEl);
 
   // #2 — видимый крестик у removable-тегов. Чип — императивный DOM-узел вне
   // React, поэтому обработчик вешаем прямо здесь. mousedown.preventDefault не
@@ -588,6 +583,26 @@ export function createChipElement(
   }
 
   return el;
+}
+
+/**
+ * Обновляет название уже вставленного чипа на месте, сохраняя иконку и крестик.
+ * Ищет label по маркеру `[data-chip-label]` — полагаться на lastChild нельзя:
+ * у removable-чипа последний ребёнок это кнопка ×.
+ */
+export function updateChipLabel(el: HTMLElement, chip: PromptChip): void {
+  let labelEl = el.querySelector<HTMLElement>("[data-chip-label]");
+  if (!labelEl) {
+    // Fail-safe для чипов, вставленных до появления маркера.
+    labelEl = document.createElement("span");
+    labelEl.setAttribute("data-chip-label", "");
+    const x = el.querySelector(".chip-remove");
+    el.insertBefore(labelEl, x ?? null);
+  }
+  if (labelEl.textContent !== chip.label) labelEl.textContent = chip.label;
+
+  const x = el.querySelector<HTMLButtonElement>(".chip-remove");
+  if (x) x.setAttribute("aria-label", `Убрать тег: ${chip.label}`);
 }
 
 function insertChipAtRange(
