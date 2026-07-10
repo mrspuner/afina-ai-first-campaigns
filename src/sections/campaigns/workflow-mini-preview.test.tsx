@@ -2,11 +2,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
-import { createBaseNodes } from "@/types/workflow";
+import type { WorkflowNode } from "@/types/workflow";
 import type { CachedGraph } from "./workflow-graph-cache";
 
 // Живой граф из кэша: одна узнаваемая нода с id "live-1".
-const liveNode = { ...createBaseNodes()[0], id: "live-1" };
+const liveNode: WorkflowNode = {
+  id: "live-1",
+  type: "workflowNode",
+  position: { x: 0, y: 0 },
+  data: { label: "Сигнал", nodeType: "signal" },
+};
 const cached: CachedGraph = {
   nodes: [liveNode],
   edges: [],

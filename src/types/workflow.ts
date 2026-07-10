@@ -262,38 +262,6 @@ function shiftRight(nodes: WorkflowNode[], fromX: number, amount: number): Workf
   );
 }
 
-// ── Base graph (Шаг 1 — базовый workflow) ────────────────────────────────────
-
-export function createBaseNodes(signalName?: string): WorkflowNode[] {
-  return [
-    makeNode("signals",  "Сигналы + сегменты", "default",   0,    0,  signalName ?? "Вход из предыдущего шага"),
-    makeNode("split",    "Split по сегментам",  "split",   220,   0),
-    makeNode("push",     "Push",                "channel", 440,  -80, "Мягкий"),
-    makeNode("email",    "Email",               "channel", 440,   0,  "Рассылка"),
-    makeNode("sms",      "SMS",                 "channel", 440,   80, "Сообщение"),
-    makeNode("check",    "Проверка отклика",    "new",     660,   0,  "Реакция / нет"),
-    makeNode("engaged",  "Engaged flow",        "result",  880,  -40, "Баннер + доп. push"),
-    makeNode("retarget", "Retarget flow",       "retarget",880,   40, "Смена канала + оффер"),
-    makeNode("result",   "Результат",           "default",1080,   0,  "Reactivated / cold", { isSuccess: true }),
-  ];
-}
-
-export function createBaseEdges(): WorkflowEdge[] {
-  return [
-    makeEdge("signals",  "split"),
-    makeEdge("split",    "push",     "Максимальный"),
-    makeEdge("split",    "email",    "Оч. высокий"),
-    makeEdge("split",    "sms",      "Высокий"),
-    makeEdge("push",     "check"),
-    makeEdge("email",    "check"),
-    makeEdge("sms",      "check"),
-    makeEdge("check",    "engaged",  "YES"),
-    makeEdge("check",    "retarget", "NO"),
-    makeEdge("engaged",  "result"),
-    makeEdge("retarget", "result"),
-  ];
-}
-
 // ── Command parser ────────────────────────────────────────────────────────────
 
 export function parseWorkflowCommand(msg: string): CommandUpdater | null {

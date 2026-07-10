@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { validateWorkflow } from "./workflow-validation";
-import { createBaseNodes, createBaseEdges } from "@/types/workflow";
+import { createTemplate } from "@/state/workflow-templates";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 function baseGraph() {
-  return { nodes: createBaseNodes("сигнал_test.json"), edges: createBaseEdges() };
+  // Own-source registration template: a real graph with a signal node bound
+  // and a reachable isSuccess node — replaces the removed legacy base graph.
+  return createTemplate("Регистрация", "own");
 }
 
 describe("validateWorkflow", () => {

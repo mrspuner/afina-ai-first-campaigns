@@ -5,8 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { WorkflowGraph } from "@/sections/campaigns/workflow-graph";
 import {
-  createBaseNodes,
-  createBaseEdges,
   parseWorkflowCommand,
   patchNodeParams,
 } from "@/types/workflow";
@@ -74,7 +72,7 @@ function initialGraph(
 ): GraphState {
   const template = signalType
     ? createTemplate(signalType, sourceType, channels)
-    : { nodes: createBaseNodes(), edges: createBaseEdges() };
+    : { nodes: [], edges: [] };
   // Overlay the real uploaded bases + interests on the graph root («Скоринг»
   // for new/stream, «Сигнал» for own) — no-op when there is no campaign context.
   const base = ctx ? applyCampaignContext(template, ctx) : template;

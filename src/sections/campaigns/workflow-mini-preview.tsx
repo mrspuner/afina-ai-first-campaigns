@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { WorkflowGraph } from "@/sections/campaigns/workflow-graph";
 import { createTemplate } from "@/state/workflow-templates";
-import { createBaseNodes, createBaseEdges } from "@/types/workflow";
 import { getCachedGraph } from "./workflow-graph-cache";
 import type { SignalType } from "@/state/app-state";
 import type { Channel, SourceType } from "@/types/campaign";
@@ -53,7 +52,7 @@ export function WorkflowMiniPreview({
       const t = createTemplate(signalType, sourceType, channels);
       return { nodes: t.nodes, edges: t.edges };
     }
-    return { nodes: createBaseNodes(), edges: createBaseEdges() };
+    return { nodes: [], edges: [] };
   }, [campaignId, signalType, sourceType, channels]);
 
   const innerGraph = (
