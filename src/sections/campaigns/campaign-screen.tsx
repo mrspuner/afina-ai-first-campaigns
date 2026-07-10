@@ -231,7 +231,7 @@ export function CampaignScreen() {
           <CampaignArtifactsBlock
             artifacts={campaignArtifacts}
             forming={collectingNow}
-            onOpen={(id) => dispatch({ type: "artifact_opened", id })}
+            onOpen={(id) => dispatch({ type: "artifact_opened", id, origin: "campaign" })}
           />
         </CardSection>
       )}

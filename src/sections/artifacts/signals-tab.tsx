@@ -77,7 +77,7 @@ export function SignalsTab() {
     <SignalsTabView
       artifacts={artifacts}
       campaigns={campaigns}
-      onOpen={(id) => dispatch({ type: "artifact_opened", id })}
+      onOpen={(id) => dispatch({ type: "artifact_opened", id, origin: "artifacts" })}
       onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
       onDelete={(id) => dispatch({ type: "artifact_deleted", id })}
