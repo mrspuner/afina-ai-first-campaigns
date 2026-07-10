@@ -11,4 +11,30 @@ describe("artifact detail routing", () => {
     const addr = viewToAddress({ kind: "artifact", artifactId: "art_1" });
     expect(addr).toEqual({ kind: "artifact", artifactId: "art_1" });
   });
+
+  it("artifact_opened carries the origin through to the view", () => {
+    const next = appReducer(initialState, {
+      type: "artifact_opened",
+      id: "art_1",
+      origin: "campaign",
+    });
+    expect(next.view).toMatchObject({
+      kind: "artifact",
+      artifactId: "art_1",
+      origin: "campaign",
+    });
+  });
+
+  it("viewToAddress round-trips the artifact origin", () => {
+    const addr = viewToAddress({
+      kind: "artifact",
+      artifactId: "art_1",
+      origin: "campaign",
+    });
+    expect(addr).toEqual({
+      kind: "artifact",
+      artifactId: "art_1",
+      origin: "campaign",
+    });
+  });
 });

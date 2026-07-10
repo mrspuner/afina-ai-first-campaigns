@@ -179,6 +179,9 @@ export type Preset = {
 
 export type SectionName = "Статистика" | "Артефакты" | "Кампании" | "Настройки";
 
+/** Where the artifact screen was opened from — drives its context-aware Back. */
+export type ArtifactOrigin = "campaign" | "artifacts";
+
 export type View =
   | { kind: "welcome" }
   | { kind: "survey" }
@@ -186,7 +189,7 @@ export type View =
   | { kind: "workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
-  | { kind: "artifact"; artifactId: string }
+  | { kind: "artifact"; artifactId: string; origin?: ArtifactOrigin }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
 // A "browser-history address" — what we persist to history.state so back/forward
@@ -199,7 +202,7 @@ export type ViewAddress =
   | { kind: "workflow"; campaignId: string }
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
-  | { kind: "artifact"; artifactId: string }
+  | { kind: "artifact"; artifactId: string; origin?: ArtifactOrigin }
   | { kind: "section"; name: SectionName; campaignId?: string };
 
 export type AppState = {
@@ -352,7 +355,7 @@ export type Action =
   | { type: "account_review_confirmed"; settings: AccountSettings }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
-  | { type: "artifact_opened"; id: string }
+  | { type: "artifact_opened"; id: string; origin?: ArtifactOrigin }
   | { type: "artifact_deleted"; id: string }
   | { type: "signals_badge_set"; value: boolean }
   | { type: "wizard_step_changed"; step: number | null }
@@ -988,7 +991,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "artifact_opened":
       return {
         ...state,
-        view: { kind: "artifact", artifactId: action.id },
+        view: { kind: "artifact", artifactId: action.id, origin: action.origin },
         activeSection: null,
       };
 
@@ -1313,7 +1316,7 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
       return { kind: "campaign", campaign: { id: c.id, name: c.name } };
     }
     case "artifact":
-      return { kind: "artifact", artifactId: addr.artifactId };
+      return { kind: "artifact", artifactId: addr.artifactId, origin: addr.origin };
     case "section":
       return { kind: "section", name: addr.name, campaignId: addr.campaignId };
   }
@@ -1339,7 +1342,7 @@ export function viewToAddress(view: View): ViewAddress {
     case "campaign":
       return { kind: "campaign", campaignId: view.campaign.id };
     case "artifact":
-      return { kind: "artifact", artifactId: view.artifactId };
+      return { kind: "artifact", artifactId: view.artifactId, origin: view.origin };
     case "section":
       return { kind: "section", name: view.name, campaignId: view.campaignId };
   }
