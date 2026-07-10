@@ -53,37 +53,41 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   };
 }
 
-describe("CampaignCard — дневной бюджет (item 10)", () => {
-  it("stream-кампания с dailyBudget показывает «Дневной бюджет» точным значением", () => {
+// Показываем ВВЕДЁННЫЙ пользователем потолок (maxDailyBudget), а не расчётный
+// dailyBudget (= communication / STREAM_DAYS): тот пересчитывается от стоимости
+// графа и перезаписывается при запуске — из-за чего «скакал» на карточке.
+describe("CampaignCard — макс. дневной бюджет", () => {
+  it("показывает введённый maxDailyBudget точным значением", () => {
     render(
       <CampaignCard
-        campaign={makeCampaign({ sourceType: "stream", dailyBudget: 12000 })}
+        campaign={makeCampaign({ sourceType: "stream", maxDailyBudget: 12000 })}
         onOpen={vi.fn()}
       />,
     );
-    expect(screen.getByText("Дневной бюджет")).toBeInTheDocument();
+    expect(screen.getByText("Макс. дневной бюджет")).toBeInTheDocument();
     // Точный формат (ru-RU no-break space), НЕ компактный «12 тыс ₽».
     expect(screen.getByText(/^12\s000\s₽$/)).toBeInTheDocument();
     expect(screen.queryByText(/тыс ₽/)).not.toBeInTheDocument();
   });
 
-  it("разовая (new) кампания не показывает «Дневной бюджет»", () => {
+  it("без введённого потолка строки нет", () => {
     render(
       <CampaignCard
-        campaign={makeCampaign({ sourceType: "new", dailyBudget: 12000 })}
+        campaign={makeCampaign({ sourceType: "stream", maxDailyBudget: undefined })}
         onOpen={vi.fn()}
       />,
     );
-    expect(screen.queryByText("Дневной бюджет")).not.toBeInTheDocument();
+    expect(screen.queryByText("Макс. дневной бюджет")).not.toBeInTheDocument();
   });
 
-  it("stream без dailyBudget не показывает строку", () => {
+  it("расчётный dailyBudget на карточку НЕ выводится", () => {
     render(
       <CampaignCard
-        campaign={makeCampaign({ sourceType: "stream", dailyBudget: undefined })}
+        campaign={makeCampaign({ sourceType: "stream", dailyBudget: 777, maxDailyBudget: undefined })}
         onOpen={vi.fn()}
       />,
     );
     expect(screen.queryByText("Дневной бюджет")).not.toBeInTheDocument();
+    expect(screen.queryByText(/777/)).not.toBeInTheDocument();
   });
 });

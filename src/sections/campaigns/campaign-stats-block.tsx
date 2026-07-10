@@ -2,6 +2,7 @@
 
 import type { Campaign, Artifact } from "@/state/app-state";
 import { getCampaignCardMetrics } from "./campaign-metrics";
+import { formatRubPlain } from "@/lib/format-rub";
 
 export interface CampaignStats {
   sends: number;
@@ -93,6 +94,16 @@ export function CampaignStatsBlock({ campaign, artifact, populated = true }: Cam
           {formatRub(stats.actualSpend)}
         </span>
       </div>
+      {/* Потолок, заданный пользователем в визарде (только stream). Точный
+          формат — это введённая сумма, округлять её нельзя. */}
+      {campaign.maxDailyBudget != null && (
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-muted-foreground">Макс. дневной бюджет</span>
+          <span className="tabular-nums text-foreground">
+            {formatRubPlain(campaign.maxDailyBudget)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
