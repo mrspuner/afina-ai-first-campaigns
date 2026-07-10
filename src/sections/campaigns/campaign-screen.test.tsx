@@ -6,6 +6,7 @@ import {
   AppStateProvider,
   useAppDispatch,
 } from "@/state/app-state-context";
+import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import type { Campaign, Preset } from "@/state/app-state";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
@@ -53,7 +54,11 @@ function Harness({ campaign }: { campaign: Campaign }) {
 function renderCampaign(campaign: Campaign) {
   return render(
     <AppStateProvider>
-      <Harness campaign={campaign} />
+      {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
+          mirror the real app tree, where PromptChipsProvider wraps the screen. */}
+      <PromptChipsProvider>
+        <Harness campaign={campaign} />
+      </PromptChipsProvider>
     </AppStateProvider>,
   );
 }
