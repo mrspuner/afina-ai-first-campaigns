@@ -536,11 +536,11 @@ export function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         campaigns: [...state.campaigns, newCampaign],
-        // Wizard finish now opens the workflow graph editor (draft, not launched).
+        // Wizard finish lands on the campaign card, not the graph editor: the
+        // chain is read there as text, with the mini-graph under it.
         view: {
-          kind: "workflow",
+          kind: "campaign",
           campaign: { id: newCampaign.id, name: newCampaign.name },
-          launched: false,
         },
         activeSection: null,
         campaignFilter: [],

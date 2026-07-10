@@ -63,6 +63,47 @@ function renderCampaign(campaign: Campaign) {
   );
 }
 
+describe("CampaignScreen — блок «Как работает кампания»", () => {
+  it("заменяет секцию «Workflow» на объединённый блок с описанием", () => {
+    renderCampaign(baseCampaign({ id: "cmp_desc", channels: ["sms"] }));
+    expect(screen.getByText("Как работает кампания")).toBeInTheDocument();
+    expect(screen.queryByText("Workflow")).not.toBeInTheDocument();
+  });
+
+  it("описывает цепочку текстом по launchGraph", () => {
+    renderCampaign(baseCampaign({ id: "cmp_desc_text", channels: ["sms"] }));
+    expect(screen.getByText("Старт.")).toBeInTheDocument();
+    expect(screen.getByText("Первое касание.")).toBeInTheDocument();
+    // Текст SMS-ноды шаблона попадает в описание дословно.
+    expect(
+      screen.getByText(/Ваше предложение ждёт\. Подробности на сайте\./),
+    ).toBeInTheDocument();
+  });
+
+  it("ставит «Изменить» между текстом и мини-графом", () => {
+    const { container } = renderCampaign(
+      baseCampaign({ id: "cmp_desc_order", channels: ["sms"] }),
+    );
+    const section = screen.getByText("Как работает кампания").closest("section")!;
+    const edit = screen.getByRole("button", { name: "Изменить" });
+    const graph = container.querySelector(".react-flow")!;
+
+    expect(section.contains(edit)).toBe(true);
+    expect(section.contains(graph)).toBe(true);
+    // Порядок в документе: текст → «Изменить» → мини-граф.
+    expect(
+      edit.compareDocumentPosition(graph) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("кампания без коммуникаций не выдумывает касаний", () => {
+    renderCampaign(baseCampaign({ id: "cmp_desc_nocomm", channels: [] }));
+    expect(screen.getByText("Старт.")).toBeInTheDocument();
+    expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
+    expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
+  });
+});
+
 describe("CampaignScreen — #25 «Статус кампании» block removed", () => {
   it("does not render a «Статус кампании» section for an active campaign", () => {
     renderCampaign(

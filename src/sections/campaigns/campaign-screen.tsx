@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/entity-card";
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
+import { WorkflowDescription } from "./workflow-description";
+import { describeWorkflow } from "@/state/graph-description";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
   CampaignProgress,
@@ -33,7 +35,7 @@ function formatDate(iso: string | undefined): string {
 }
 
 export function CampaignScreen() {
-  const { view, campaigns, artifacts } = useAppState();
+  const { view, campaigns, artifacts, templates } = useAppState();
   const dispatch = useAppDispatch();
 
   const campaign =
@@ -80,6 +82,9 @@ export function CampaignScreen() {
       ? createTemplate(signalType, campaign.sourceType, campaign.channels ?? [])
       : null);
   const canLaunch = canLaunchWithGraph(campaign, launchGraph);
+  // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
+  // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
+  const stages = launchGraph ? describeWorkflow(launchGraph, templates) : [];
   // The «Прогресс кампании» stepper is the canonical progress view — shown once
   // the campaign has entered its run (active, paused, or completed). A
   // not-yet-started draft shows the «Запуск» CTA.
@@ -184,15 +189,20 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Workflow */}
-      <CardSection label="Workflow">
-        <WorkflowMiniPreview
-          campaignId={campaign.id}
-          signalType={signalType}
-          sourceType={campaign.sourceType}
-          channels={campaign.channels}
-          onClick={openWorkflow}
-        />
+      {/* Как работает кампания — описание и мини-граф про одно и то же, поэтому
+          живут в одном блоке: текст → «Изменить» (правка идёт через текст) →
+          кликабельная миниатюра, открывающая полный граф. */}
+      <CardSection label="Как работает кампания">
+        <div className="flex flex-col gap-5">
+          <WorkflowDescription stages={stages} />
+          <WorkflowMiniPreview
+            campaignId={campaign.id}
+            signalType={signalType}
+            sourceType={campaign.sourceType}
+            channels={campaign.channels}
+            onClick={openWorkflow}
+          />
+        </div>
       </CardSection>
 
       {/* Прогресс кампании — единый канонический прогресс: раскрываемый степпер
