@@ -45,6 +45,7 @@ interface ArtifactScreenViewProps {
   campaignName: string;
   dailies?: Artifact[];
   onBack: () => void;
+  backLabel?: string;
   onOpenCampaign: (campaignId: string) => void;
   onDownload: () => void;
   onDownloadDaily?: (id: string) => void;
@@ -58,6 +59,7 @@ export function ArtifactScreenView({
   campaignName,
   dailies,
   onBack,
+  backLabel = "К артефактам",
   onOpenCampaign,
   onDownload,
   onDownloadDaily,
@@ -70,7 +72,7 @@ export function ArtifactScreenView({
     <EntityCardShell
       title={isCollection ? `Поток · ${campaignName}` : kindLabel}
       onBack={onBack}
-      backLabel="К артефактам"
+      backLabel={backLabel}
       meta={
         <span className="inline-flex items-center gap-1.5">
           <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
@@ -158,6 +160,8 @@ export function ArtifactScreen() {
 
   const campaign = campaigns.find((c) => c.id === artifact.campaignId);
 
+  const backToCampaign = view.origin === "campaign";
+
   const dailies =
     artifact.variant === "cumulative"
       ? artifacts
@@ -180,7 +184,12 @@ export function ArtifactScreen() {
       campaign={campaign}
       campaignName={campaign?.name ?? "—"}
       dailies={dailies}
-      onBack={() => dispatch({ type: "sidebar_nav", section: "Артефакты" })}
+      backLabel={backToCampaign ? "К кампании" : "К артефактам"}
+      onBack={() =>
+        backToCampaign
+          ? dispatch({ type: "campaign_opened", id: artifact.campaignId })
+          : dispatch({ type: "sidebar_nav", section: "Артефакты" })
+      }
       onOpenCampaign={(id) => dispatch({ type: "campaign_opened", id })}
       onDownload={handleDownload}
       onDownloadDaily={handleDownloadDaily}

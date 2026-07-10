@@ -99,3 +99,22 @@ describe("ArtifactScreenView", () => {
     expect(onDownloadDaily).toHaveBeenCalledWith("d2");
   });
 });
+
+describe("ArtifactScreenView — back label", () => {
+  it("defaults the back button to «К артефактам»", () => {
+    renderScreen();
+    expect(
+      screen.getByRole("button", { name: "К артефактам" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a supplied backLabel («К кампании»)", () => {
+    renderScreen({ backLabel: "К кампании" });
+    expect(
+      screen.getByRole("button", { name: "К кампании" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "К артефактам" }),
+    ).not.toBeInTheDocument();
+  });
+});
