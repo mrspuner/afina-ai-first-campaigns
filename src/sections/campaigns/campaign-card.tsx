@@ -5,6 +5,7 @@ import type { Campaign, Artifact } from "@/state/app-state";
 import type { SourceType } from "@/types/campaign";
 import { StatusBadge } from "./status-badge";
 import { getCampaignCardMetrics } from "./campaign-metrics";
+import { formatRubPlain } from "@/lib/format-rub";
 
 const SOURCE_LABEL: Record<SourceType, string> = {
   new: "Новая база номеров",
@@ -98,6 +99,12 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
           <StatItem
             label="Бюджет (факт)"
             value={formatRub(metrics.actualSpend)}
+          />
+        )}
+        {campaign.sourceType === "stream" && campaign.dailyBudget != null && (
+          <StatItem
+            label="Дневной бюджет"
+            value={formatRubPlain(campaign.dailyBudget)}
           />
         )}
       </div>
