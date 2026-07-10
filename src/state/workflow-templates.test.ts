@@ -8,6 +8,7 @@ import {
 import { validateWorkflow } from "./workflow-validation";
 import type { SignalType } from "./app-state";
 import type { Channel } from "@/types/campaign";
+import type { SignalParams } from "@/types/workflow";
 
 const SIGNAL_TYPES: SignalType[] = [
   "Регистрация",
@@ -422,5 +423,29 @@ describe("statistics terminal sink (12b)", () => {
     const { nodes } = createTemplate("Регистрация", "new");
     const stat = nodes.find((n) => n.data.nodeType === "statistics")!;
     expect(stat.data.params).toEqual({ kind: "statistics" });
+  });
+});
+
+describe("applyCampaignContext — signal node files (spec C)", () => {
+  it("populates the signal node's files list from the campaign bases", () => {
+    const t = createTemplate("Регистрация", "own");
+    const ctx = {
+      files: [
+        { name: "base-a.csv", rowCount: 1000 },
+        { name: "base-b.csv", rowCount: 2000 },
+      ],
+    };
+    const out = applyCampaignContext(t, ctx);
+    const signal = out.nodes.find((n) => n.data.params?.kind === "signal");
+    const params = signal!.data.params as SignalParams;
+    expect(params.files).toEqual(["base-a.csv", "base-b.csv"]);
+  });
+
+  it("leaves files empty when the campaign has no bases", () => {
+    const t = createTemplate("Регистрация", "own");
+    const out = applyCampaignContext(t, { files: [] });
+    const signal = out.nodes.find((n) => n.data.params?.kind === "signal");
+    const params = signal!.data.params as SignalParams;
+    expect(params.files ?? []).toEqual([]);
   });
 });

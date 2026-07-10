@@ -656,10 +656,11 @@ export function applyCampaignContext(
       };
     }
     // Signal result node: always carries the base `count` (N for the cost
-    // model). For `own` (no scoring) it is also the root that shows the base —
-    // surface the file names + summary there so nothing is lost with «Файл» gone.
+    // model) AND (spec C) the signal file-name list read by <SignalFiles/>.
+    // For `own` (no scoring) it also surfaces the file names on fileName/sublabel.
     if (nd.data.nodeType === "signal" && nd.data.params?.kind === "signal") {
       const showFiles = !hasScoring;
+      const fileNames = files.map((f) => f.name);
       return {
         ...nd,
         data: {
@@ -668,8 +669,9 @@ export function applyCampaignContext(
           params: {
             ...nd.data.params,
             count: totalRows || nd.data.params.count,
+            files: fileNames,
             ...(showFiles
-              ? { fileName: files.map((f) => f.name).join(", ") || nd.data.params.fileName }
+              ? { fileName: fileNames.join(", ") || nd.data.params.fileName }
               : {}),
           },
         },

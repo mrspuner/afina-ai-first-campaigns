@@ -87,6 +87,12 @@ export type StatisticsParams = { kind: "statistics" };
 export type SignalParams = {
   kind: "signal";
   fileName: string;
+  /**
+   * Spec C — signal file names surfaced in the node body by <SignalFiles/>.
+   * Optional for back-compat (templates/rebuild-schema omit it); populated by
+   * applyCampaignContext. Empty/undefined = draft placeholder.
+   */
+  files?: string[];
   count: number;
   segments: { max: number; high: number; mid: number; low: number };
 };
