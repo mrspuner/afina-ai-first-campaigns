@@ -59,3 +59,15 @@ describe("source/scoring node visuals (A2)", () => {
     expect(NODE_ICON.scoring).toBeTruthy();
   });
 });
+
+describe("signal node icon (spec C)", () => {
+  it("uses the Radar icon for the signal node type", async () => {
+    // Import both from the current module registry state so the reference
+    // comparison is robust to the resetModules() other describes run.
+    const [{ NODE_ICON }, { Radar }] = await Promise.all([
+      import("./node-visuals"),
+      import("lucide-react"),
+    ]);
+    expect(NODE_ICON.signal).toBe(Radar);
+  });
+});

@@ -1,5 +1,5 @@
 import {
-  SignalLow,
+  Radar,
   Database,
   Gauge,
   GitFork,
@@ -53,7 +53,7 @@ export const NODE_STYLES: Record<WorkflowNodeType, NodeStyle> = {
 };
 
 export const NODE_ICON: Partial<Record<WorkflowNodeType, LucideIcon>> = {
-  signal: SignalLow,
+  signal: Radar,
   // source = the audience source (file / stream / collection); scoring = the
   // quality-selection step. Distinct lucide icons; palette stays provisional
   // (reuses the `signal` blue) pending the §7.7 UI decision — yellow stays a
