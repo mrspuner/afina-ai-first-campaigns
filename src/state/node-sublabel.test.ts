@@ -26,6 +26,21 @@ describe("computeNodeSublabel", () => {
       computeNodeSublabel({ kind: "scoring", interests: ["a", "b"], triggers: ["t"], files: [] }),
     ).toBe("2 интереса · 1 триггер");
   });
+  it("email → имя привязанного шаблона, «—» когда шаблон не выбран", () => {
+    // 12c: подзаголовок канала — привязанный шаблон, а не его id.
+    expect(
+      computeNodeSublabel({
+        kind: "email",
+        subject: "S",
+        body: "B",
+        sender: "a@b.c",
+        emailId: "eml_welcome",
+      }),
+    ).toBe("Приветственное — онбординг");
+    expect(
+      computeNodeSublabel({ kind: "email", subject: "S", body: "B", sender: "a@b.c" }),
+    ).toBe("—");
+  });
   it("sms/push → «—», statistics → placeholder", () => {
     expect(computeNodeSublabel({ kind: "sms", text: "hi", alphaName: "A", scheduledAt: "immediate" })).toBe("—");
     expect(computeNodeSublabel({ kind: "push", title: "T", body: "B" })).toBe("—");
