@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Handle, Position, useUpdateNodeInternals } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { useAppDispatch } from "@/state/app-state-context";
+import { usePromptChips } from "@/state/prompt-chips-context";
+import { isDeletableNodeType } from "@/state/structural-commands";
 import type { WorkflowNode } from "@/types/workflow";
 import { NodeCardBody } from "./node-card-content";
 import { NODE_STYLES, NODE_ICON } from "./node-visuals";
@@ -21,7 +23,17 @@ export function WorkflowNodeComponent({ id, data, selected }: NodeProps<Workflow
   const s = NODE_STYLES[data.nodeType] ?? NODE_STYLES.default;
   const Icon = NODE_ICON[data.nodeType];
   const dispatch = useAppDispatch();
+  const { removeChipsForNode } = usePromptChips();
   const updateNodeInternals = useUpdateNodeInternals();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Снимаем «взведённое» подтверждение удаления, когда карточка сворачивается,
+  // чтобы состояние не «утекло» на следующее раскрытие узла. Правка состояния
+  // при смене пропа `selected` (паттерн React) — без эффекта и каскадных рендеров.
+  const [prevSelected, setPrevSelected] = useState(selected);
+  if (selected !== prevSelected) {
+    setPrevSelected(selected);
+    if (!selected) setConfirmDelete(false);
+  }
 
   // Selecting a node resizes it (110→320 wide, taller card), which moves both
   // handles. React Flow caches handle positions per node, so without telling it
@@ -110,12 +122,43 @@ export function WorkflowNodeComponent({ id, data, selected }: NodeProps<Workflow
           )}
         </div>
 
+        {selected && isDeletableNodeType(data.nodeType) && (
+          <button
+            type="button"
+            aria-label={confirmDelete ? "Подтвердить удаление узла" : "Удалить узел"}
+            title={confirmDelete ? "Подтвердить удаление" : "Удалить узел"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!confirmDelete) {
+                setConfirmDelete(true);
+                return;
+              }
+              // Реконнект рёбер делает applyRemove — не дублируем.
+              dispatch({
+                type: "workflow_structural_commands_submit",
+                ops: [{ kind: "remove", ref: id }],
+              });
+            }}
+            className={
+              "nodrag -mt-1 rounded-md p-1 opacity-70 hover:opacity-100 " +
+              (confirmDelete
+                ? "bg-red-500/20 text-red-300"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground")
+            }
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+
         {selected && (
           <button
             type="button"
             aria-label="Закрыть карточку ноды"
             onClick={(e) => {
               e.stopPropagation();
+              // #2 — снимаем теги этой ноды (node_${id} + nodefield_${id}_*).
+              // Направление одностороннее: закрытие ноды → чистка её тегов.
+              removeChipsForNode(id);
               dispatch({ type: "workflow_node_deselected" });
             }}
             className="nodrag -mr-1 -mt-1 rounded-md p-1 text-muted-foreground opacity-70 hover:bg-accent hover:text-foreground hover:opacity-100"

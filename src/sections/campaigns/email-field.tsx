@@ -25,6 +25,7 @@ import {
   getEmails,
 } from "@/state/email-directory";
 import type { EmailParams, NodeParams } from "@/types/workflow";
+import { DirtyDot } from "./dirty-dot";
 import { cn } from "@/lib/utils";
 
 const NEW_EMAIL_QUESTION =
@@ -114,7 +115,10 @@ export function EmailField({
 
   return (
     <div className={cn(rowGrid, "px-1 py-0.5")}>
-      <span className="text-muted-foreground">Текст</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        Текст
+        {isDirty && <DirtyDot />}
+      </span>
 
       <Popover open={open} onOpenChange={readOnly ? undefined : setOpen}>
         <PopoverTrigger
@@ -170,13 +174,6 @@ export function EmailField({
       </Popover>
 
       <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50">
-        {isDirty && (
-          <span
-            aria-hidden
-            title="Параметр изменён"
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-          />
-        )}
         {hasSelection && (
           <button
             type="button"

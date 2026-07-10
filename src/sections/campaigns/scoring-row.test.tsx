@@ -22,6 +22,12 @@ vi.mock("@/state/chat-context", () => ({
 vi.mock("@/state/prompt-chips-context", () => ({
   usePromptChips: () => ({ removeChip: vi.fn(), pushChip: vi.fn() }),
 }));
+vi.mock("next/image", () => ({
+  default: (props: Record<string, unknown>) => {
+    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+    return <img {...(props as Record<string, string>)} />;
+  },
+}));
 
 // Imported AFTER the mocks so the module picks them up.
 import { ScoringRow } from "./node-card-content";
@@ -124,5 +130,21 @@ describe("ScoringRow — «Файлы» как отдельные удаляем
     const row = getByText("base-1.csv").closest("div");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText(/строк/)).not.toBeNull();
+  });
+
+  it("draft: interests/triggers affordance is the mascot, not a pencil", () => {
+    const { container, getByRole } = render(<ScoringRow nodeId="n1" params={params} />);
+    // draft keeps the «Изменить …» button; icon is the mascot image, no pencil.
+    expect(getByRole("button", { name: "Изменить интересы и триггеры" })).not.toBeNull();
+    expect(container.querySelector('img[src="/mascot-icon.svg"]')).not.toBeNull();
+    expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
+
+  it("launched (read-only): interests/triggers affordance is the eye", () => {
+    mockReadOnly = true;
+    const { container, getByRole } = render(<ScoringRow nodeId="n1" params={params} />);
+    expect(getByRole("button", { name: "Показать интересы и триггеры" })).not.toBeNull();
+    expect(container.querySelector("svg.lucide-eye")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-pencil")).toBeNull();
   });
 });

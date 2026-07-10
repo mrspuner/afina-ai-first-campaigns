@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import {
   Popover,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/command";
 import { useAppDispatch } from "@/state/app-state-context";
 import { NodeFieldCombobox } from "./node-field-combobox";
+import { DirtyDot } from "./dirty-dot";
 import type { NodeParams, WaitParams } from "@/types/workflow";
 import { cn } from "@/lib/utils";
 
@@ -40,16 +41,6 @@ export function splitDuration(hours: number): { value: number; unitIdx: number }
     if (hours >= u && hours % u === 0) return { value: hours / u, unitIdx: i };
   }
   return { value: hours, unitIdx: 0 };
-}
-
-function DirtyDot() {
-  return (
-    <span
-      aria-hidden
-      title="Параметр изменён"
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFEC00]"
-    />
-  );
 }
 
 /**
@@ -150,9 +141,12 @@ function ModeRow({
   if (readOnly) {
     return (
       <div className={cn(rowGrid, "px-1 py-0.5")}>
-        <span className="text-muted-foreground">Режим</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          Режим
+          {isDirty && <DirtyDot />}
+        </span>
         <span className="truncate text-foreground">{value}</span>
-        <span className="flex items-center justify-end">{isDirty && <DirtyDot />}</span>
+        <span className="flex items-center justify-end" />
       </div>
     );
   }
@@ -169,11 +163,13 @@ function ModeRow({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-muted-foreground">Режим</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          Режим
+          {isDirty && <DirtyDot />}
+        </span>
         <span className="truncate text-foreground">{value}</span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-          {isDirty && <DirtyDot />}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent
@@ -208,11 +204,14 @@ function DurationRow({
   if (readOnly) {
     return (
       <div className={cn(rowGrid, "px-1 py-0.5")}>
-        <span className="text-muted-foreground">Длительность</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          Длительность
+          {isDirty && <DirtyDot />}
+        </span>
         <span className="truncate text-foreground">
           {value} {UNITS[unitIdx].label}
         </span>
-        <span className="flex items-center justify-end">{isDirty && <DirtyDot />}</span>
+        <span className="flex items-center justify-end" />
       </div>
     );
   }
@@ -241,13 +240,15 @@ function DurationRow({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-muted-foreground">Длительность</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          Длительность
+          {isDirty && <DirtyDot />}
+        </span>
         <span className="truncate text-foreground">
           {value} {UNITS[unitIdx].label}
         </span>
         <span className="ml-1 flex shrink-0 items-center gap-1.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-          {isDirty && <DirtyDot />}
-          <Pencil aria-hidden className="h-3 w-3 shrink-0" />
+          <ChevronDown aria-hidden className="h-3 w-3 shrink-0" />
         </span>
       </PopoverTrigger>
       <PopoverContent

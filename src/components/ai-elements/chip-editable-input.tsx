@@ -281,7 +281,7 @@ export const ChipEditableInput = forwardRef<
       // is switching tags — the composer parks the previous tag's draft.
       const hadChip = ed.querySelector("[data-chip-id]") !== null;
       if (hadChip) onTagSwap?.();
-      const el = createChipElement(chip);
+      const el = createChipElement(chip, removeChip);
       insertChipAtRange(el, ed, lastRangeRef.current);
       insertedChip = true;
       // Refresh the saved range so subsequent chip pushes append after the
@@ -298,7 +298,7 @@ export const ChipEditableInput = forwardRef<
 
     // Re-flush text into controller so external readers see the latest.
     setInput(readText());
-  }, [chips, readText, setInput, onTagSwap]);
+  }, [chips, readText, setInput, onTagSwap, removeChip]);
 
   // External setInput("") (form-submit clear) should also clear DOM text and
   // chips. Other external value changes (rare now) sync into the editor end.
@@ -520,7 +520,10 @@ export const ChipEditableInput = forwardRef<
   );
 });
 
-function createChipElement(chip: PromptChip): HTMLElement {
+export function createChipElement(
+  chip: PromptChip,
+  onRemoveChip?: (id: string) => void
+): HTMLElement {
   const el = document.createElement("span");
   el.contentEditable = "false";
   el.setAttribute("data-chip-id", chip.id);
@@ -559,6 +562,31 @@ function createChipElement(chip: PromptChip): HTMLElement {
   }
 
   el.appendChild(document.createTextNode(chip.label));
+
+  // #2 — видимый крестик у removable-тегов. Чип — императивный DOM-узел вне
+  // React, поэтому обработчик вешаем прямо здесь. mousedown.preventDefault не
+  // даёт крестику украсть каретку/фокус у редактора.
+  if (chip.removable && onRemoveChip) {
+    const x = document.createElement("button");
+    x.type = "button";
+    x.setAttribute("aria-label", `Убрать тег: ${chip.label}`);
+    x.className =
+      "chip-remove ml-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center " +
+      "justify-center rounded-full text-current/70 transition-colors " +
+      "hover:bg-black/20 hover:text-current";
+    x.textContent = "×";
+    x.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    x.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onRemoveChip(chip.id);
+    });
+    el.appendChild(x);
+  }
+
   return el;
 }
 

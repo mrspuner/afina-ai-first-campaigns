@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { NodeTemplateSelect } from "./node-template-select";
 import type { MessageTemplate } from "@/state/app-state";
 
@@ -126,5 +126,74 @@ describe("NodeTemplateSelect", () => {
     );
     open();
     expect(screen.getByText("Нет шаблонов для этого канала")).toBeInTheDocument();
+  });
+
+  it("uses a chevron affordance, not a pencil (spec B #4)", () => {
+    const { container } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty={false}
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    expect(container.querySelector("svg.lucide-chevron-down")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
+
+  it("dirty dot sits next to the label (spec B #5)", () => {
+    const { getByText } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    const labelCell = getByText("Шаблон");
+    expect(within(labelCell).getByTitle("Параметр изменён")).not.toBeNull();
+  });
+
+  it("shows an eye before the chevron when a template is selected; click previews, no popover (spec B #6)", () => {
+    const onPreview = vi.fn();
+    const onSelect = vi.fn();
+    const { getByRole, container } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName="SMS — напоминание"
+        selectedTemplateId="t1"
+        isDirty={false}
+        onSelect={onSelect}
+        onPreview={onPreview}
+        onCreate={vi.fn()}
+      />
+    );
+    const eye = getByRole("button", { name: "Предпросмотр" });
+    expect(container.querySelector("svg.lucide-eye")).not.toBeNull();
+    fireEvent.click(eye);
+    expect(onPreview).toHaveBeenCalledWith("t1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("no eye when nothing selected", () => {
+    const { queryByRole } = render(
+      <NodeTemplateSelect
+        label="Шаблон"
+        templates={TPLS}
+        selectedName=""
+        isDirty={false}
+        onSelect={vi.fn()}
+        onPreview={vi.fn()}
+        onCreate={vi.fn()}
+      />
+    );
+    expect(queryByRole("button", { name: "Предпросмотр" })).toBeNull();
   });
 });

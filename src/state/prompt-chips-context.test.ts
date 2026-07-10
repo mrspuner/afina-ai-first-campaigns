@@ -106,3 +106,30 @@ describe("promptChipsReducer", () => {
     expect(p.paramLabel).toBe("Текст");
   });
 });
+
+describe("removeForNode", () => {
+  const push = (s: PromptChipsState, id: string) =>
+    promptChipsReducer(s, {
+      type: "push",
+      chip: { id, kind: "node", label: id, payload: null, removable: true },
+    });
+
+  it("drops the whole-node chip and all its field chips, keeps other nodes", () => {
+    let s = empty;
+    s = push(s, "node_n1");
+    s = push(s, "nodefield_n1_Текст");
+    s = push(s, "nodefield_n1_Время");
+    s = push(s, "node_n2");
+    s = push(s, "nodefield_n2_Текст");
+    const next = promptChipsReducer(s, { type: "removeForNode", nodeId: "n1" });
+    expect(next.chips.map((c) => c.id)).toEqual(["node_n2", "nodefield_n2_Текст"]);
+  });
+
+  it("does not falsely match a longer node id (n1 vs n10)", () => {
+    let s = empty;
+    s = push(s, "node_n10");
+    s = push(s, "nodefield_n10_Текст");
+    const next = promptChipsReducer(s, { type: "removeForNode", nodeId: "n1" });
+    expect(next.chips.map((c) => c.id)).toEqual(["node_n10", "nodefield_n10_Текст"]);
+  });
+});
