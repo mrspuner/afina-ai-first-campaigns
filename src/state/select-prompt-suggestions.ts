@@ -141,6 +141,16 @@ export function selectPromptSuggestions(
       // Редактируемый draft без выбранной ноды → подсказки уровня сценария
       // (выбранная нода обрабатывается раньше, в правиле 2 по активному тегу).
       if (!v.launched) {
+        // Скоринг-дровер «Интересы и триггеры» публикует СВОИ подсказки в
+        // screenHints (useScreenHints). Пока они есть — показываем их вместо
+        // общих подсказок сценария (owner-механизм чистит их при закрытии).
+        if (state.screenHints.length > 0) {
+          return {
+            kind: "items",
+            scope: { kind: "wizard-screen" },
+            items: state.screenHints,
+          };
+        }
         return resolved({ kind: "workflow-scenario", aiUndoAvailable: state.aiUndoAvailable });
       }
       const status: CampaignStatus = feedStatusForCampaign(

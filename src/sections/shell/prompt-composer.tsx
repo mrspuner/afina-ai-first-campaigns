@@ -362,19 +362,22 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
           text: s.text,
         }));
 
-      // #7 гибрид: когда LLM НЕДОСТУПЕН (офлайн-прототип), вопрос ПО ноде не
-      // должен применяться как правка — отдаём его в чат-пайплайн
-      // (информационный ответ), а не в node-command. Онлайн этот детектор не
-      // участвует: node-command идёт к оркестратору, и намерение решает LLM.
-      if (
-        !aiAvailable &&
-        structural.ops.length === 0 &&
-        nodeCommands.length > 0 &&
-        nodeCommands.every((c) => isNodeQuestion(c.text))
-      ) {
-        chatSubmit({ text: rawText, segments });
-        resetEditor();
-        return;
+      // #7 гибрид маршрутизации теговой команды по ноде:
+      // - ОНЛАЙН (LLM доступен): отдаём ввод оркестратору — он САМ решает
+      //   намерение (answer на вопрос / node-params на изменение). Инструменты
+      //   и контекст selectedNode у него есть, runner применяет node-params.
+      //   Раньше теговый ввод всегда шёл в regex-путь (deriveParamsPatch) мимо
+      //   LLM — поэтому онлайн вопрос обрабатывался как правка.
+      // - ОФЛАЙН (LLM нет): вопрос → информационный ответ (regex-детектор),
+      //   изменение → deriveParamsPatch (workflow_node_command_submit ниже).
+      if (nodeCommands.length > 0 && structural.ops.length === 0) {
+        const toOrchestrator =
+          aiAvailable || nodeCommands.every((c) => isNodeQuestion(c.text));
+        if (toOrchestrator) {
+          chatSubmit({ text: rawText, segments });
+          resetEditor();
+          return;
+        }
       }
 
       if (nodeCommands.length > 0) {

@@ -344,7 +344,9 @@ function buildLinearChannelTemplate(
   const legacy = TEMPLATE_BY_TYPE[signalType]();
   const signalNode = legacy.nodes[0]; // always the source node
 
-  // Build the comm unit with pre-filled template params (validates ok immediately)
+  // Comm-ноды авто-заполняются шаблонами («магия» #2) → валидны сразу, запуск
+  // не блокируется. Пустой текст (если пользователь очистит) — неблокирующее
+  // предупреждение (validateWorkflow → warning), а не блок.
   const unit = buildCommUnit(channels, {
     prefix,
     onEngaged: successId,
@@ -455,7 +457,8 @@ function buildSegmentedChannelTemplate(
     const prefix = `${seg}_comm`;
     const yOffset = segYPositions[idx];
 
-    // Each unit's YES path → success (напрямую, без Слияния), NO path → end
+    // Each unit's YES path → success (напрямую, без Слияния), NO path → end.
+    // Comm-ноды авто-заполняются шаблонами («магия» #2) — запуск не блокируется.
     const unit = buildCommUnit(channels, {
       prefix,
       onEngaged: successId,    // YES → Успех напрямую

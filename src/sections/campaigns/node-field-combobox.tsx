@@ -51,8 +51,12 @@ export function NodeFieldCombobox({
   onSelect: (next: string) => void;
   /** Передаёт поле ассистенту (тег + шаблон в PromptBar/дровер). */
   onAiHandoff: () => void;
-  /** #6 — если задан, показывает глазик предпросмотра перед шевроном (только IVR). */
-  onPreview?: () => void;
+  /**
+   * Когда задан — включает предпросмотр (только IVR):
+   *  - «глаз» у каждого варианта в открытом списке (превью, не выбирая вариант);
+   *  - «глаз» в трейлинге триггера перед шевроном (#6) — превью текущего значения.
+   */
+  onPreview?: (option: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -118,13 +122,13 @@ export function NodeFieldCombobox({
               className="nodrag inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none"
               onClick={(e) => {
                 e.stopPropagation();
-                onPreview();
+                onPreview(value);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   e.stopPropagation();
-                  onPreview();
+                  onPreview(value);
                 }
               }}
             >
@@ -165,8 +169,26 @@ export function NodeFieldCombobox({
                     value={opt}
                     data-checked={opt === value}
                     onSelect={() => apply(opt)}
+                    className={
+                      onPreview ? "flex items-center justify-between gap-2" : undefined
+                    }
                   >
-                    <span className="truncate">{opt}</span>
+                    <span className="min-w-0 truncate">{opt}</span>
+                    {onPreview && (
+                      <button
+                        type="button"
+                        aria-label="Предпросмотр"
+                        title="Предпросмотр"
+                        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                        onClick={(e) => {
+                          // Не выбираем вариант — только превью.
+                          e.stopPropagation();
+                          onPreview(opt);
+                        }}
+                      >
+                        <Eye aria-hidden className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>

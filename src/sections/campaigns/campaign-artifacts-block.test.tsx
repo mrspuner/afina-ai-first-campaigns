@@ -31,7 +31,7 @@ describe("CampaignArtifactsBlock — streaming collection", () => {
     expect(onOpen).toHaveBeenCalledWith("str-c");
   });
 
-  it("caps recent выжимки at 3 and shows an «…ещё N» count for the rest", () => {
+  it("≤5 выжимок → показаны все, без кнопки", () => {
     const dailies = [
       daily("d1", "2026-06-30", 2140),
       daily("d2", "2026-06-29", 1980),
@@ -40,11 +40,19 @@ describe("CampaignArtifactsBlock — streaming collection", () => {
       daily("d5", "2026-06-26", 1600),
     ];
     render(<CampaignArtifactsBlock artifacts={[cumulative, ...dailies]} onOpen={vi.fn()} />);
-    expect(screen.getByText(/Выжимка · 30\.06/)).toBeVisible();
-    expect(screen.getByText(/Выжимка · 29\.06/)).toBeVisible();
-    expect(screen.getByText(/Выжимка · 28\.06/)).toBeVisible();
-    expect(screen.queryByText(/Выжимка · 27\.06/)).not.toBeInTheDocument();
-    expect(screen.getByText(/…ещё 2 выжимок/)).toBeVisible();
+    expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(5);
+    expect(screen.queryByRole("button", { name: /Показать все/ })).not.toBeInTheDocument();
+  });
+
+  it(">5 выжимок → показаны 5 и «Показать все (7)»; клик разворачивает в «Свернуть»", () => {
+    const dailies = Array.from({ length: 7 }, (_, i) =>
+      daily(`d${i}`, `2026-06-${10 + i}`, 100 + i),
+    );
+    render(<CampaignArtifactsBlock artifacts={[cumulative, ...dailies]} onOpen={vi.fn()} />);
+    expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Показать все (7)" }));
+    expect(screen.getAllByText(/^Выжимка · /)).toHaveLength(7);
+    expect(screen.getByRole("button", { name: "Свернуть" })).toBeInTheDocument();
   });
 
   it("one-time campaign with a single artifact still renders «Сигналы · count» row", () => {

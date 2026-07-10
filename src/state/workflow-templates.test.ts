@@ -267,10 +267,29 @@ describe("channel-aware template generation", () => {
     expect(pushCount).toBe(2);
   });
 
-  it("createTemplate with channels still validates ok", () => {
+  it("createTemplate with channels авто-заполняет шаблоны → валиден сразу (#2 магия)", () => {
     const t = createTemplate("Регистрация", "own", ["sms", "email"]);
-    const v = validateWorkflow(t, true);
+    // Комм-ноды авто-заполняются шаблонами («магия» #2), поэтому граф валиден
+    // сразу — запуск не блокируется незаполненным текстом.
+    expect(validateWorkflow(t, true).ok).toBe(true);
+
+    // А если пользователь ОЧИСТИТ текст комм-нод — это неблокирующее
+    // предупреждение (needs-attention → warning), запуск всё равно разрешён.
+    const cleared = {
+      ...t,
+      nodes: t.nodes.map((n) => {
+        if (n.data.params?.kind === "sms") {
+          return { ...n, data: { ...n.data, params: { ...n.data.params, text: "" } } };
+        }
+        if (n.data.params?.kind === "email") {
+          return { ...n, data: { ...n.data, params: { ...n.data.params, subject: "", body: "" } } };
+        }
+        return n;
+      }),
+    };
+    const v = validateWorkflow(cleared, true);
     expect(v.ok).toBe(true);
+    expect(v.warnings).toContain("needs-attention");
   });
 
   it("createTemplate without channels falls back to legacy template", () => {

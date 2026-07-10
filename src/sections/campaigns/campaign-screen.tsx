@@ -13,16 +13,19 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { copyCachedGraph } from "./workflow-graph-cache";
-import { CampaignProgress } from "./campaign-progress";
-import { canLaunchCampaign, isCollecting } from "./campaign-launch-gate";
+import {
+  CampaignProgress,
+  campaignStageList,
+  communicatingThresholdMs,
+} from "./campaign-progress";
+import { canLaunchWithGraph } from "./campaign-launch-gate";
+import { getCachedGraph } from "./workflow-graph-cache";
+import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { StatusBadge } from "./status-badge";
+import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
-
-/** Prototype collection window (ms) before a `new` draft auto-advances
- *  from `scoring` to `communicating` (pre-launch signal collection). */
-const SCORING_WINDOW_MS = 8000;
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -38,20 +41,24 @@ export function CampaignScreen() {
       ? campaigns.find((c) => c.id === view.campaign.id)
       : undefined;
 
-  // Pre-launch signal collection: a `new` DRAFT collects signals on the card
-  // (phase "scoring") before «Запустить» unlocks. After the (simulated) window,
-  // advance scoring → communicating, which also generates the collected-signals
-  // artifact. stream/own carry no pre-launch phase, so they never collect here.
   const campaignId = campaign?.id;
-  const collecting = campaign ? isCollecting(campaign) : false;
+  // Пост-лонч: на пороге коммуникации (после «Обработки базы») переводим фазу и
+  // создаём артефакт. Старые кампании (elapsed > порога) — сразу без таймера.
+  const launchedAtMs =
+    campaign?.launchedAt ? Date.parse(campaign.launchedAt) : null;
+  const needsAdvance =
+    !!campaign && campaign.status === "active" && campaign.phase === "scoring";
   useEffect(() => {
-    if (!campaignId) return;
-    if (!collecting) return;
-    const t = setTimeout(() => {
-      dispatch({ type: "campaign_phase_advanced", id: campaignId });
-    }, SCORING_WINDOW_MS);
+    if (!campaignId || !needsAdvance || launchedAtMs === null) return;
+    const stages = campaignStageList(campaign!);
+    const remaining =
+      communicatingThresholdMs(stages) - (Date.now() - launchedAtMs);
+    const t = setTimeout(
+      () => dispatch({ type: "campaign_phase_advanced", id: campaignId }),
+      Math.max(0, remaining),
+    );
     return () => clearTimeout(t);
-  }, [campaignId, collecting, dispatch]);
+  }, [campaignId, needsAdvance, launchedAtMs, campaign, dispatch]);
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -63,17 +70,22 @@ export function CampaignScreen() {
   const isActive = status === "active";
   const isCompleted = status === "completed";
   const hasStats = isActive || isCompleted;
-  // Pre-launch collection: a `new` draft is still gathering signals. While
-  // collecting, the progress stepper renders «Обработка базы» as the current
-  // stage and «Запустить» stays locked.
-  const collectingNow = isCollecting(campaign);
-  const canLaunch = canLaunchCampaign(campaign);
+  // Гейт «Запустить»: базовый статус-гейт И валидность workflow-графа
+  // (незаполненный шаблон = needs-attention блокирует запуск). Граф берём из
+  // durable-кэша (учитывает ручные правки) либо строим из шаблона по сценарию
+  // — тот же приём, что в campaign-payment-screen.
+  const launchGraph =
+    getCachedGraph(campaign.id) ??
+    (signalType
+      ? createTemplate(signalType, campaign.sourceType, campaign.channels ?? [])
+      : null);
+  const canLaunch = canLaunchWithGraph(campaign, launchGraph);
   // The «Прогресс кампании» stepper is the canonical progress view — shown once
-  // the campaign has entered its run (a `new` draft collecting signals, active,
-  // paused, or completed). A not-yet-started draft shows the «Запуск» CTA.
-  const started = collectingNow || isActive || status === "paused" || isCompleted;
-  // «Запуск»/«Возобновить» CTA — a ready draft (done collecting) or a paused run.
-  const showLaunch = (status === "draft" && !collectingNow) || status === "paused";
+  // the campaign has entered its run (active, paused, or completed). A
+  // not-yet-started draft shows the «Запуск» CTA.
+  const started = isActive || status === "paused" || isCompleted;
+  // «Запуск»/«Возобновить» CTA — a draft ready to launch, or a paused run.
+  const showLaunch = status === "draft" || status === "paused";
 
   // Artifacts produced by this campaign (newest first).
   const campaignArtifacts = artifacts
@@ -82,6 +94,7 @@ export function CampaignScreen() {
   const campaignArtifact = campaignArtifacts[0];
 
   const scenarioName = campaign.scenario?.name ?? "—";
+  const cadenceLabel = campaignCadenceLabel(campaign.sourceType);
 
   const metaDate =
     status === "active"
@@ -165,6 +178,7 @@ export function CampaignScreen() {
       tags={
         <>
           <CardTag>Сценарий: {scenarioName}</CardTag>
+          {cadenceLabel && <CardTag>{cadenceLabel}</CardTag>}
         </>
       }
       meta={metaDate}
@@ -186,7 +200,7 @@ export function CampaignScreen() {
           текущим этапом обработки. Показывается, когда кампания в работе. */}
       {started && (
         <CardSection>
-          <CampaignProgress campaign={campaign} />
+          <CampaignProgress campaign={campaign} defaultExpanded />
         </CardSection>
       )}
 
@@ -221,16 +235,19 @@ export function CampaignScreen() {
       {/* Статистика — сводка в карточке (дополняет переход в полный отчёт) */}
       {hasStats && (
         <CardSection label="Статистика">
-          <CampaignStatsBlock campaign={campaign} artifact={campaignArtifact} />
+          <CampaignStatsBlock
+            campaign={campaign}
+            artifact={campaignArtifact}
+            populated={campaign.phase === "communicating" || isCompleted}
+          />
         </CardSection>
       )}
 
       {/* Артефакты — что произвела кампания (Сигналы / Сигналы и конверсии) */}
-      {(campaignArtifacts.length > 0 || collectingNow) && (
+      {campaignArtifacts.length > 0 && (
         <CardSection label="Артефакты">
           <CampaignArtifactsBlock
             artifacts={campaignArtifacts}
-            forming={collectingNow}
             onOpen={(id) => dispatch({ type: "artifact_opened", id, origin: "campaign" })}
           />
         </CardSection>

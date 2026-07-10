@@ -513,10 +513,13 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
-              // IVR «Текст» — глазик предпросмотра СЦЕНАРИЯ ноды теперь ВНУТРИ
-              // комбобокса (перед шевроном): тот же дровер/IvrRenderer, что и
-              // sms/email/push. Прочие combo-поля (sms «Время», condition/success/
-              // end) onPreview не передают — глаза нет.
+              // IVR — единственное combo-поле с превью. onPreview питает сразу два
+              // «глаза»: у каждого варианта в открытом списке (превью, не выбирая)
+              // и в трейлинге триггера перед шевроном (#6, превью текущего значения).
+              // Прочие combo-поля (sms «Время», condition/wait/success/end) onPreview
+              // не передают — глаза нет.
+              const ivrForPreview =
+                data.params?.kind === "ivr" ? data.params : undefined;
               const combo = (
                 <NodeFieldCombobox
                   key={row.label}
@@ -527,13 +530,13 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   onSelect={(next) => applyFieldValue(paramKey, next)}
                   onAiHandoff={() => handleAiField(row.label)}
                   onPreview={
-                    data.params?.kind === "ivr"
-                      ? () =>
+                    ivrForPreview
+                      ? (opt) =>
                           openTemplatePreview(
-                            ivrNodePreviewTemplate(
-                              id,
-                              data.params as Extract<NodeParams, { kind: "ivr" }>
-                            )
+                            ivrNodePreviewTemplate(id, {
+                              ...ivrForPreview,
+                              scenario: opt,
+                            }),
                           )
                       : undefined
                   }

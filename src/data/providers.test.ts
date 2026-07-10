@@ -10,7 +10,10 @@ describe("providers data", () => {
     expect(PROVIDERS.filter((p) => p.connectAfterMs === null)).toHaveLength(1);
   });
   it("Beeline connects fastest", () => {
+    const connectTimes = PROVIDERS.filter((p) => p.connectAfterMs !== null).map(
+      (p) => p.connectAfterMs as number,
+    );
     const bee = PROVIDERS.find((p) => p.name === "Билайн");
-    expect(bee?.connectAfterMs).toBe(2000);
+    expect(bee?.connectAfterMs).toBe(Math.min(...connectTimes));
   });
 });

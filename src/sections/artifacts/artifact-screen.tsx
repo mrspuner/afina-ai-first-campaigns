@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, Download, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Download, RefreshCw, Trash2 } from "lucide-react";
 import {
   EntityCardShell,
   CardSection,
@@ -67,6 +68,10 @@ export function ArtifactScreenView({
 }: ArtifactScreenViewProps) {
   const kindLabel = ARTIFACT_KIND_LABEL[artifact.kind];
   const isCollection = artifact.variant === "cumulative";
+  const [dailiesExpanded, setDailiesExpanded] = useState(false);
+  // Потоковая коллекция активной кампании ещё собирается; завершённая (и разовые
+  // артефакты) — собраны.
+  const collecting = isCollection && campaign?.status !== "completed";
 
   return (
     <EntityCardShell
@@ -74,11 +79,18 @@ export function ArtifactScreenView({
       onBack={onBack}
       backLabel={backLabel}
       meta={
-        <span className="inline-flex items-center gap-1.5">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
-          Артефакт собран ·{" "}
-          {new Date(artifact.createdAt).toLocaleString("ru-RU")}
-        </span>
+        collecting ? (
+          <span className="inline-flex items-center gap-1.5">
+            <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden />
+            Артефакт собирается, обновляется каждый день в 00:00
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
+            Артефакт собран ·{" "}
+            {new Date(artifact.createdAt).toLocaleString("ru-RU")}
+          </span>
+        )
       }
       secondaryActions={[
         {
@@ -98,7 +110,7 @@ export function ArtifactScreenView({
       {isCollection && dailies && (
         <CardSection label="Дневные выжимки">
           <div className="flex flex-col">
-            {dailies.map((d) => (
+            {(dailiesExpanded ? dailies : dailies.slice(0, 5)).map((d) => (
               <div key={d.id} className="flex items-center gap-3 border-t border-border/40 py-2.5 text-sm first:border-t-0">
                 <span className="flex-1 text-foreground">
                   Выжимка · {d.periodDate ? `${d.periodDate.slice(8, 10)}.${d.periodDate.slice(5, 7)}` : "—"}
@@ -110,31 +122,30 @@ export function ArtifactScreenView({
               </div>
             ))}
           </div>
-        </CardSection>
-      )}
-
-      <CardSection label="Об артефакте">
-        <div className="divide-y divide-border">
-          <SummaryRow label="Тип файла">CSV</SummaryRow>
-          <SummaryRow label="Кампания">
+          {dailies.length > 5 && (
             <button
               type="button"
-              onClick={() => onOpenCampaign(artifact.campaignId)}
-              className="rounded underline-offset-2 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              onClick={() => setDailiesExpanded((v) => !v)}
+              className="mt-2 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              {campaignName}
+              {dailiesExpanded ? "Свернуть" : `Показать все (${dailies.length})`}
             </button>
-          </SummaryRow>
-          <SummaryRow label="Тип">{kindLabel}</SummaryRow>
-          <SummaryRow label="Создан">
-            {new Date(artifact.createdAt).toLocaleString("ru-RU")}
-          </SummaryRow>
-        </div>
-      </CardSection>
+          )}
+        </CardSection>
+      )}
 
       {campaign && (
         <CardSection label="Настройки кампании-источника">
           <div className="divide-y divide-border">
+            <SummaryRow label="Кампания">
+              <button
+                type="button"
+                onClick={() => onOpenCampaign(artifact.campaignId)}
+                className="rounded underline-offset-2 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {campaignName}
+              </button>
+            </SummaryRow>
             <SummaryRow label="Сценарий">{campaign.scenario?.name ?? "—"}</SummaryRow>
             <SummaryRow label="Источник">{SOURCE_LABEL[campaign.sourceType ?? "new"]}</SummaryRow>
             <SummaryRow label="Интересы">{campaign.interests?.length ? campaign.interests.join(", ") : "—"}</SummaryRow>

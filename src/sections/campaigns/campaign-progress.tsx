@@ -7,6 +7,7 @@ import { rngFor, seededInt } from "@/state/metrics";
 import type { Campaign } from "@/state/app-state";
 import { PROVIDERS } from "@/data/providers";
 import { ProviderList } from "./provider-list";
+import { useCampaignClock } from "@/hooks/use-campaign-clock";
 
 // ---------------------------------------------------------------------------
 // Stage model (pure) — the canonical «Прогресс кампании» sequence
@@ -50,6 +51,68 @@ type ProgressCampaign = Pick<
   Campaign,
   "sourceType" | "channels" | "phase" | "status"
 >;
+
+/** Длительность этапа по id (ms). Этапы без записи и последний этап списка —
+ *  терминальные (текущий «ongoing», без авто-перехода). */
+const STAGE_DURATION_MS: Record<string, number> = {
+  send: 8000,
+  verify: 8000,
+  connect: 8000,
+  process: 30000,
+};
+
+/** Список этапов кампании (без индекса) — по типу источника + наличию comm. */
+export function campaignStageList(c: ProgressCampaign): ProgressStage[] {
+  const streaming = c.sourceType === "stream";
+  if (streaming) return STREAM;
+  const hasComm = (c.channels?.length ?? 0) > 0;
+  return hasComm ? NON_STREAM_COMM : NON_STREAM_NO_COMM;
+}
+
+/**
+ * Индекс текущего этапа по прошедшему времени с запуска. Терминальный этап
+ * (последний в списке или без длительности — communicate/process-stream/done)
+ * «залипает» как ongoing. `elapsedMs === Infinity` (completed) → все done.
+ */
+export function campaignStageAt(stages: ProgressStage[], elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs)) return stages.length;
+  let acc = 0;
+  for (let i = 0; i < stages.length; i++) {
+    const isLast = i === stages.length - 1;
+    const dur = STAGE_DURATION_MS[stages[i].id];
+    if (isLast || dur === undefined) return i;
+    acc += dur;
+    if (elapsedMs < acc) return i;
+  }
+  return stages.length;
+}
+
+/** Момент (ms с запуска) старта коммуникации/артефакта — начало терминального
+ *  этапа. Не-stream = 46000, stream = 8000. */
+export function communicatingThresholdMs(stages: ProgressStage[]): number {
+  let acc = 0;
+  for (let i = 0; i < stages.length; i++) {
+    const isLast = i === stages.length - 1;
+    const dur = STAGE_DURATION_MS[stages[i].id];
+    if (isLast || dur === undefined) return acc;
+    acc += dur;
+  }
+  return acc;
+}
+
+/** Границы этапов (кумулятивные ms) для перерисовки часами. */
+export function stageBoundariesMs(stages: ProgressStage[]): number[] {
+  const out: number[] = [];
+  let acc = 0;
+  for (let i = 0; i < stages.length; i++) {
+    const isLast = i === stages.length - 1;
+    const dur = STAGE_DURATION_MS[stages[i].id];
+    if (isLast || dur === undefined) break;
+    acc += dur;
+    out.push(acc);
+  }
+  return out;
+}
 
 /**
  * Derives the canonical progress stepper for a campaign — the stage list (by
@@ -200,7 +263,12 @@ export function CampaignProgress({
   defaultExpanded = false,
 }: CampaignProgressProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const progress = campaignProgressStages(campaign);
+  const elapsed = useCampaignClock(campaign);
+  const stages = campaignStageList(campaign);
+  const progress: CampaignProgress = {
+    stages,
+    currentIndex: campaignStageAt(stages, elapsed),
+  };
   const summary = currentStageLabel(progress);
   const streaming = campaign.sourceType === "stream";
 

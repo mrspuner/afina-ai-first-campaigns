@@ -2,16 +2,10 @@
 
 import { Card } from "@/components/ui/card";
 import type { Campaign, Artifact } from "@/state/app-state";
-import type { SourceType } from "@/types/campaign";
 import { StatusBadge } from "./status-badge";
 import { getCampaignCardMetrics } from "./campaign-metrics";
+import { campaignCadenceLabel } from "./campaign-cadence";
 import { formatRubPlain } from "@/lib/format-rub";
-
-const SOURCE_LABEL: Record<SourceType, string> = {
-  new: "Новая база номеров",
-  stream: "Поток",
-  own: "Свои сигналы",
-};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("ru-RU");
@@ -43,9 +37,7 @@ interface CampaignCardProps {
 
 export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) {
   const scenarioName = campaign.scenario?.name ?? "—";
-  const sourceLabel = campaign.sourceType
-    ? SOURCE_LABEL[campaign.sourceType]
-    : null;
+  const cadenceLabel = campaignCadenceLabel(campaign.sourceType);
   const isDegenerate = (campaign.channels?.length ?? 0) === 0;
 
   const metrics = getCampaignCardMetrics(campaign, artifact);
@@ -72,9 +64,9 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
           <span className="shrink-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
             Сценарий: {scenarioName}
           </span>
-          {sourceLabel && (
+          {cadenceLabel && (
             <span className="shrink-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
-              {sourceLabel}
+              {cadenceLabel}
             </span>
           )}
         </div>

@@ -9,29 +9,32 @@ function launchedState(over: Partial<Campaign>, artifacts: Artifact[] = []) {
 }
 
 describe("campaign_launched artifact generation", () => {
-  it("own → artifact at launch + phase communicating", () => {
+  // Progress is now a post-launch, time-derived sequence (Отправка → Проверка
+  // → Обработка базы → Коммуникация): launch always starts in "scoring" and
+  // never creates an artifact itself — that happens later via the post-launch
+  // `campaign_phase_advanced` (see the describe block below).
+  it("own → NO artifact at launch, phase scoring", () => {
     const s = launchedState({ sourceType: "own", channels: ["sms"], files: [{ name: "b.csv", rowCount: 4200 }] });
-    expect(s.artifacts).toHaveLength(1);
-    expect(s.artifacts[0]).toMatchObject({ campaignId: "c1", kind: "signals_conversions", count: 4200 });
-    expect(s.campaigns[0].phase).toBe("communicating");
+    expect(s.artifacts).toHaveLength(0);
+    expect(s.campaigns[0].phase).toBe("scoring");
   });
-  it("stream → NO single artifact at launch (collection comes from daily digests) + phase communicating", () => {
+  it("stream → NO single artifact at launch (collection comes from daily digests), phase scoring", () => {
     const s = launchedState({ sourceType: "stream", channels: [] });
     expect(s.artifacts).toHaveLength(0);
-    expect(s.campaigns[0].phase).toBe("communicating");
+    expect(s.campaigns[0].phase).toBe("scoring");
   });
-  it("new launches to communicating (collection already done pre-launch)", () => {
+  it("new launches to scoring (post-launch phase_advanced now drives the collected-signals artifact)", () => {
     const s = launchedState({ sourceType: "new", channels: ["sms"] });
-    expect(s.campaigns[0].phase).toBe("communicating");
+    expect(s.campaigns[0].phase).toBe("scoring");
   });
-  it("new with a pre-launch artifact does NOT get a second at launch", () => {
+  it("new with a pre-launch artifact keeps it untouched at launch (no new artifact added)", () => {
     const preLaunch: Artifact = {
       id: "art_pre", campaignId: "c1", kind: "signals_conversions", count: 1234, createdAt: "pre",
     };
     const s = launchedState({ sourceType: "new", channels: ["sms"] }, [preLaunch]);
     expect(s.artifacts).toHaveLength(1);
     expect(s.artifacts[0].id).toBe("art_pre");
-    expect(s.campaigns[0].phase).toBe("communicating");
+    expect(s.campaigns[0].phase).toBe("scoring");
   });
 });
 
