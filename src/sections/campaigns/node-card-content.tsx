@@ -79,7 +79,7 @@ const PARAM_RENDERERS: {
           : String(p.branches),
     },
   ],
-  merge: () => [],
+  statistics: () => [],
   scoring: (p) => [
     { label: "Интересы", value: p.interests.length ? p.interests.join(", ") : "—" },
     { label: "Триггеры", value: p.triggers.length ? p.triggers.join(", ") : "—" },
