@@ -15,14 +15,6 @@ function formatNumber(n: number): string {
   return n.toLocaleString("ru-RU");
 }
 
-/** Компактный рубль: точные значения до 10 тыс., дальше — «тыс»/«млн». */
-function formatRub(value: number): string {
-  const abs = Math.round(value);
-  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(1)} млн ₽`;
-  if (abs >= 10_000) return `${Math.round(abs / 1_000)} тыс ₽`;
-  return `${abs.toLocaleString("ru-RU")} ₽`;
-}
-
 function timestampLine(c: Campaign): string {
   if (c.status === "active" && c.launchedAt) return `Запущена ${formatDate(c.launchedAt)}`;
   if (c.status === "completed" && c.completedAt) return `Завершена ${formatDate(c.completedAt)}`;
@@ -85,12 +77,12 @@ export function CampaignCard({ campaign, artifact, onOpen }: CampaignCardProps) 
         )}
         <StatItem
           label="Бюджет (расчётный)"
-          value={formatRub(metrics.plannedBudget)}
+          value={formatRubPlain(Math.round(metrics.plannedBudget))}
         />
         {metrics.launched && (
           <StatItem
             label="Бюджет (факт)"
-            value={formatRub(metrics.actualSpend)}
+            value={formatRubPlain(Math.round(metrics.actualSpend))}
           />
         )}
         {/* Потолок, заданный пользователем. НЕ dailyBudget: тот производный от

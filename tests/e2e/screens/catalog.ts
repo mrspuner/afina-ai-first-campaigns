@@ -17,6 +17,15 @@ export type Screen = {
   expect: string;
   /** Optional selectors masked out of visual snapshots (non-deterministic regions). */
   mask?: string[];
+  /**
+   * Приложение скроллится внутренним контейнером, поэтому `fullPage` снимает
+   * только первый экран. Для экранов с реальным контентом ниже сгиба ставим
+   * `expand: true` — перед съёмкой вьюпорт растягивается на скрытую высоту.
+   *
+   * НЕ включать для шагов визарда: там контент центрируется по высоте экрана и
+   * растёт вместе с вьюпортом (расширение уходит в разнос).
+   */
+  expand?: boolean;
 };
 
 // Shared, survey-passed, intro-skipped, funded base applied to every screen.
@@ -275,6 +284,8 @@ export const SCREENS: Screen[] = [
       },
     },
     expect: 'h1:has-text("Тестовая кампания")',
+    // 500px контента ниже сгиба (внутренний скроллер)
+    expand: true,
   },
   {
     id: "campaign-payment",
@@ -312,6 +323,8 @@ export const SCREENS: Screen[] = [
       view: { kind: "artifact", artifactId: artifact.id },
     },
     expect: 'h1:has-text("Сигналы и конверсии")',
+    // 105px контента ниже сгиба (внутренний скроллер)
+    expand: true,
   },
 
   // ---- Sidebar sections ----
@@ -328,6 +341,8 @@ export const SCREENS: Screen[] = [
       view: { kind: "section", name: "Статистика" },
     },
     expect: 'h1:has-text("Сводный за период")',
+    // 275px контента ниже сгиба (внутренний скроллер)
+    expand: true,
   },
   {
     id: "section-artifacts",
@@ -356,6 +371,8 @@ export const SCREENS: Screen[] = [
     name: "Раздел — Настройки",
     seed: { ...FIXED, view: { kind: "section", name: "Настройки" } },
     expect: 'h1:has-text("Настройки")',
+    // 1046px контента ниже сгиба (внутренний скроллер)
+    expand: true,
   },
 
   // ---- Streaming artifacts (Task II-8) ----
@@ -385,5 +402,7 @@ export const SCREENS: Screen[] = [
       view: { kind: "artifact", artifactId: streamCumulative.id },
     },
     expect: "text=Дневные выжимки",
+    // 455px контента ниже сгиба (внутренний скроллер)
+    expand: true,
   },
 ];
