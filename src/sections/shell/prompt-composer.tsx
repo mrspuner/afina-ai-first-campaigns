@@ -46,6 +46,7 @@ import { useChatSubmit } from "./use-chat-submit";
 import { isNodeQuestion } from "./node-prompt-intent";
 import { VariantPicker } from "./variant-picker";
 import { useTemplateFlow } from "./use-template-flow";
+import { answerEditOption, answerEditQuestion } from "./use-campaign-edit-flow";
 
 export interface PromptComposerHandle {
   /** Загружает черновик из очереди обратно в инпут (клик по карточке). */
@@ -112,6 +113,13 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       tplDrawer.open && tplDrawer.mode === "create" ? tplDrawer.question : null;
     const tplIntentStep =
       tplDrawer.open && tplDrawer.mode === "create" && tplDrawer.step === "intent";
+
+    // Активный вопрос правки кампании — независимый слой поверх дровера.
+    // Текущий вопрос это questions[index]; очередь исчерпана → пикер гаснет.
+    const editDrawer = chat.campaignEditDrawer;
+    const editQuestion = editDrawer.open
+      ? (editDrawer.questions[editDrawer.index] ?? null)
+      : null;
 
     const editorRef = useRef<ChipEditableInputHandle>(null);
     // Parked suggestion action — runs on confirm only if the inserted text is
@@ -250,6 +258,14 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       const rawText = message.text ?? "";
       const segments = editorRef.current?.getSegments() ?? [];
       const active = editorRef.current?.getActiveSegment() ?? null;
+
+      // 0. Правка кампании: пока висит вопрос, текст композера — это свободный
+      // ответ на него, а не команда оболочки.
+      if (editQuestion && rawText.trim()) {
+        answerEditQuestion(chat, rawText.trim());
+        resetEditor();
+        return;
+      }
 
       // 0. Создание шаблона в дровере (#14): на шаге свободного намерения текст
       // композера — это ответ ассистенту, а не команда оболочки.
@@ -471,13 +487,25 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
             onSkip={chat.closeTemplateDrawer}
           />
         )}
+        {editQuestion && (
+          <VariantPicker
+            question={editQuestion}
+            onSelect={(optionId) => answerEditOption(chat, optionId)}
+            onClose={chat.closeCampaignEdit}
+            onSkip={chat.closeCampaignEdit}
+          />
+        )}
         {/* data-onboarding — цель точечной подсветки онбординга (спека #5). */}
         <div data-onboarding="prompt-input">
           <PromptInput onSubmit={handlePromptSubmit} className={inputClassName}>
             <ChipEditableInput
               ref={editorRef}
               className="px-3 py-2"
-              placeholder={tplIntentStep || tplQuestion ? "Или напишите ответ…" : placeholder}
+              placeholder={
+                tplIntentStep || tplQuestion || editQuestion
+                  ? "Или напишите ответ…"
+                  : placeholder
+              }
               onTagSwap={parkPreviousIfNeeded}
               captureGlobalTyping={captureGlobalTyping}
             />

@@ -141,7 +141,7 @@ export function ArtifactScreenView({
               <button
                 type="button"
                 onClick={() => onOpenCampaign(artifact.campaignId)}
-                className="rounded underline-offset-2 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+                className="rounded underline underline-offset-2 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 {campaignName}
               </button>

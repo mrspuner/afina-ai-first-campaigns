@@ -75,6 +75,13 @@ describe("ArtifactScreenView", () => {
     expect(onOpenCampaign).toHaveBeenCalledWith("cmp_1");
   });
 
+  it("имя кампании подчёркнуто постоянно, а не только по наведению", () => {
+    renderScreen({ campaign, campaignName: campaign.name });
+    const link = screen.getByRole("button", { name: /Лето 2026/ });
+    // Токен `underline` сам по себе — не `hover:underline`.
+    expect(link.className.split(/\s+/)).toContain("underline");
+  });
+
   it("shows campaign settings table when campaign is passed", () => {
     renderScreen({ campaign, campaignName: campaign.name });
     expect(screen.getByText(/Настройки кампании-источника/)).toBeInTheDocument();

@@ -14,6 +14,7 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
 import { describeWorkflow } from "@/state/graph-description";
+import { useCampaignEditFlow } from "@/sections/shell/use-campaign-edit-flow";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
   CampaignProgress,
@@ -62,29 +63,37 @@ export function CampaignScreen() {
     return () => clearTimeout(t);
   }, [campaignId, needsAdvance, launchedAtMs, campaign, dispatch]);
 
-  if (view.kind !== "campaign") return null;
-  if (!campaign) return null;
-  const signalType = campaign.scenario
+  const signalType = campaign?.scenario
     ? getScenario(campaign.scenario.id)?.signalType
     : undefined;
+  // Гейт «Запустить»: базовый статус-гейт И валидность workflow-графа
+  // (незаполненный шаблон = needs-attention блокирует запуск). Граф берём из
+  // durable-кэша (учитывает ручные правки) либо строим из шаблона по сценарию
+  // — тот же приём, что в campaign-payment-screen.
+  const launchGraph = campaign
+    ? (getCachedGraph(campaign.id) ??
+      (signalType
+        ? createTemplate(signalType, campaign.sourceType, campaign.channels ?? [])
+        : null))
+    : null;
+  // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
+  // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
+  // Считается ДО ранних выходов: его же читает хук правки (правила хуков).
+  const descriptionStages = launchGraph ? describeWorkflow(launchGraph, templates) : [];
+  // Модель получает то же описание, что видит пользователь, — не JSON графа.
+  const descriptionText = descriptionStages
+    .map((s) => `${s.heading} ${s.body}`)
+    .join("\n");
+  const editFlow = useCampaignEditFlow(campaignId ?? "", descriptionText);
+
+  if (view.kind !== "campaign") return null;
+  if (!campaign) return null;
 
   const status = campaign.status;
   const isActive = status === "active";
   const isCompleted = status === "completed";
   const hasStats = isActive || isCompleted;
-  // Гейт «Запустить»: базовый статус-гейт И валидность workflow-графа
-  // (незаполненный шаблон = needs-attention блокирует запуск). Граф берём из
-  // durable-кэша (учитывает ручные правки) либо строим из шаблона по сценарию
-  // — тот же приём, что в campaign-payment-screen.
-  const launchGraph =
-    getCachedGraph(campaign.id) ??
-    (signalType
-      ? createTemplate(signalType, campaign.sourceType, campaign.channels ?? [])
-      : null);
   const canLaunch = canLaunchWithGraph(campaign, launchGraph);
-  // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
-  // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
-  const stages = launchGraph ? describeWorkflow(launchGraph, templates) : [];
   // The «Прогресс кампании» stepper is the canonical progress view — shown once
   // the campaign has entered its run (active, paused, or completed). A
   // not-yet-started draft shows the «Запуск» CTA.
@@ -194,14 +203,28 @@ export function CampaignScreen() {
           кликабельная миниатюра, открывающая полный граф. */}
       <CardSection label="Как работает кампания">
         <div className="flex flex-col gap-5">
-          <WorkflowDescription stages={stages} />
-          <WorkflowMiniPreview
-            campaignId={campaign.id}
-            signalType={signalType}
-            sourceType={campaign.sourceType}
-            channels={campaign.channels}
-            onClick={openWorkflow}
+          {/* Правка — только до запуска (статус «Не запущена»), как read-only
+              режим скоринг-дровера у запущенной кампании. */}
+          <WorkflowDescription
+            stages={descriptionStages}
+            canEdit={status === "draft"}
+            phase={editFlow.phase}
+            error={editFlow.error}
+            onSubmitEdit={editFlow.submit}
+            onCancelEdit={editFlow.cancel}
           />
+          <div className="flex flex-col gap-3 border-t border-border pt-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Граф кампании
+            </p>
+            <WorkflowMiniPreview
+              campaignId={campaign.id}
+              signalType={signalType}
+              sourceType={campaign.sourceType}
+              channels={campaign.channels}
+              onClick={openWorkflow}
+            />
+          </div>
         </div>
       </CardSection>
 

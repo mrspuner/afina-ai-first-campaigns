@@ -7,6 +7,7 @@ import {
   useAppDispatch,
 } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
+import { ChatProvider } from "@/state/chat-context";
 import type { Campaign, Preset } from "@/state/app-state";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
@@ -55,9 +56,13 @@ function renderCampaign(campaign: Campaign) {
   return render(
     <AppStateProvider>
       {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
-          mirror the real app tree, where PromptChipsProvider wraps the screen. */}
+          mirror the real app tree, where PromptChipsProvider wraps the screen.
+          ChatProvider — потому что карточка ведёт правку через ИИ-дровер
+          (useCampaignEditFlow), как и в page.tsx. */}
       <PromptChipsProvider>
-        <Harness campaign={campaign} />
+        <ChatProvider>
+          <Harness campaign={campaign} />
+        </ChatProvider>
       </PromptChipsProvider>
     </AppStateProvider>,
   );
@@ -78,6 +83,35 @@ describe("CampaignScreen — блок «Как работает кампания
     expect(
       screen.getByText(/Ваше предложение ждёт\. Подробности на сайте\./),
     ).toBeInTheDocument();
+  });
+
+  it("озаглавливает мини-граф «Граф кампании»", () => {
+    renderCampaign(baseCampaign({ id: "cmp_desc_graph", channels: ["sms"] }));
+    expect(screen.getByText("Граф кампании")).toBeInTheDocument();
+  });
+
+  it("прячет «Изменить» у запущенной кампании", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_desc_active",
+        status: "active",
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    // Описание остаётся — read-only, как у скоринг-дровера launched-кампании.
+    expect(screen.getByText("Как работает кампания")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+  });
+
+  it("прячет «Изменить» у остановленной и завершённой", () => {
+    for (const status of ["paused", "completed"] as const) {
+      const { unmount } = renderCampaign(
+        baseCampaign({ id: `cmp_desc_${status}`, status }),
+      );
+      expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+      unmount();
+    }
   });
 
   it("ставит «Изменить» между текстом и мини-графом", () => {
