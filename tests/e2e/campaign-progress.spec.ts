@@ -7,10 +7,10 @@
 //   3. streaming → Подключение к провайдерам → Обработка и коммуникация (+ a
 //      «Суммарно» per-day line)
 //
-// The row is collapsed by default (chevron); clicking reveals the stepper. The
-// current processing stage hosts the provider list. Seeds put each campaign in
-// the scoring/processing era (phase drives the current stage) so the provider
-// list is the current stage and renders when expanded.
+// The row is EXPANDED by default (refactor bf9b62c); clicking the chevron
+// collapses it. The current processing stage hosts the provider list. Seeds put
+// each campaign in the scoring/processing era so the provider list is the
+// current stage and renders in the expanded stepper.
 import { test, expect } from "@playwright/test";
 import { seedScreen } from "./screens/seed";
 import type { AppState, Campaign, Artifact, View } from "@/state/app-state";
@@ -91,22 +91,27 @@ test.describe("«Прогресс кампании» stepper on the campaign car
       expect: 'h1:has-text("С коммуникацией")',
     });
 
-    // Collapsed: the «Прогресс» row shows the current stage; stages are hidden.
+    // Expanded by default: the row is open and the full non-streaming-with-comm
+    // sequence is visible without a click (progress is expanded by default).
     const row = page.getByRole("button", { name: /Прогресс/ });
     await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Обработка базы").first()).toBeVisible();
-    await expect(page.getByText("Отправка провайдерам")).toHaveCount(0);
+    await expect(page.getByText("Отправка провайдерам").first()).toBeVisible();
+    await expect(page.getByText("Проверка провайдерами").first()).toBeVisible();
+    await expect(page.getByText("Коммуникация по сигналам").first()).toBeVisible();
+    await expect(page.getByText("Кампания завершена").first()).toBeVisible();
 
-    // Expand → the full non-streaming-with-comm sequence appears.
-    await row.click();
-    await expect(page.getByText("Отправка провайдерам")).toBeVisible();
-    await expect(page.getByText("Проверка провайдерами")).toBeVisible();
-    await expect(page.getByText("Коммуникация по сигналам")).toBeVisible();
-    await expect(page.getByText("Кампания завершена")).toBeVisible();
-
-    // Providers render under the current «Обработка базы» stage.
+    // Providers render (by name) under the current «Обработка базы» stage.
+    // (The «ожидание подключения» status text is streaming-only; non-streaming
+    // providers show a status icon, not that label.)
     await expect(page.getByText("Билайн")).toBeVisible();
-    await expect(page.getByText("ожидание подключения").first()).toBeVisible();
+    await expect(page.getByText("Мегафон")).toBeVisible();
+
+    // Clicking the row collapses it → the downstream stages hide.
+    await row.click();
+    await expect(row).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByText("Отправка провайдерам")).toHaveCount(0);
   });
 
   test("non-streaming WITHOUT comm: sequence ends at «Кампания завершена», no «Коммуникация по сигналам»", async ({
@@ -119,11 +124,12 @@ test.describe("«Прогресс кампании» stepper on the campaign car
       expect: 'h1:has-text("Без коммуникации")',
     });
 
+    // Expanded by default — no click needed to reveal the sequence.
     const row = page.getByRole("button", { name: /Прогресс/ });
-    await row.click();
+    await expect(row).toHaveAttribute("aria-expanded", "true");
 
     await expect(page.getByText("Обработка базы").first()).toBeVisible();
-    await expect(page.getByText("Кампания завершена")).toBeVisible();
+    await expect(page.getByText("Кампания завершена").first()).toBeVisible();
     // The communication stage is entirely absent for a no-comm campaign.
     await expect(page.getByText("Коммуникация по сигналам")).toHaveCount(0);
     // Providers still render in the processing stage.
@@ -138,11 +144,10 @@ test.describe("«Прогресс кампании» stepper on the campaign car
       expect: 'h1:has-text("Поток")',
     });
 
+    // Expanded by default: both streaming stages are visible without a click.
     const row = page.getByRole("button", { name: /Прогресс/ });
-    // Collapsed summary is the streaming combined stage.
+    await expect(row).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Обработка и коммуникация").first()).toBeVisible();
-    await row.click();
-
     await expect(page.getByText("Подключение к провайдерам")).toBeVisible();
     // The non-streaming stages must NOT appear for a streaming campaign.
     await expect(page.getByText("Отправка провайдерам")).toHaveCount(0);

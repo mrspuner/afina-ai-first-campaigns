@@ -1,8 +1,9 @@
-// The scoring node's «Интересы и триггеры» opens the SAME interests/triggers
-// editor the wizard uses, hosted inside the AI sidebar (chat-drawer) that
-// already carries «Афина ИИ» + the prompt composer. Editable while the campaign
-// is a draft (not launched), read-only once launched. Reuses the catalog's
-// workflow-draft (draft) and workflow-launched (active) screens.
+// The scoring node's «Интересы и триггеры» opens a SELF-CONTAINED selection
+// layer (component ScoringDrawer, testid "scoring-drawer") — the same
+// interests/triggers editor the wizard uses, but WITHOUT the «Афина ИИ» chat
+// header or prompt composer inside it (refactor 7181b7a: «независимый слой,
+// без AI внутри»). Editable while the campaign is a draft, read-only once
+// launched. Reuses the catalog's workflow-draft / workflow-launched screens.
 import { test, expect, type Page } from "@playwright/test";
 import { seedScreen } from "./screens/seed";
 import { SCREENS } from "./screens/catalog";
@@ -11,24 +12,26 @@ async function openScoringDrawer(page: Page, editLabel: RegExp) {
   await page.locator('[data-node-type="scoring"]').first().click();
   await expect(page.getByTestId("node-control-panel")).toBeVisible();
   await page.getByRole("button", { name: editLabel }).click();
-  const drawer = page.getByTestId("chat-drawer");
+  const drawer = page.getByTestId("scoring-drawer");
   await expect(drawer).toBeVisible();
   return drawer;
 }
 
 test.describe("scoring «Интересы и триггеры» drawer — draft editable / launched read-only", () => {
-  test("draft: opens the shared editor inside the «Афина ИИ» drawer with the prompt composer", async ({
+  test("draft: opens the self-contained selection layer (interests toggles + trigger domains)", async ({
     page,
   }) => {
     const screen = SCREENS.find((s) => s.id === "workflow-draft")!;
     await seedScreen(page, screen);
     const drawer = await openScoringDrawer(page, /Изменить интересы и триггеры/);
 
-    // The drawer IS the «Афина ИИ» AI sidebar (header + prompt composer present).
-    await expect(drawer.getByText("Афина ИИ")).toBeVisible();
+    // Own layer header — «Скоринг · нода» + the «Интересы и триггеры» title.
+    // It is a pure selection panel: NO «Афина ИИ» chat, NO prompt composer.
+    await expect(drawer.getByText("Интересы и триггеры")).toBeVisible();
+    await expect(drawer.getByText("Афина ИИ")).toHaveCount(0);
     await expect(
       drawer.locator('[role="textbox"][contenteditable="true"]')
-    ).toBeVisible();
+    ).toHaveCount(0);
 
     // Same editor as the wizard: the campaign's interest is a pressed toggle, the
     // direction catalog offers more toggles to pick from.
@@ -45,15 +48,15 @@ test.describe("scoring «Интересы и триггеры» drawer — draft
     expect(await drawer.locator(".font-mono").count()).toBeGreaterThan(0);
   });
 
-  test("launched: drawer is read-only (interests as text, no toggles) but still «Афина ИИ»", async ({
+  test("launched: drawer is read-only (interests as text, no toggles)", async ({
     page,
   }) => {
     const screen = SCREENS.find((s) => s.id === "workflow-launched")!;
     await seedScreen(page, screen);
     const drawer = await openScoringDrawer(page, /Показать интересы и триггеры/);
 
-    // Still the «Афина ИИ» drawer.
-    await expect(drawer.getByText("Афина ИИ")).toBeVisible();
+    // Still the same self-contained layer.
+    await expect(drawer.getByText("Интересы и триггеры")).toBeVisible();
 
     // Read-only: interests render as plain text, not pressable toggles.
     await expect(drawer.getByText("Кредитование")).toBeVisible();
