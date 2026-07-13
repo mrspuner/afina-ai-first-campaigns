@@ -5,8 +5,6 @@ import { motion } from "motion/react";
 import { X, CornerDownLeft, Pencil } from "lucide-react";
 import type { TemplateQuestion } from "@/state/chat-context";
 
-export const VARIANT_PICKER_HINT = "↑↓ — навигация · Enter — выбрать · или впишите ниже";
-
 export interface VariantPickerProps {
   question: TemplateQuestion;
   onSelect: (optionId: string) => void;
@@ -99,11 +97,6 @@ export function VariantPicker({ question, onSelect, onClose, onSkip }: VariantPi
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{opt.label}</span>
-                  {opt.components && opt.components.length > 0 && (
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {opt.components.join(" · ")}
-                    </span>
-                  )}
                 </span>
                 {active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-primary" />}
               </button>
@@ -128,11 +121,6 @@ export function VariantPicker({ question, onSelect, onClose, onSkip }: VariantPi
           </button>
         </div>
       )}
-
-      {/* Navigation hint */}
-      <p className="border-t border-white/8 px-3 py-1.5 text-[11px] text-muted-foreground">
-        {VARIANT_PICKER_HINT}
-      </p>
     </motion.div>
   );
 }

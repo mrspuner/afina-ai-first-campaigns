@@ -37,9 +37,9 @@ describe("VariantPicker", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
-  it("shows component makeup for each option (#15)", () => {
+  it("НЕ показывает подстроку состава под опцией (#10)", () => {
     render(<VariantPicker question={openQuestion} {...base} />);
-    expect(screen.getByText(/тема · текст · отправитель/)).toBeInTheDocument();
+    expect(screen.queryByText(/тема · текст · отправитель/)).not.toBeInTheDocument();
   });
 
   it("calls onSelect with option id on click", () => {
@@ -84,11 +84,11 @@ describe("VariantPicker", () => {
     expect(screen.getByRole("button", { name: "Пропустить" })).toBeInTheDocument();
   });
 
-  it("renders the navigation hint line", () => {
+  it("НЕ показывает подсказку навигации (#9)", () => {
     render(<VariantPicker question={openQuestion} {...base} />);
     expect(
-      screen.getByText(/↑↓ — навигация · Enter — выбрать · или впишите ниже/)
-    ).toBeInTheDocument();
+      screen.queryByText(/↑↓ — навигация · Enter — выбрать · или впишите ниже/)
+    ).not.toBeInTheDocument();
   });
 
   it("calls onClose when ✕ pressed", () => {
