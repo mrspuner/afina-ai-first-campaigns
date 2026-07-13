@@ -50,7 +50,7 @@ export function ArtifactCard({
         tabIndex={0}
         className={cn(
           "animate-in fade-in-0 slide-in-from-bottom-2 gap-2 px-5 py-4 [--tw-animation-duration:220ms] [--tw-ease:var(--ease-out)]",
-          "cursor-pointer transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          "cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         )}
         style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
       >
