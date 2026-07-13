@@ -68,10 +68,10 @@ test.describe("@visual template preview drawers", () => {
   });
 });
 
-// This visual covers the library-template entry point (Артефакты → Шаблоны card
-// «Предпросмотр»). The IVR node's field also has its own eye now, but the drawer
-// it opens renders the same IvrRenderer, so no extra snapshot is needed. The
-// script text is static, so no clock dep.
+// This visual covers the library-template entry point (Артефакты → Шаблоны —
+// клик по карточке, #4). The IVR node's field also has its own eye now, but the
+// drawer it opens renders the same IvrRenderer, so no extra snapshot is needed.
+// The script text is static, so no clock dep.
 const IVR_SCRIPT = [
   "Здравствуйте! Меня зовут Анна, я звоню из компании «Афина».",
   "",
@@ -109,7 +109,8 @@ test.describe("@visual template preview drawer — IVR", () => {
 
   test("visual: IVR preview drawer (full script)", async ({ page }) => {
     await page.getByRole("tab", { name: "Шаблоны" }).click();
-    await page.getByRole("button", { name: "Предпросмотр" }).click();
+    // #4 — карточка целиком кликабельна (кнопки «Предпросмотр» больше нет).
+    await page.getByText("Звонок — ипотека").click();
     const drawer = page.getByTestId("template-preview-drawer");
     await expect(drawer).toBeVisible();
     await expect(drawer).toHaveScreenshot("template-preview-ivr.png");
