@@ -164,10 +164,19 @@ describe("submitIntent assistant message", () => {
       },
     ];
 
-    const appended: Array<{ role: string; text: string; pending?: boolean }> = [];
+    const appended: Array<{ role: string; text: string; pending?: boolean; id: string }> = [];
+    const updates: Array<{ id: string; text: string; format?: string }> = [];
+    let idCounter = 0;
     const chat = {
       templateDrawer: { channel: "email" as const, variants: [] },
-      append: (m: { role: string; text: string; pending?: boolean }) => appended.push(m),
+      append: (m: { role: string; text: string; pending?: boolean }) => {
+        const id = `id${idCounter++}`;
+        appended.push({ ...m, id });
+        return id;
+      },
+      updatePending: (id: string, text: string, format?: "markdown") => {
+        updates.push({ id, text, format });
+      },
       setTemplateIntent: () => {},
       setTemplateQuestion: () => {},
       setTemplateGenerating: () => {},
@@ -190,10 +199,17 @@ describe("submitIntent assistant message", () => {
       globalThis.fetch = orig;
     }
 
-    // The non-pending assistant message after variants are ready.
-    const ready = appended.filter((m) => m.role === "assistant" && !m.pending).at(-1);
-    expect(ready).toBeDefined();
-    const text = ready!.text;
+    // #11: pending-пузырёк «Готовлю варианты…» РЕЗОЛВИТСЯ (updatePending),
+    // а не плодит новое сообщение.
+    const pending = appended.find((m) => m.pending);
+    expect(pending).toBeDefined();
+    const resolved = updates.find((u) => u.id === pending!.id);
+    expect(resolved).toBeDefined();
+    expect(resolved!.format).toBe("markdown"); // #8 — markdown-рендер
+    // Никаких лишних не-pending ассистентских append после pending.
+    expect(appended.filter((m) => m.role === "assistant" && !m.pending)).toHaveLength(0);
+
+    const text = resolved!.text;
     expect(text).toContain("Вариант А");
     expect(text).toContain("Тема А");
     expect(text).toContain("Текст А");

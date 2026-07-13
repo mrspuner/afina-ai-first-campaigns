@@ -159,7 +159,7 @@ export interface ChatState {
 
 export type ChatAction =
   | { type: "append"; message: ChatMessage }
-  | { type: "update_pending"; id: string; text: string }
+  | { type: "update_pending"; id: string; text: string; format?: "markdown" }
   | {
       type: "update_reasoning";
       id: string;
@@ -214,7 +214,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.map((m) =>
-          m.id === action.id ? { ...m, text: action.text, pending: undefined } : m
+          m.id === action.id
+            ? { ...m, text: action.text, pending: undefined, format: action.format }
+            : m
         ),
       };
     }
@@ -462,7 +464,7 @@ interface ChatContextValue {
   mode: ChatPanelMode;
   /** Returns the id of the new message so the caller can update_pending later. */
   append: (input: Omit<ChatMessage, "id" | "createdAt">) => string;
-  updatePending: (id: string, text: string) => void;
+  updatePending: (id: string, text: string, format?: "markdown") => void;
   /** Push the current reasoning steps into an existing reasoning message. */
   updateReasoning: (id: string, steps: string[], streaming: boolean) => void;
   clear: () => void;
@@ -557,9 +559,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const updatePending = useCallback((id: string, text: string) => {
-    dispatch({ type: "update_pending", id, text });
-  }, []);
+  const updatePending = useCallback(
+    (id: string, text: string, format?: "markdown") => {
+      dispatch({ type: "update_pending", id, text, format });
+    },
+    []
+  );
 
   const updateReasoning = useCallback(
     (id: string, steps: string[], streaming: boolean) => {

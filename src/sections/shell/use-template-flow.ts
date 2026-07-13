@@ -78,7 +78,9 @@ export function buildVariantsMessage(variants: TemplateDrawerVariant[]): string 
 /** Минимальный контракт чата, нужный потоку submitIntent (для тестируемости). */
 export interface SubmitIntentChat {
   templateDrawer: { channel: Channel | null; variants: TemplateDrawerVariant[] };
-  append: (m: { role: "user" | "assistant"; text: string; pending?: boolean }) => void;
+  /** Возвращает id созданного сообщения (нужен для updatePending). */
+  append: (m: { role: "user" | "assistant"; text: string; pending?: boolean }) => string;
+  updatePending: (id: string, text: string, format?: "markdown") => void;
   setTemplateIntent: (intent: string) => void;
   setTemplateQuestion: (q: TemplateQuestion | null) => void;
   setTemplateGenerating: (v: boolean) => void;
@@ -98,7 +100,9 @@ export async function runSubmitIntent(chat: SubmitIntentChat, intent: string): P
   chat.setTemplateIntent(intent);
   chat.setTemplateQuestion(null);
   chat.setTemplateGenerating(true);
-  chat.append({ role: "assistant", text: "Готовлю варианты…", pending: true });
+  // pending-пузырёк «думания»; резолвим ЕГО же в ответ (#11), а не плодим новое
+  // сообщение — иначе точки зависают над вариантами.
+  const pendingId = chat.append({ role: "assistant", text: "Готовлю варианты…", pending: true });
   try {
     const res = await fetch(TEMPLATE_GENERATE_URL, {
       method: "POST",
@@ -119,10 +123,10 @@ export async function runSubmitIntent(chat: SubmitIntentChat, intent: string): P
       };
     });
     chat.setTemplateVariants(variants);
-    chat.append({ role: "assistant", text: buildVariantsMessage(variants) });
+    chat.updatePending(pendingId, buildVariantsMessage(variants), "markdown");
     chat.setTemplateQuestion(variantQuestion(variants));
   } catch {
-    chat.append({ role: "assistant", text: "Не удалось сгенерировать. Попробуйте ещё раз." });
+    chat.updatePending(pendingId, "Не удалось сгенерировать. Попробуйте ещё раз.");
     chat.setTemplateQuestion(null);
   } finally {
     chat.setTemplateGenerating(false);
