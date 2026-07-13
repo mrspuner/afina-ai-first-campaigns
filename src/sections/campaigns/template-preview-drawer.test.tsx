@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TemplatePreviewBody, TemplatePreviewDrawer } from "./template-preview-drawer";
 import { AppStateProvider } from "@/state/app-state-context";
@@ -52,9 +52,11 @@ const ivr: MessageTemplate = {
   usedInCampaigns: 0,
 };
 
+const noop = () => {};
+
 describe("TemplatePreviewBody — routes by channel", () => {
   it("renders the SMS styled preview for an sms template", () => {
-    render(<TemplatePreviewBody template={sms} />);
+    render(<TemplatePreviewBody template={sms} readOnly onChange={noop} />);
     expect(
       screen.getByText("Ваше предложение ждёт. Подробности на сайте."),
     ).toBeInTheDocument();
@@ -62,25 +64,35 @@ describe("TemplatePreviewBody — routes by channel", () => {
   });
 
   it("renders the Push styled preview for a push template", () => {
-    render(<TemplatePreviewBody template={push} />);
+    render(<TemplatePreviewBody template={push} readOnly onChange={noop} />);
     expect(screen.getByText("Давно вас не видели")).toBeInTheDocument();
     expect(screen.getByText("Загляните")).toBeInTheDocument();
   });
 
   it("renders the Email styled preview for an email template", () => {
-    render(<TemplatePreviewBody template={email} />);
+    render(<TemplatePreviewBody template={email} readOnly onChange={noop} />);
     expect(screen.getByText("Добро пожаловать! Начнём?")).toBeInTheDocument();
     // EmailRenderer prints the sender in the «От:» header line.
     expect(screen.getByText(/Афина <noreply@afina.ai>/)).toBeInTheDocument();
   });
 
   it("renders IVR as a full-text call-script panel (whole scenario, voice meta)", () => {
-    render(<TemplatePreviewBody template={ivr} />);
+    render(<TemplatePreviewBody template={ivr} readOnly onChange={noop} />);
     // The FULL script is shown — both the opening and the trailing line.
     const script = screen.getByText(/Здравствуйте! Это звонок от Афины\./);
     expect(script).toHaveTextContent("перезвоните нам, когда будет удобно");
     // Voice value is mapped to a human label.
     expect(screen.getByText(/Женский/)).toBeInTheDocument();
+  });
+
+  it("editable (readOnly=false): правка SMS-текста → onChange с патчем (#3)", () => {
+    const onChange = vi.fn();
+    render(<TemplatePreviewBody template={sms} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Правка" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ text: "Правка" });
   });
 });
 
@@ -123,11 +135,31 @@ describe("TemplatePreviewDrawer (connected) — eye-icon wiring", () => {
     expect(
       screen.getByText("Ваше предложение ждёт. Подробности на сайте."),
     ).toBeInTheDocument();
-    // The channel-scoped header and a working close affordance are present.
+    // The channel-scoped header is present. Seed template is unused →
+    // editable → footer says «Готово» (autosave), no lock banner.
     expect(screen.getByText(/Шаблон · SMS/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Закрыть" }),
+      screen.getByRole("button", { name: "Готово" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/нельзя редактировать/)).toBeNull();
+  });
+
+  it("использованный шаблон (usedInCampaigns≥1) → замок: баннер + read-only (#3)", () => {
+    const usedSms: MessageTemplate = { ...sms, id: "t_used", usedInCampaigns: 3 };
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <InlineHarness template={usedSms} />
+          <TemplatePreviewDrawer />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    expect(screen.getByText(/нельзя редактировать/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+    // read-only: клик по тексту не открывает инпут.
+    fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("opens the drawer for an inline IVR template (node scenario, not in library)", () => {
