@@ -70,6 +70,13 @@ describe("BudgetBreakdown — collapsible «Коммуникации» table", (
     ).toBe("true");
   });
 
+  it("показывает пояснение первичные/повторные над таблицей (#14)", () => {
+    renderBreakdown({ defaultExpanded: true });
+    expect(
+      screen.getByText(/дополнительное касание тем, кто не отреагировал/)
+    ).toBeTruthy();
+  });
+
   it("clicking again collapses the table back", () => {
     renderBreakdown();
     const btn = screen.getByRole("button", { name: /Коммуникации/ });

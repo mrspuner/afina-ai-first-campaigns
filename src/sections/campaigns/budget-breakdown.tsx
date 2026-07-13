@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import {
@@ -81,11 +81,11 @@ export function BudgetBreakdown({
           >
             <span className="flex items-center gap-1 text-muted-foreground">
               Коммуникации
-              <ChevronRight
+              <ChevronDown
                 aria-hidden
                 className={cn(
                   "size-3.5 shrink-0 text-muted-foreground/70 transition-transform",
-                  expanded && "rotate-90"
+                  expanded && "rotate-180"
                 )}
               />
             </span>
@@ -98,6 +98,11 @@ export function BudgetBreakdown({
               top corners, rounded bottom, subtle top divider. */}
           {expanded && (
             <div className="mb-4 rounded-b-[7px] border-t border-white/[0.067] bg-white/[0.011] px-3 py-1.5">
+              <p className="mb-2 text-[11px] leading-[1.5] text-muted-foreground">
+                Первичные — первое касание по каждому получателю. Повторные —
+                дополнительное касание тем, кто не отреагировал: обычно это заметно
+                повышает отклик, их можно будет отключать при настройке кампании.
+              </p>
               <table className="w-full">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.02em] text-[#6f6f66]">
