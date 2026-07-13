@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { PushRenderer } from "./push-renderer";
 import type { PushParams } from "@/types/workflow";
 
@@ -34,5 +34,21 @@ describe("PushRenderer", () => {
     render(<PushRenderer params={params({ title: "", body: "" })} />);
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Текст уведомления")).toBeInTheDocument();
+  });
+
+  it("readOnly по умолчанию — клик по заголовку НЕ открывает инпут", () => {
+    render(<PushRenderer params={params()} />);
+    fireEvent.click(screen.getByText("Давно вас не видели"));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("editable: правка тела → onChange с патчем body (#3)", () => {
+    const onChange = vi.fn();
+    render(<PushRenderer params={params()} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByText("Загляните — у нас есть кое-что для вас."));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Обновлённое тело" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ body: "Обновлённое тело" });
   });
 });

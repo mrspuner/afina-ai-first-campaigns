@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { SmsRenderer } from "./sms-renderer";
 import type { SmsParams } from "@/types/workflow";
 
@@ -41,5 +41,21 @@ describe("SmsRenderer", () => {
   it("falls back to a placeholder when the text is empty", () => {
     render(<SmsRenderer params={params({ text: "" })} />);
     expect(screen.getByText("Текст сообщения")).toBeInTheDocument();
+  });
+
+  it("readOnly по умолчанию — клик по тексту НЕ открывает инпут", () => {
+    render(<SmsRenderer params={params()} />);
+    fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("editable: клик по тексту → правка → onChange с патчем text (#3)", () => {
+    const onChange = vi.fn();
+    render(<SmsRenderer params={params()} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Новый текст" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ text: "Новый текст" });
   });
 });
