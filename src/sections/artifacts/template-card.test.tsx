@@ -30,91 +30,96 @@ const email: MessageTemplate = {
   usedInCampaigns: 1,
 };
 
+function renderCard(
+  template: MessageTemplate,
+  over: Partial<React.ComponentProps<typeof TemplateCard>> = {},
+) {
+  const props = {
+    template,
+    onRename: vi.fn(),
+    onPreview: vi.fn(),
+    onDuplicate: vi.fn(),
+    ...over,
+  };
+  return { ...render(<TemplateCard {...props} />), props };
+}
+
 describe("TemplateCard", () => {
   it("shows channel label, name and a grey usage chip «Использовано N раз»", () => {
-    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    renderCard(sms);
     expect(screen.getByText("SMS")).toBeInTheDocument();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
     expect(screen.getByText("Использовано 3 раза")).toBeInTheDocument();
   });
 
   it("usage chip is neutral/grey, not the accent or channel color", () => {
-    const { container } = render(<TemplateCard template={sms} onRename={vi.fn()} />);
-    const usageChip = container.querySelector(
-      "[data-usage-chip]",
-    ) as HTMLElement;
+    const { container } = renderCard(sms);
+    const usageChip = container.querySelector("[data-usage-chip]") as HTMLElement;
     expect(usageChip).not.toBeNull();
     expect(usageChip.textContent).toContain("Использовано 3 раза");
-    // grey chip must NOT reuse the channel node color (sms accent)
-    const hexToRgb = (hex: string) => {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return `rgb(${r}, ${g}, ${b})`;
-    };
+    const hexToRgb = (hex: string) =>
+      `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
     expect(usageChip.style.color).not.toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
-  it("channel chip is on its own line (separate element from the title)", () => {
-    const { container } = render(
-      <TemplateCard template={sms} onRename={vi.fn()} />,
-    );
+  it("channel chip sits in the footer, not next to the title (#6)", () => {
+    const { container } = renderCard(sms);
     const chip = container.querySelector("[data-channel='sms']");
     expect(chip).not.toBeNull();
-    // The chip's parent should NOT contain the template name text
+    // The chip's parent (footer) must NOT contain the template name text.
     expect(chip!.parentElement!.textContent).not.toContain("SMS — напоминание");
   });
 
   it("channel chip has inline style derived from NODE_STYLES for the channel", () => {
-    const { container } = render(
-      <TemplateCard template={sms} onRename={vi.fn()} />,
-    );
+    const { container } = renderCard(sms);
     const chip = container.querySelector("[data-channel='sms']") as HTMLElement;
-    expect(chip).not.toBeNull();
-    // The chip should carry node-derived color styling
-    const style = chip.style;
-    expect(style.color).toBeTruthy();
-    // The color should correspond to the sms node style.
-    // jsdom converts hex colors to rgb() form in .style, so we compare via
-    // a CSS-color-to-hex helper rather than direct hex comparison.
-    const hexToRgb = (hex: string) => {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return `rgb(${r}, ${g}, ${b})`;
-    };
-    expect(style.color).toBe(hexToRgb(NODE_STYLES.sms.color));
+    const hexToRgb = (hex: string) =>
+      `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
+    expect(chip.style.color).toBe(hexToRgb(NODE_STYLES.sms.color));
   });
 
-  it("does not render a «Использовать в новой кампании» action button", () => {
-    render(<TemplateCard template={sms} onRename={vi.fn()} />);
-    expect(
-      screen.queryByRole("button", {
-        name: /Использовать в новой кампании/i,
-      }),
-    ).toBeNull();
+  it("нет отдельной кнопки «Предпросмотр» — вся карточка кликабельна (#4)", () => {
+    renderCard(sms);
+    expect(screen.queryByRole("button", { name: /Предпросмотр/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Письмо/i })).toBeNull();
+  });
+
+  it("клик по карточке зовёт onPreview(id) (#4)", () => {
+    const onPreview = vi.fn();
+    renderCard(sms, { onPreview });
+    fireEvent.click(screen.getByText("SMS — напоминание"));
+    expect(onPreview).toHaveBeenCalledWith("tpl_sms");
+  });
+
+  it("карандаш переименования спрятан до наведения (opacity-0) (#5)", () => {
+    renderCard(sms);
+    const pencil = screen.getByRole("button", { name: /Переименовать/i });
+    expect(pencil.className).toContain("opacity-0");
+    expect(pencil.className).toContain("group-hover/card:opacity-100");
   });
 
   it("enters rename mode via the pencil control and shows an input with the current name", () => {
-    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    renderCard(sms);
     fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
     const input = screen.getByRole("textbox", { name: /Название шаблона/i });
     expect(input).toHaveValue("SMS — напоминание");
   });
 
-  it("calls onRename with id and trimmed new name on Enter", () => {
+  it("calls onRename with id and trimmed new name on Enter (не открывая предпросмотр)", () => {
     const onRename = vi.fn();
-    render(<TemplateCard template={sms} onRename={onRename} />);
+    const onPreview = vi.fn();
+    renderCard(sms, { onRename, onPreview });
     fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
     const input = screen.getByRole("textbox", { name: /Название шаблона/i });
     fireEvent.change(input, { target: { value: "  Новое  " } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onRename).toHaveBeenCalledWith("tpl_sms", "Новое");
+    expect(onPreview).not.toHaveBeenCalled();
   });
 
   it("cancels rename on Escape without calling onRename", () => {
     const onRename = vi.fn();
-    render(<TemplateCard template={sms} onRename={onRename} />);
+    renderCard(sms, { onRename });
     fireEvent.click(screen.getByRole("button", { name: /Переименовать/i }));
     const input = screen.getByRole("textbox", { name: /Название шаблона/i });
     fireEvent.change(input, { target: { value: "X" } });
@@ -124,82 +129,45 @@ describe("TemplateCard", () => {
   });
 
   it("renders per-channel fields for sms: text and alpha-name", () => {
-    render(<TemplateCard template={sms} onRename={vi.fn()} />);
+    renderCard(sms);
     expect(screen.getByText("Текст:")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Ваше предложение ждёт/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Ваше предложение ждёт/)).toBeInTheDocument();
     expect(screen.getByText("Альфа-имя:")).toBeInTheDocument();
     expect(screen.getByText("AFINA")).toBeInTheDocument();
   });
 
-  it("does not truncate a long field value with line-clamp-1 (#29)", () => {
-    const longText =
-      "Очень длинный текст сообщения, который раньше обрезался по одной " +
-      "строке line-clamp-1, а теперь должен показываться полностью без усечения.";
-    const longSms: MessageTemplate = {
-      ...sms,
-      content: {
-        ...sms.content,
-        kind: "sms",
-        text: longText,
-      } as MessageTemplate["content"],
-    };
-    const { container } = render(
-      <TemplateCard template={longSms} onRename={vi.fn()} />,
-    );
-    // The full value must be present in the DOM…
-    const valueEl = screen.getByText(longText);
-    expect(valueEl).toBeInTheDocument();
-    // …and rendered without the line-clamp-1 truncation class anywhere.
-    expect(container.querySelector(".line-clamp-1")).toBeNull();
-    expect(valueEl.className).not.toContain("line-clamp-1");
-  });
-
-  it("renders email as a compact «Письмо» field (no inline letter card) and opens it on click (#32)", () => {
-    const onOpenEmail = vi.fn();
+  it("письмо показывает две строки — Тема и Текст (#2)", () => {
     const emailWithBody: MessageTemplate = {
       ...email,
       content: {
         kind: "email",
         subject: "Тема письма для предпросмотра",
-        body:
-          "Здравствуйте!\n\n" +
-          "Это первый содержательный абзац письма.\n\n" +
-          "А это второй абзац.",
+        body: "Здравствуйте! Это тело письма.",
         sender: "Афина <hello@afina.ru>",
-        link: "https://example.com/cta",
       },
     };
-    const { container } = render(
-      <TemplateCard
-        template={emailWithBody}
-        onRename={vi.fn()}
-        onOpenEmail={onOpenEmail}
-      />,
-    );
+    renderCard(emailWithBody);
+    expect(screen.getByText("Тема:")).toBeInTheDocument();
+    expect(screen.getByText("Тема письма для предпросмотра")).toBeInTheDocument();
+    expect(screen.getByText("Текст:")).toBeInTheDocument();
+    expect(screen.getByText("Здравствуйте! Это тело письма.")).toBeInTheDocument();
+    // Нет старой кнопки-коробки «Письмо».
+    expect(screen.queryByText("Письмо:")).toBeNull();
+  });
 
-    // A compact field labelled «Письмо» is shown…
-    expect(screen.getByText("Письмо:")).toBeInTheDocument();
-    // …surfacing the subject as the value.
-    expect(
-      screen.getByText("Тема письма для предпросмотра"),
-    ).toBeInTheDocument();
+  it("превью тела письма зажато line-clamp-2 (карточка компактна) (#2)", () => {
+    const { container } = renderCard(email);
+    const body = screen.getByText("Мы рады вас видеть");
+    expect(body.className).toContain("line-clamp-2");
+    expect(container.querySelector(".line-clamp-1")).toBeNull();
+  });
 
-    // The inline letter card is GONE: body paragraphs are NOT rendered inline.
-    expect(screen.queryByText(/первый содержательный абзац/)).toBeNull();
-    expect(screen.queryByText(/второй абзац/)).toBeNull();
-    const paragraphs = Array.from(container.querySelectorAll("p")).filter(
-      (p) =>
-        p.textContent?.includes("первый содержательный") ||
-        p.textContent?.includes("второй абзац"),
-    );
-    expect(paragraphs.length).toBe(0);
-
-    // Clicking the «Письмо» field opens the email with the template content.
-    fireEvent.click(screen.getByRole("button", { name: /Письмо/i }));
-    expect(onOpenEmail).toHaveBeenCalledTimes(1);
-    expect(onOpenEmail).toHaveBeenCalledWith(emailWithBody.content);
+  it("⋯-меню → «Дублировать» зовёт onDuplicate(id)", () => {
+    const onDuplicate = vi.fn();
+    renderCard(sms, { onDuplicate });
+    fireEvent.click(screen.getByRole("button", { name: /Действия с шаблоном/i }));
+    fireEvent.click(screen.getByText("Дублировать"));
+    expect(onDuplicate).toHaveBeenCalledWith("tpl_sms");
   });
 
   it("renders a fields list for push channel", () => {
@@ -210,7 +178,7 @@ describe("TemplateCard", () => {
       content: { kind: "push", title: "Заголовок", body: "Текст пуша" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={push} onRename={vi.fn()} />);
+    renderCard(push);
     expect(screen.getByText("Заголовок:")).toBeInTheDocument();
     expect(screen.getByText("Заголовок")).toBeInTheDocument();
     expect(screen.getByText("Текст:")).toBeInTheDocument();
@@ -225,7 +193,7 @@ describe("TemplateCard", () => {
       content: { kind: "ivr", scenario: "auto_call_v2", voiceType: "female" },
       usedInCampaigns: 0,
     };
-    render(<TemplateCard template={ivr} onRename={vi.fn()} />);
+    renderCard(ivr);
     expect(screen.getByText("Сценарий:")).toBeInTheDocument();
     expect(screen.getByText("auto_call_v2")).toBeInTheDocument();
     expect(screen.getByText("Голос:")).toBeInTheDocument();

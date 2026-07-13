@@ -3,7 +3,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { TemplatesTabView, TemplatesTab } from "./templates-tab";
 import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
-import { EmailEditorPanel } from "@/sections/campaigns/email-editor-panel";
 import { TemplatePreviewDrawer } from "@/sections/campaigns/template-preview-drawer";
 import type { MessageTemplate } from "@/state/app-state";
 
@@ -29,16 +28,22 @@ const templates: MessageTemplate[] = [
   },
 ];
 
+function renderView(over: Partial<React.ComponentProps<typeof TemplatesTabView>> = {}) {
+  const props = {
+    templates,
+    onCreateManual: vi.fn(),
+    onRename: vi.fn(),
+    onPreview: vi.fn(),
+    onDuplicate: vi.fn(),
+    ...over,
+  };
+  return { ...render(<TemplatesTabView {...props} />), props };
+}
+
 describe("TemplatesTabView", () => {
   it("renders the empty state with a manual-create control when empty", () => {
     const onCreateManual = vi.fn();
-    render(
-      <TemplatesTabView
-        templates={[]}
-        onCreateManual={onCreateManual}
-        onRename={vi.fn()}
-      />,
-    );
+    renderView({ templates: [], onCreateManual });
     expect(screen.getByText(/Пока нет шаблонов/i)).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: /Создать шаблон вручную/i }),
@@ -47,13 +52,7 @@ describe("TemplatesTabView", () => {
   });
 
   it("renders one card per template plus a tab-level manual-create control", () => {
-    render(
-      <TemplatesTabView
-        templates={templates}
-        onCreateManual={vi.fn()}
-        onRename={vi.fn()}
-      />,
-    );
+    renderView();
     expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
     expect(screen.getByText("Push — возвращение")).toBeInTheDocument();
     expect(
@@ -61,52 +60,25 @@ describe("TemplatesTabView", () => {
     ).toBeInTheDocument();
   });
 
-  it("threads onOpenEmail down to an email card and calls it with the content (#32)", () => {
-    const onOpenEmail = vi.fn();
-    const emailTemplate: MessageTemplate = {
-      id: "tpl_email",
-      channel: "email",
-      name: "Email — приветствие",
-      content: {
-        kind: "email",
-        subject: "Добро пожаловать",
-        body: "Текст",
-        sender: "hello@afina.ru",
-      },
-      usedInCampaigns: 0,
-    };
-    render(
-      <TemplatesTabView
-        templates={[emailTemplate]}
-        onCreateManual={vi.fn()}
-        onRename={vi.fn()}
-        onOpenEmail={onOpenEmail}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /Письмо/i }));
-    expect(onOpenEmail).toHaveBeenCalledWith(emailTemplate.content);
+  it("клик по карточке зовёт onPreview с её id (#4)", () => {
+    const onPreview = vi.fn();
+    renderView({ onPreview });
+    fireEvent.click(screen.getByText("SMS — напоминание"));
+    expect(onPreview).toHaveBeenCalledWith("tpl_sms");
   });
 
-  it("threads onPreview down to a non-email card and calls it with the id", () => {
-    const onPreview = vi.fn();
-    render(
-      <TemplatesTabView
-        templates={templates}
-        onCreateManual={vi.fn()}
-        onRename={vi.fn()}
-        onPreview={onPreview}
-      />,
-    );
-    // The sms + push cards each expose a «Предпросмотр» affordance.
-    const buttons = screen.getAllByRole("button", { name: "Предпросмотр" });
-    expect(buttons.length).toBe(2);
-    fireEvent.click(buttons[0]);
-    expect(onPreview).toHaveBeenCalledWith("tpl_sms");
+  it("⋯ → «Дублировать» на карточке зовёт onDuplicate с её id", () => {
+    const onDuplicate = vi.fn();
+    renderView({ onDuplicate });
+    const menus = screen.getAllByRole("button", { name: /Действия с шаблоном/i });
+    fireEvent.click(menus[0]);
+    fireEvent.click(screen.getByText("Дублировать"));
+    expect(onDuplicate).toHaveBeenCalledWith("tpl_sms");
   });
 });
 
-describe("TemplatesTab (connected) — opens sms/push in the preview drawer", () => {
-  it("opens a seeded SMS template's styled preview on «Предпросмотр» click", () => {
+describe("TemplatesTab (connected) — карточка открывает единый дровер", () => {
+  it("клик по карточке монтирует превью-дровер шаблона (все каналы)", () => {
     render(
       <AppStateProvider>
         <ChatProvider>
@@ -115,34 +87,9 @@ describe("TemplatesTab (connected) — opens sms/push in the preview drawer", ()
         </ChatProvider>
       </AppStateProvider>,
     );
-    // Click the first «Предпросмотр» (seeded sms/push templates carry one).
-    const buttons = screen.getAllByRole("button", { name: "Предпросмотр" });
-    expect(buttons.length).toBeGreaterThan(0);
-    fireEvent.click(buttons[0]);
-    // The unified preview drawer mounts.
+    expect(screen.queryByTestId("template-preview-drawer")).toBeNull();
+    // Клик по любой части карточки (чип «Использовано») → onPreview.
+    fireEvent.click(screen.getAllByText(/Использовано/)[0]);
     expect(screen.getByTestId("template-preview-drawer")).toBeInTheDocument();
-  });
-});
-
-describe("TemplatesTab (connected) — opens email in the side drawer (#32)", () => {
-  it("opens a seeded email template in the read-only preview drawer on «Письмо» click", () => {
-    render(
-      <AppStateProvider>
-        <ChatProvider>
-          <TemplatesTab />
-          <EmailEditorPanel />
-        </ChatProvider>
-      </AppStateProvider>,
-    );
-    // Click the first «Письмо» field (seeded email templates come first).
-    const fields = screen.getAllByRole("button", { name: /Письмо/i });
-    expect(fields.length).toBeGreaterThan(0);
-    fireEvent.click(fields[0]);
-    // The side drawer mounts…
-    expect(screen.getByTestId("email-editor-panel")).toBeInTheDocument();
-    // …in read-only preview mode: no «Сохранить» button.
-    expect(
-      screen.queryByRole("button", { name: "Сохранить" }),
-    ).toBeNull();
   });
 });

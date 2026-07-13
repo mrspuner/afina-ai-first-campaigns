@@ -1,60 +1,35 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ChevronRight, Eye, Pencil } from "lucide-react";
+import { Fragment, useRef, useState } from "react";
+import { Copy, MoreHorizontal, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { pluralizeRaz } from "@/lib/pluralize";
 import type { MessageTemplate } from "@/state/app-state";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { NODE_STYLES } from "@/sections/campaigns/node-visuals";
-import type { EmailParams, WorkflowNodeType } from "@/types/workflow";
+import type { WorkflowNodeType } from "@/types/workflow";
 
-/**
- * Compact clickable «Письмо» field for email templates (#32). The inline
- * letter card was hidden behind this row: it surfaces the subject as the value
- * and, on click, opens the full letter in the side drawer (read-only preview).
- * Pure — the actual drawer open is delegated to `onOpenEmail` so the card stays
- * testable without ChatProvider.
- */
-function EmailField({
-  content,
-  onOpenEmail,
-}: {
-  content: EmailParams;
-  onOpenEmail?: (content: EmailParams) => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label="Письмо"
-      onClick={() => onOpenEmail?.(content)}
-      className="group flex w-full items-center gap-2 rounded-md border border-border bg-input/20 px-2.5 py-1.5 text-left transition-colors hover:border-ring/60 hover:bg-input/40"
-    >
-      <span className="shrink-0 text-xs text-muted-foreground/60">Письмо:</span>
-      <span className="flex-1 truncate text-xs text-muted-foreground">
-        {content.subject || "Без темы"}
-      </span>
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
-    </button>
-  );
-}
-
-/** Per-channel field rows rendered below the preview. */
-function FieldList({
-  content,
-  onOpenEmail,
-}: {
-  content: MessageTemplate["content"];
-  onOpenEmail?: (content: EmailParams) => void;
-}) {
-  // Email collapses to a compact clickable field; the letter opens in the drawer.
-  if (content.kind === "email") {
-    return <EmailField content={content} onOpenEmail={onOpenEmail} />;
-  }
-
-  let rows: Array<{ label: string; value: string | undefined }>;
+/** Per-channel field rows под именем. Письмо (#2) показывает Тему + превью
+ *  Текста, как остальные каналы; тело письма зажато line-clamp-2, чтобы карточка
+ *  оставалась компактной. */
+function FieldList({ content }: { content: MessageTemplate["content"] }) {
+  let rows: Array<{ label: string; value: string | undefined; clamp?: boolean }>;
 
   switch (content.kind) {
+    case "email":
+      rows = [
+        { label: "Тема", value: content.subject },
+        { label: "Текст", value: content.body, clamp: true },
+      ];
+      break;
     case "sms":
       rows = [
         { label: "Текст", value: content.text },
@@ -79,21 +54,20 @@ function FieldList({
 
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
-      {rows.map(({ label, value }) => (
-        <>
-          <dt
-            key={`lbl-${label}`}
-            className="text-xs text-muted-foreground/60 whitespace-nowrap"
-          >
+      {rows.map(({ label, value, clamp }) => (
+        <Fragment key={label}>
+          <dt className="whitespace-nowrap text-xs text-muted-foreground/60">
             {label}:
           </dt>
           <dd
-            key={`val-${label}`}
-            className="text-xs text-muted-foreground break-words"
+            className={cn(
+              "break-words text-xs text-muted-foreground",
+              clamp && "line-clamp-2"
+            )}
           >
             {value ?? "—"}
           </dd>
-        </>
+        </Fragment>
       ))}
     </dl>
   );
@@ -104,17 +78,12 @@ interface TemplateCardProps {
   /** Commit a renamed template name. Empty/whitespace input is dropped. */
   onRename: (id: string, name: string) => void;
   /**
-   * #32: open an email template's letter in the side drawer. Delegated so the
-   * card stays pure (no ChatProvider dependency) — the connected tab wires this.
+   * Open the template in the side drawer (preview / inline edit). Fired by a
+   * click anywhere on the card (#4). Delegated so the card stays pure.
    */
-  onOpenEmail?: (content: EmailParams) => void;
-  /**
-   * Open the full styled preview of a non-email template (sms/push/ivr) in the
-   * side drawer. Delegated so the card stays pure (no ChatProvider dependency)
-   * — the connected tab wires this to `openTemplatePreview`. Email keeps its own
-   * «Письмо» affordance (`onOpenEmail`), so this is only surfaced off-email.
-   */
-  onPreview?: (id: string) => void;
+  onPreview: (id: string) => void;
+  /** Duplicate the template (⋯-menu). Used for locked (used) templates. */
+  onDuplicate: (id: string) => void;
   /**
    * Page-entrance stagger position (0-based). Each step adds 40 ms of
    * animation-delay so a fresh list cascades in instead of popping at once.
@@ -125,8 +94,8 @@ interface TemplateCardProps {
 export function TemplateCard({
   template,
   onRename,
-  onOpenEmail,
   onPreview,
+  onDuplicate,
   index = 0,
 }: TemplateCardProps) {
   const { id, channel, name, content, usedInCampaigns } = template;
@@ -177,16 +146,86 @@ export function TemplateCard({
 
   return (
     <Card
-      className="animate-in fade-in-0 slide-in-from-bottom-2 gap-2 px-5 py-4 [--tw-animation-duration:220ms] [--tw-ease:var(--ease-out)]"
+      role="button"
+      tabIndex={0}
+      onClick={() => onPreview(id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPreview(id);
+        }
+      }}
+      className="group/card animate-in fade-in-0 slide-in-from-bottom-2 cursor-pointer gap-2 px-5 py-4 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [--tw-animation-duration:220ms] [--tw-ease:var(--ease-out)]"
       style={index > 0 ? { animationDelay: `${index * 40}ms` } : undefined}
     >
-      {/* Row 1: channel chip + grey usage chip on one line */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      {/* Row 1: name (+ hover rename) on the left, ⋯-menu on the right */}
+      <div className="flex items-start justify-between gap-2">
+        {editing ? (
+          <input
+            aria-label="Название шаблона"
+            autoFocus
+            value={draft}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") commit();
+              else if (e.key === "Escape") cancel();
+            }}
+            className="w-full rounded-md border border-border bg-input/30 px-2 py-1 text-sm font-semibold text-foreground outline-none focus-visible:border-ring"
+          />
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+            <button
+              type="button"
+              aria-label="Переименовать"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing();
+              }}
+              className="shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 hover:text-muted-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* ⋯-menu — как у карточки сигнала. Клик не открывает предпросмотр. */}
+        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Действия с шаблоном"
+                  className="size-7 text-muted-foreground"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onDuplicate(id)}>
+                <Copy className="mr-2 h-4 w-4" />
+                Дублировать
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Per-channel component fields */}
+      <FieldList content={content} />
+
+      {/* Footer: channel chip + usage chip (#6 — переехали вниз, под разделитель) */}
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2.5">
         <span style={chipStyle} data-channel={channel}>
           {CHANNEL_LABEL[channel]}
         </span>
-        {/* grey usage chip — same pill geometry as the channel chip, neutral
-            tokens. Never the yellow accent (PRODUCT.md): muted/border tokens. */}
+        {/* grey usage chip — neutral tokens, never the yellow accent (PRODUCT.md) */}
         <span
           data-usage-chip
           className="inline-block rounded-full border border-border bg-muted px-2 py-px text-[0.65rem] font-medium leading-[1.4] tracking-[0.02em] text-muted-foreground"
@@ -194,51 +233,6 @@ export function TemplateCard({
           Использовано {pluralizeRaz(usedInCampaigns)}
         </span>
       </div>
-
-      {/* Row 2: template name with inline rename */}
-      {editing ? (
-        <input
-          aria-label="Название шаблона"
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            else if (e.key === "Escape") cancel();
-          }}
-          className="w-full rounded-md border border-border bg-input/30 px-2 py-1 text-sm font-semibold text-foreground outline-none focus-visible:border-ring"
-        />
-      ) : (
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-semibold text-foreground">{name}</p>
-          <button
-            type="button"
-            aria-label="Переименовать"
-            onClick={startEditing}
-            className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Per-channel component fields */}
-      <FieldList content={content} onOpenEmail={onOpenEmail} />
-
-      {/* Non-email channels get a styled full-preview affordance (email opens
-          its letter via the «Письмо» field above). */}
-      {content.kind !== "email" && onPreview && (
-        <button
-          type="button"
-          aria-label="Предпросмотр"
-          onClick={() => onPreview(id)}
-          className="group flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-xs text-muted-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
-        >
-          <Eye className="size-3.5 shrink-0" />
-          Предпросмотр
-        </button>
-      )}
     </Card>
   );
 }
