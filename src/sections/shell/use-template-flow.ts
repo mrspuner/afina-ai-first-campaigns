@@ -11,7 +11,9 @@ import { templateComponentLabels } from "@/state/template-components";
 const CHANNELS: Channel[] = ["sms", "email", "push", "ivr"];
 const TEMPLATE_GENERATE_URL = "/api/ai/create-template";
 
-const INTENT_PROMPT = "Опишите, что нужно донести клиенту — тему, оффер или тон.";
+/** Сообщение-намерение. Публикуется реактивным эффектом в PromptComposer —
+ *  единственный источник (см. #7). Экспортируется, чтобы не дублировать литерал. */
+export const INTENT_PROMPT = "Опишите, что нужно донести клиенту — тему, оффер или тон.";
 
 /** Закрытый вопрос выбора канала (#14): 4 опции, без свободного ввода. */
 export function channelQuestion(): TemplateQuestion {
@@ -181,7 +183,8 @@ export function useTemplateFlow() {
     (channel: Channel) => {
       chat.append({ role: "user", text: CHANNEL_LABEL[channel] });
       chat.setTemplateChannel(channel);
-      chat.append({ role: "assistant", text: INTENT_PROMPT });
+      // INTENT_PROMPT НЕ публикуем здесь — его шлёт реактивный эффект в
+      // PromptComposer при переходе шага в intent. Иначе — дубль (#7).
       chat.setTemplateQuestion(null);
     },
     [chat]

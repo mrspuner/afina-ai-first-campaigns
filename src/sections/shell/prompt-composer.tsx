@@ -45,7 +45,7 @@ import { SuggestionBar } from "./suggestion-bar";
 import { useChatSubmit } from "./use-chat-submit";
 import { isNodeQuestion } from "./node-prompt-intent";
 import { VariantPicker } from "./variant-picker";
-import { useTemplateFlow } from "./use-template-flow";
+import { useTemplateFlow, INTENT_PROMPT } from "./use-template-flow";
 import { answerEditOption, answerEditQuestion } from "./use-campaign-edit-flow";
 
 export interface PromptComposerHandle {
@@ -172,10 +172,7 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
         !tplCreateAnnouncedRef.current
       ) {
         tplCreateAnnouncedRef.current = true;
-        chat.append({
-          role: "assistant",
-          text: "Опишите, что нужно донести клиенту — тему, оффер или тон.",
-        });
+        chat.append({ role: "assistant", text: INTENT_PROMPT });
       }
     }, [tplOpen, tplMode, tplStep, tplHasChannel, tplHasQuestion, tplHasIntent, chat]);
 
