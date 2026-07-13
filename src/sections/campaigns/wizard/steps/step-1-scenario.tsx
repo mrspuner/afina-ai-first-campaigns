@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Search } from "lucide-react";
+import { Search, List } from "lucide-react";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepProps } from "@/types/campaign";
 import { useScreenHints } from "@/hooks/use-screen-hints";
 import { SCENARIO_SCREEN_HINTS } from "./screen-hints";
 import { ScenarioCard } from "@/sections/signals/scenario-card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -167,14 +168,17 @@ export function Step1Scenario({ data, onNext, active }: StepProps) {
           </div>
         </section>
 
-        {/* Тоггл «Показать все» ↔ «Свернуть» */}
-        <button
+        {/* Тоггл «Показать все» ↔ «Свернуть» — заметная outline-кнопка (#12) */}
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => setShowAll((v) => !v)}
-          className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+          className="self-start"
         >
+          <List className="h-4 w-4" />
           {showAll ? "Свернуть" : "Показать все"}
-        </button>
+        </Button>
 
         {/* Полный каталог — добавляется ниже подборки */}
         <AnimatePresence initial={false}>
