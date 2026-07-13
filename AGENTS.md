@@ -8,13 +8,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 If another agent may be working on this project at the same time, you MUST work in your own worktree on your own branch. Never share the main checkout with another running agent — concurrent commits to the same working tree corrupt the index and silently mix unrelated changes into one commit.
 
-The active development branch is **`integration`** — it is the working trunk: base new work on it and target it for merges/PRs. Treat `main`/`origin/main` as the release/stable line — it may trail `integration` and is updated separately, so never branch from `main`. (They can also happen to be level; the rule stands regardless: branch from and target `integration`.)
+The active development branch is **`main`** — it is the working trunk: base new work on it and target it for merges/PRs. (`main` is kept current; branch from and target `main`.)
 
 Before touching any code:
 
 1. From the repo root, create a worktree off the active branch:
    ```bash
-   git worktree add .worktrees/<task-name> -b feature/<task-name> integration
+   git worktree add .worktrees/<task-name> -b feature/<task-name> main
    cd .worktrees/<task-name>
    npm install
    ```
@@ -23,12 +23,12 @@ Before touching any code:
 
 ## MANDATORY preflight: verify your worktree base BEFORE any edits
 
-Spawned/isolated worktrees (e.g. agents launched with worktree isolation) are often created off `origin/main` rather than `integration`. Whenever `main` trails `integration`, working on that stale base wastes effort and produces invalid changes. So the FIRST thing any worktree agent does:
+Confirm your worktree is clean and level with the active branch (`main`) before editing:
 
 ```bash
 git status --short                 # expect clean
-git merge --ff-only integration    # fast-forward onto the active branch (non-destructive)
-git rev-list --count HEAD..integration   # MUST print 0 — you are level with integration
+git merge --ff-only main           # fast-forward onto the active branch (non-destructive)
+git rev-list --count HEAD..main    # MUST print 0 — you are level with main
 ```
 
 If the count is not 0 (or the merge fails), STOP and report — do not work on a stale base. Note: `git reset --hard` is blocked by the safety classifier here, so use `git merge --ff-only`, never a hard reset. Do not claim a branch/base is correct without running this check.
