@@ -10,6 +10,7 @@ import {
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Streamdown } from "streamdown";
 
 function MascotIcon({ className }: { className?: string }) {
   return (
@@ -65,7 +66,16 @@ function MessageRow({ message }: { message: ChatMessage }) {
     return (
       <div className="flex items-start gap-2 py-1.5 text-sm text-foreground/90">
         <MascotIcon className="mt-0.5" />
-        {message.pending ? <ThinkingDots /> : <span className="leading-snug">{message.text}</span>}
+        {message.pending ? (
+          <ThinkingDots />
+        ) : message.format === "markdown" ? (
+          // Markdown-рендер (#8) — цвет наследуется, отступы абзацев схлопнуты.
+          <div className="min-w-0 flex-1 leading-snug [&_p]:my-0 [&_strong]:font-semibold">
+            <Streamdown>{message.text}</Streamdown>
+          </div>
+        ) : (
+          <span className="leading-snug">{message.text}</span>
+        )}
       </div>
     );
   }

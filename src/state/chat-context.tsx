@@ -23,6 +23,12 @@ export interface ChatMessage {
   reasoningSteps?: string[];
   /** true пока шаги ещё стримятся; по завершении → false, блок сворачивается. */
   reasoningStreaming?: boolean;
+  /**
+   * Рендерить текст ассистента как markdown (Streamdown) вместо plain-span.
+   * Ставится точечно (напр. сообщение с вариантами шаблона, #8) — обычные
+   * сообщения остаются plain.
+   */
+  format?: "markdown";
   createdAt: number;
 }
 

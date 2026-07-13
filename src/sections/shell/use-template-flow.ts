@@ -33,40 +33,46 @@ export function variantQuestion(variants: TemplateDrawerVariant[]): TemplateQues
   };
 }
 
-/**
- * Человекочитаемое описание одного варианта (#28): «<n>. <имя> — <поля>».
- * Поля title/text выводятся по каналу из content.kind, чтобы пользователь
- * мог прочитать содержимое варианта до выбора, не открывая превью.
- */
-export function describeVariant(variant: TemplateDrawerVariant, index: number): string {
-  const { content } = variant;
-  let fields: string;
-  switch (content.kind) {
-    case "email":
-      fields = `Тема: ${content.subject}, Текст: ${content.body}`;
-      break;
-    case "sms":
-      fields = `Текст: ${content.text}`;
-      break;
-    case "push":
-      fields = `Заголовок: ${content.title}, Текст: ${content.body}`;
-      break;
-    case "ivr":
-      fields = `Сценарий: ${content.scenario}`;
-      break;
-    default:
-      fields = variant.components.join(", ");
-  }
-  return `${index}. ${variant.name} — ${fields}`;
+/** Убирает HTML-теги из значения поля и схлопывает пробелы (#8). */
+export function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
- * Сообщение ассистента после генерации (#28): подсказка выбора + перечень
- * всех вариантов с их заголовками/текстами, по одному на строку.
+ * Человекочитаемое описание одного варианта (#8): заголовок «**<n>. <имя>**»
+ * жирным на своей строке, затем поля Тема/Текст (по каналу) — каждое на своей
+ * строке. HTML из значений вычищается; текст выводится полностью. Формат —
+ * markdown (жирный через **), рендерится Streamdown в чате.
+ */
+export function describeVariant(variant: TemplateDrawerVariant, index: number): string {
+  const { content } = variant;
+  const lines: string[] = [`**${index}. ${variant.name}**`];
+  switch (content.kind) {
+    case "email":
+      lines.push(`Тема: ${stripHtml(content.subject)}`, `Текст: ${stripHtml(content.body)}`);
+      break;
+    case "sms":
+      lines.push(`Текст: ${stripHtml(content.text)}`);
+      break;
+    case "push":
+      lines.push(`Заголовок: ${stripHtml(content.title)}`, `Текст: ${stripHtml(content.body)}`);
+      break;
+    case "ivr":
+      lines.push(`Сценарий: ${stripHtml(content.scenario)}`);
+      break;
+    default:
+      lines.push(variant.components.join(", "));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Сообщение ассистента после генерации (#8): подсказка выбора + описания всех
+ * вариантов, между вариантами — пустая строка. Markdown (см. describeVariant).
  */
 export function buildVariantsMessage(variants: TemplateDrawerVariant[]): string {
-  const lines = variants.map((v, i) => describeVariant(v, i + 1));
-  return `Готово. Какой вариант сохранить?\n${lines.join("\n")}`;
+  const blocks = variants.map((v, i) => describeVariant(v, i + 1));
+  return `Готово. Какой вариант сохранить?\n\n${blocks.join("\n\n")}`;
 }
 
 /** Минимальный контракт чата, нужный потоку submitIntent (для тестируемости). */

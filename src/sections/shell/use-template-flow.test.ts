@@ -123,6 +123,28 @@ describe("buildVariantsMessage", () => {
     expect(msg).toContain("Тема: Последний день");
     expect(msg).toContain("Текст: Скидка уходит");
   });
+
+  it("вычищает HTML, жирный заголовок на своей строке, пустая строка между вариантами (#8)", () => {
+    const variants: TemplateDrawerVariant[] = [
+      {
+        id: "v1",
+        name: "Деловой",
+        content: { kind: "email", subject: "Тема A", body: "<p>Привет</p><p>Текст</p>", sender: "" },
+        components: [],
+      },
+      {
+        id: "v2",
+        name: "Дружеский",
+        content: { kind: "email", subject: "Тема B", body: "<p>Хай</p>", sender: "" },
+        components: [],
+      },
+    ];
+    const msg = buildVariantsMessage(variants);
+    expect(msg).not.toMatch(/<[a-z/]/i);              // нет HTML-тегов
+    expect(msg).toContain("**1. Деловой**");           // жирный заголовок
+    expect(msg).toContain("Текст: Привет Текст");       // теги схлопнуты, текст полный
+    expect(msg).toMatch(/\n\n\*\*2\. Дружеский\*\*/);   // пустая строка между вариантами
+  });
 });
 
 describe("submitIntent assistant message", () => {
