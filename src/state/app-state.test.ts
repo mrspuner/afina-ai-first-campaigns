@@ -1517,3 +1517,64 @@ describe("appReducer — template_renamed", () => {
     expect(next.templates).toEqual([base]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// template_content_updated / template_duplicated (#3 — редактор шаблонов)
+// ---------------------------------------------------------------------------
+describe("appReducer — template_content_updated", () => {
+  const base = {
+    id: "tpl_ed",
+    channel: "sms" as const,
+    name: "SMS",
+    content: { kind: "sms" as const, text: "старый", alphaName: "AFINA", scheduledAt: "immediate" as const },
+    usedInCampaigns: 0,
+  };
+
+  it("патчит content шаблона по id, сохраняя остальные поля", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, { type: "template_content_updated", id: "tpl_ed", patch: { text: "новый" } });
+    const t = next.templates.find((x) => x.id === "tpl_ed")!;
+    expect((t.content as { text: string }).text).toBe("новый");
+    expect((t.content as { alphaName: string }).alphaName).toBe("AFINA");
+    expect(t.name).toBe("SMS");
+  });
+
+  it("no-op для неизвестного id", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, { type: "template_content_updated", id: "nope", patch: { text: "x" } });
+    expect(next).toBe(state);
+  });
+});
+
+describe("appReducer — template_duplicated", () => {
+  const base = {
+    id: "tpl_src",
+    channel: "sms" as const,
+    name: "Реактивация",
+    content: { kind: "sms" as const, text: "t", alphaName: "AFINA", scheduledAt: "immediate" as const },
+    usedInCampaigns: 3,
+  };
+
+  it("создаёт копию: newId, имя «… (копия)», usedInCampaigns=0, тот же content", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, { type: "template_duplicated", id: "tpl_src", newId: "tpl_copy" });
+    const copy = next.templates.find((x) => x.id === "tpl_copy")!;
+    expect(copy).toBeDefined();
+    expect(copy.name).toBe("Реактивация (копия)");
+    expect(copy.usedInCampaigns).toBe(0);
+    expect(copy.content).toEqual(base.content);
+  });
+
+  it("кладёт копию сразу после оригинала", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, { type: "template_duplicated", id: "tpl_src", newId: "tpl_copy" });
+    const idxSrc = next.templates.findIndex((t) => t.id === "tpl_src");
+    expect(next.templates[idxSrc + 1].id).toBe("tpl_copy");
+  });
+
+  it("no-op для неизвестного id", () => {
+    const state = { ...initialState, templates: [base] };
+    const next = appReducer(state, { type: "template_duplicated", id: "nope", newId: "tpl_copy" });
+    expect(next).toBe(state);
+  });
+});

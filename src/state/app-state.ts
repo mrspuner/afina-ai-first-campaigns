@@ -391,6 +391,8 @@ export type Action =
   | { type: "workflow_ai_undo_availability"; available: boolean }
   | { type: "template_added"; template: MessageTemplate }
   | { type: "template_renamed"; id: string; name: string }
+  | { type: "template_content_updated"; id: string; patch: Partial<NodeParams> }
+  | { type: "template_duplicated"; id: string; newId: string }
   // Co-located PromptBar hints: the active screen publishes its suggestion set
   // (set) and relinquishes it on deactivate/unmount (clear). Clear is
   // owner-guarded — see `screenHintsOwner`.
@@ -1261,6 +1263,36 @@ export function appReducer(state: AppState, action: Action): AppState {
           t.id === action.id ? { ...t, name } : t,
         ),
       };
+    }
+    case "template_content_updated": {
+      // Автосейв инлайн-правки контента шаблона (#3). Патч мержится в content;
+      // тип content — NodeParams конкретного канала, поэтому сужаем через as.
+      if (!state.templates.some((t) => t.id === action.id)) return state;
+      return {
+        ...state,
+        templates: state.templates.map((t) =>
+          t.id === action.id
+            ? { ...t, content: { ...t.content, ...action.patch } as NodeParams }
+            : t,
+        ),
+      };
+    }
+    case "template_duplicated": {
+      // Копия использованного шаблона — черновик (#3): новый id (детерминирован
+      // вызывающим), имя «… (копия)», usedInCampaigns=0. Кладём сразу после
+      // оригинала. newId позволяет вызывающему тут же открыть копию.
+      const src = state.templates.find((t) => t.id === action.id);
+      if (!src) return state;
+      const copy: MessageTemplate = {
+        ...src,
+        id: action.newId,
+        name: `${src.name} (копия)`,
+        usedInCampaigns: 0,
+      };
+      const idx = state.templates.findIndex((t) => t.id === action.id);
+      const templates = [...state.templates];
+      templates.splice(idx + 1, 0, copy);
+      return { ...state, templates };
     }
     case "__dev_seed__":
       return { ...state, ...action.partial };
