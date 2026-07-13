@@ -56,7 +56,7 @@ const noop = () => {};
 
 describe("TemplatePreviewBody — routes by channel", () => {
   it("renders the SMS styled preview for an sms template", () => {
-    render(<TemplatePreviewBody template={sms} readOnly onChange={noop} />);
+    render(<TemplatePreviewBody content={sms.content} readOnly onChange={noop} />);
     expect(
       screen.getByText("Ваше предложение ждёт. Подробности на сайте."),
     ).toBeInTheDocument();
@@ -64,20 +64,21 @@ describe("TemplatePreviewBody — routes by channel", () => {
   });
 
   it("renders the Push styled preview for a push template", () => {
-    render(<TemplatePreviewBody template={push} readOnly onChange={noop} />);
+    render(<TemplatePreviewBody content={push.content} readOnly onChange={noop} />);
     expect(screen.getByText("Давно вас не видели")).toBeInTheDocument();
     expect(screen.getByText("Загляните")).toBeInTheDocument();
   });
 
-  it("renders the Email styled preview for an email template", () => {
-    render(<TemplatePreviewBody template={email} readOnly onChange={noop} />);
+  it("email: тема письма показана отдельным полем «Тема письма» над письмом", () => {
+    render(<TemplatePreviewBody content={email.content} readOnly onChange={noop} />);
+    expect(screen.getByText("Тема письма")).toBeInTheDocument();
     expect(screen.getByText("Добро пожаловать! Начнём?")).toBeInTheDocument();
     // EmailRenderer prints the sender in the «От:» header line.
     expect(screen.getByText(/Афина <noreply@afina.ai>/)).toBeInTheDocument();
   });
 
   it("renders IVR as a full-text call-script panel (whole scenario, voice meta)", () => {
-    render(<TemplatePreviewBody template={ivr} readOnly onChange={noop} />);
+    render(<TemplatePreviewBody content={ivr.content} readOnly onChange={noop} />);
     // The FULL script is shown — both the opening and the trailing line.
     const script = screen.getByText(/Здравствуйте! Это звонок от Афины\./);
     expect(script).toHaveTextContent("перезвоните нам, когда будет удобно");
@@ -87,12 +88,22 @@ describe("TemplatePreviewBody — routes by channel", () => {
 
   it("editable (readOnly=false): правка SMS-текста → onChange с патчем (#3)", () => {
     const onChange = vi.fn();
-    render(<TemplatePreviewBody template={sms} readOnly={false} onChange={onChange} />);
+    render(<TemplatePreviewBody content={sms.content} readOnly={false} onChange={onChange} />);
     fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "Правка" } });
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledWith({ text: "Правка" });
+  });
+
+  it("editable email: правка темы → onChange с патчем subject", () => {
+    const onChange = vi.fn();
+    render(<TemplatePreviewBody content={email.content} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByText("Добро пожаловать! Начнём?"));
+    const input = screen.getByDisplayValue("Добро пожаловать! Начнём?");
+    fireEvent.change(input, { target: { value: "Новая тема" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ subject: "Новая тема" });
   });
 });
 
@@ -136,12 +147,33 @@ describe("TemplatePreviewDrawer (connected) — eye-icon wiring", () => {
       screen.getByText("Ваше предложение ждёт. Подробности на сайте."),
     ).toBeInTheDocument();
     // The channel-scoped header is present. Seed template is unused →
-    // editable → footer says «Готово» (autosave), no lock banner.
+    // editable, но без правок → футер «Закрыть», без «Сохранить» и без замка.
     expect(screen.getByText(/Шаблон · SMS/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Готово" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
     expect(screen.queryByText(/нельзя редактировать/)).toBeNull();
+  });
+
+  it("после правки поля появляется «Сохранить» в нижнем баре (#3)", () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <Harness templateId="tpl_sms_reminder" />
+          <TemplatePreviewDrawer />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    // До правки — «Сохранить» нет.
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    // Правим текст SMS.
+    fireEvent.click(screen.getByText("Ваше предложение ждёт. Подробности на сайте."));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Изменённый текст" } });
+    fireEvent.blur(input);
+    // Теперь «Сохранить» и «Отмена» видны.
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отмена" })).toBeInTheDocument();
   });
 
   it("использованный шаблон (usedInCampaigns≥1) → замок: баннер + read-only (#3)", () => {

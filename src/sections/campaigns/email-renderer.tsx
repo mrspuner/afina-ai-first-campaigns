@@ -14,10 +14,14 @@ export function EmailRenderer({
   draft,
   readOnly,
   onChange,
+  hideSubject,
 }: {
   draft: EmailDraft;
   readOnly?: boolean;
   onChange: (patch: Partial<EmailDraft>) => void;
+  /** Скрыть заголовок-тему внутри письма — когда тема показана отдельным полем
+   *  над письмом (дровер шаблона). По умолчанию тема — заголовок письма. */
+  hideSubject?: boolean;
 }) {
   const blocks = draft.body.split(/\n\n+/);
 
@@ -62,20 +66,22 @@ export function EmailRenderer({
         </div>
       )}
 
-      {/* Тема — заголовок письма */}
-      <EditableText
-        value={draft.subject}
-        readOnly={readOnly}
-        placeholder="Тема письма"
-        onCommit={(v) => onChange({ subject: v })}
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          lineHeight: 1.25,
-          marginBottom: 16,
-          color: "#111",
-        }}
-      />
+      {/* Тема — заголовок письма (скрывается, если тема показана над письмом) */}
+      {!hideSubject && (
+        <EditableText
+          value={draft.subject}
+          readOnly={readOnly}
+          placeholder="Тема письма"
+          onCommit={(v) => onChange({ subject: v })}
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            lineHeight: 1.25,
+            marginBottom: 16,
+            color: "#111",
+          }}
+        />
+      )}
 
       {/* Тело — редактируется как единый блок (textarea) */}
       <EditableText

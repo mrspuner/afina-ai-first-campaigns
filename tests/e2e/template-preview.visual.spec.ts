@@ -43,6 +43,12 @@ async function openDrawer(page: Page, nodeType: string, optionText: RegExp) {
     .click();
   const drawer = page.getByTestId("template-preview-drawer");
   await expect(drawer).toBeVisible();
+  // Попап селекта остаётся открытым после «Предпросмотр»; его портал попадает в
+  // кадр дровера и делает снапшот флакающим (наблюдалось на Push). Закрываем его
+  // Escape (крестик дровера — единственный его close, Escape дровер не трогает).
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("option", { name: optionText })).toHaveCount(0);
+  await expect(drawer).toBeVisible();
   return drawer;
 }
 
