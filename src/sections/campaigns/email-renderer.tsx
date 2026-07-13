@@ -204,7 +204,8 @@ function EditableText({
       borderRadius: 6,
       padding: multiline ? "8px 10px" : "4px 8px",
       outline: "none",
-      boxShadow: "0 0 0 3px rgba(255,236,0,0.25)",
+      // Нейтральный фокус — без жёлтого (жёлтый = редкий сигнал, не подсветка).
+      boxShadow: "0 0 0 1px #b7b7b0, 0 0 0 3px rgba(120,120,120,0.18)",
       resize: multiline ? "vertical" : undefined,
     };
     if (multiline) {
