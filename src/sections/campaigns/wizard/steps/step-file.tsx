@@ -6,17 +6,10 @@ import { DropZone } from "@/components/ui/drop-zone";
 import { HashingLoader } from "@/components/ui/hashing-loader";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StepData, StepProps } from "@/types/campaign";
 import { useScreenHints } from "@/hooks/use-screen-hints";
 import { FILE_SCREEN_HINTS } from "./screen-hints";
-import { SIGNAL_TYPES, type SignalType } from "@/state/app-state";
+import { getScenario } from "@/data/scenarios";
 import { rngFor, seededInt } from "@/state/metrics";
 
 /** Deterministic stand-in for parsing an uploaded file's row count. */
@@ -58,38 +51,29 @@ export function fileCopy(sourceType: StepProps["data"]["sourceType"]): {
 }
 
 /**
- * Own-source signal-type dropdown — a simple select over the 6 signal types
- * (`SIGNAL_TYPES`). The selection is HELD LOCALLY by the parent step and
- * reflected back via `value`. Choosing only calls `onChange` (a local state
- * update) — it does NOT advance the wizard. The chosen type is flushed into the
- * wizard's dedicated `ownSignalType` field only when the user clicks the
- * existing «Далее» button, so neither the upload nor the step progress is ever
- * reset (handleNext's scenarioChanged reset watches `scenario`, not this field).
+ * Own-source warning callout (жёлтая нотификация, стиль welcome-экрана): при
+ * загрузке собственной базы напоминаем, что база должна соответствовать
+ * выбранному сценарию, иначе кампания покажет низкие результаты. Категория
+ * берётся из выбранного сценария (`data.scenario` — его id).
  */
-function OwnSignalTypeSelector({
-  value,
-  onChange,
-}: {
-  value: SignalType | null;
-  onChange: (value: SignalType) => void;
-}) {
+function ScenarioMatchNotice({ scenarioId }: { scenarioId: string | null }) {
+  const category = scenarioId ? getScenario(scenarioId)?.category : undefined;
   return (
-    <div className="flex flex-col gap-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Тип сигнала
-      </h2>
-      <Select value={value ?? null} onValueChange={(v) => onChange(v as SignalType)}>
-        <SelectTrigger className="w-full" aria-label="Тип сигнала">
-          <SelectValue placeholder="Выберите тип сигнала" />
-        </SelectTrigger>
-        <SelectContent>
-          {SIGNAL_TYPES.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="rounded-lg border border-brand/30 bg-brand-muted p-4">
+      <p className="text-sm leading-relaxed text-foreground/80">
+        {category ? (
+          <>
+            Выбран сценарий категории «{category}», убедитесь что ваша база
+            сигналов соответствует этому сценарию, иначе кампания может показать
+            низкие результаты.
+          </>
+        ) : (
+          <>
+            Убедитесь, что ваша база сигналов соответствует выбранному сценарию,
+            иначе кампания может показать низкие результаты.
+          </>
+        )}
+      </p>
     </div>
   );
 }
@@ -105,14 +89,6 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
   const [showAddSlot, setShowAddSlot] = useState(seededFiles.length === 0);
   const [isHashing, setIsHashing] = useState(false);
   const isOwn = data.sourceType === "own";
-
-  // Own-source signal-type choice held LOCALLY (seeded from the wizard's
-  // dedicated field). Selecting only updates this state — it never calls
-  // onNext, so the wizard does not advance and the upload is not reset. The
-  // value is flushed into `ownSignalType` on «Далее» (see emit()).
-  const [ownSignalType, setOwnSignalType] = useState<SignalType | null>(
-    data.ownSignalType ?? null
-  );
 
   const { title, subtitle } = fileCopy(data.sourceType);
 
@@ -135,11 +111,6 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
 
   function emit(rowCount: number) {
     const partial: Partial<StepData> = { files, fileRowCount: rowCount };
-    // Carry the own-source signal-type choice on the DEDICATED field — never on
-    // `scenario` — so handleNext's scenarioChanged reset never fires.
-    if (isOwn && ownSignalType) {
-      partial.ownSignalType = ownSignalType;
-    }
     onNext(partial);
   }
 
@@ -170,6 +141,10 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
   return (
     <StepContent title={title} subtitle={subtitle}>
       <div className="flex flex-col gap-6">
+        {/* Жёлтая нотификация над загрузкой (для собственной базы): напоминаем
+            согласовать базу с выбранным сценарием. */}
+        {isOwn && <ScenarioMatchNotice scenarioId={data.scenario} />}
+
         <div className="flex flex-col gap-3">
           {isHashing ? (
             <div className="relative flex min-h-[160px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-card">
@@ -218,13 +193,6 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
             Поддерживаемые форматы: CSV, XLSX, TXT · Данные будут захешированы перед отправкой
           </p>
         </div>
-
-        {isOwn ? (
-          <OwnSignalTypeSelector
-            value={ownSignalType}
-            onChange={setOwnSignalType}
-          />
-        ) : null}
 
         <StepFooter
           onBack={onBack}
