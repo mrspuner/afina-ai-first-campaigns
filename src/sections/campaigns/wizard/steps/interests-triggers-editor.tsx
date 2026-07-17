@@ -37,7 +37,11 @@ import {
   type ParsedTriggerCommand,
   type TriggerDelta,
 } from "@/lib/trigger-edit-parser";
-import { classifyTypedDomain, resolveDomainStatus } from "@/lib/domain-add";
+import {
+  classifyTypedDomain,
+  normalizeDomainInput,
+  resolveDomainStatus,
+} from "@/lib/domain-add";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
@@ -866,6 +870,26 @@ export function InterestsTriggersEditor({
     setSelectedTriggers((prev) =>
       prev.includes(triggerId) ? prev : [...prev, triggerId]
     );
+    // B2.5 (final-review gap) — this is the SHARED merge choke point for
+    // every add path: the AI prompt-bar edit (`triggerEditApi.applyToTrigger`,
+    // driven by `use-assist-runner.ts`) and the add-domain combobox both
+    // route here. Without registering here, an AI-added domain never entered
+    // `accountSettings.ownDomains`, so `resolveDomainStatus` defaulted it to
+    // a fake "approved" and it skipped moderation entirely. Register every
+    // `add` domain — known trigger-domain roots route to `approved`, anything
+    // else lands `pending` (idempotent, see the `domain_registered` reducer
+    // case). `exclude` never registers — excluding an existing domain isn't
+    // "adding" one. Normalize FIRST (`normalizeDomainInput`, the same helper
+    // the combobox uses) so the registered string and the one merged into the
+    // delta always agree: the AI parser (`extractDomains`) already lowercases
+    // but doesn't strip a leading `www.`, so registering the raw token could
+    // register one variant while the delta stores another — silently
+    // duplicating the domain in the registry.
+    const normalizedAdd =
+      parsed.kind === "edit" ? parsed.add.map(normalizeDomainInput) : [];
+    for (const domain of normalizedAdd) {
+      dispatch({ type: "domain_registered", domain });
+    }
     setDeltas((prev) => {
       const current = prev[triggerId] ?? EMPTY_DELTA;
       let updated: TriggerDelta;
@@ -874,7 +898,7 @@ export function InterestsTriggersEditor({
       } else if (parsed.kind === "clear-excluded") {
         updated = { ...current, excluded: [] };
       } else {
-        updated = applyEditToDelta(current, parsed.add, parsed.exclude);
+        updated = applyEditToDelta(current, normalizedAdd, parsed.exclude);
       }
       const next = { ...prev };
       if (isDeltaEmpty(updated)) delete next[triggerId];
@@ -941,14 +965,15 @@ export function InterestsTriggersEditor({
   // flow (`applyEditToDelta`, through `handleApplyParsed`) — one mechanism,
   // two entry points. Status is never stored on the delta: it's read from
   // the registry (`accountSettings.ownDomains`) at render time.
-  //   - Picking a PREVIOUSLY-REGISTERED domain (from the directory list)
-  //     needs no (re-)registration — it's already in the registry.
-  //   - Free-typed input is normalized + always registered via
-  //     `domain_registered` before being added (B2.5: every user-added
-  //     domain lives in the registry, one source of truth). A known
-  //     trigger-domain root routes to `approved` there (same reducer,
-  //     idempotent for already-registered domains); anything else lands
-  //     `pending`.
+  // `handleApplyParsed` itself now registers every `add` domain (B2.5,
+  // final-review gap — it's the shared choke point every add path funnels
+  // through, including the AI prompt-bar edit), so neither helper below
+  // dispatches `domain_registered` directly anymore:
+  //   - Picking a PREVIOUSLY-REGISTERED domain (from the directory list) is
+  //     already in the registry — the dispatch is idempotent, a no-op.
+  //   - Free-typed input is normalized (`classifyTypedDomain` /
+  //     `normalizeDomainInput`) before being added — a known trigger-domain
+  //     root routes to `approved`, anything else lands `pending`.
   function addRegisteredDomainToTrigger(triggerId: string, domain: string) {
     handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
@@ -956,9 +981,6 @@ export function InterestsTriggersEditor({
   function addTypedDomainToTrigger(triggerId: string, raw: string) {
     const { domain } = classifyTypedDomain(raw, knownRoots);
     if (!domain) return;
-    // B2.5: every user-added domain lives in the registry — known roots
-    // route to `approved` there (idempotent, see `domain_registered`).
-    dispatch({ type: "domain_registered", domain });
     handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 

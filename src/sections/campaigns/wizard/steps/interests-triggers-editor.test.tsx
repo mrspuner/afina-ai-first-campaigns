@@ -12,7 +12,10 @@ import {
   useAppDispatch,
 } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
-import { TriggerEditRegistryProvider } from "@/state/trigger-edit-context";
+import {
+  TriggerEditRegistryProvider,
+  useTriggerEdit,
+} from "@/state/trigger-edit-context";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 
 // next/image pulls extra setup and isn't needed for the assertions.
@@ -178,6 +181,56 @@ function renderReadOnlyEditorWithModerationControls(
             <OwnDomainsDebug />
             <RegisterDomainButton domain={rejectDomain} />
             <RejectDomainButton domain={rejectDomain} />
+          </TriggerEditRegistryProvider>
+        </PromptChipsProvider>
+      </PromptInputProvider>
+    </AppStateProvider>
+  );
+}
+
+/** Probe (final-review fix) — invokes the EXACT entry point the AI
+ *  prompt-bar uses: `use-assist-runner.ts`'s `executeAssistResults` calls
+ *  `triggerEdit.applyToTrigger(activeTriggerId, { kind: "edit", add, exclude
+ *  })` for a "triggers" AssistResult. This button reads the same
+ *  `TriggerEditRegistryProvider` registry `InterestsTriggersEditor` publishes
+ *  its api into (via `useRegisterTriggerEdit`), so clicking it exercises the
+ *  real `handleApplyParsed` "edit" branch — no orchestrator/parser mocking
+ *  needed, since those are tested elsewhere (`trigger-edit-parser.test.ts`,
+ *  `use-assist-runner.test.ts`). Proves the shared choke point registers
+ *  AI-added domains into the account registry exactly like the combobox. */
+function AiEditAddButton({
+  triggerId,
+  add,
+}: {
+  triggerId: string;
+  add: string[];
+}) {
+  const triggerEdit = useTriggerEdit();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        triggerEdit.applyToTrigger(triggerId, { kind: "edit", add, exclude: [] })
+      }
+    >
+      AI add {add.join(",")}
+    </button>
+  );
+}
+
+function renderEditorWithAiAddProbe(
+  triggerId: string,
+  add: string[],
+  props: Partial<EditorProps> = {}
+) {
+  return render(
+    <AppStateProvider>
+      <PromptInputProvider>
+        <PromptChipsProvider>
+          <TriggerEditRegistryProvider>
+            <InterestsTriggersEditor {...props} />
+            <OwnDomainsDebug />
+            <AiEditAddButton triggerId={triggerId} add={add} />
           </TriggerEditRegistryProvider>
         </PromptChipsProvider>
       </PromptInputProvider>
@@ -463,6 +516,51 @@ describe("InterestsTriggersEditor — add-domain combobox (Task 8)", () => {
     expect(screen.getByTestId("own-domains").textContent).toBe(
       "brand-new-site.ru:pending"
     );
+  });
+});
+
+describe("InterestsTriggersEditor — AI prompt-bar add path registers into the account registry (final-review Important)", () => {
+  afterEach(cleanup);
+
+  it("an UNKNOWN domain added via the AI edit path (applyToTrigger) registers as pending, not the fake 'approved' default", () => {
+    renderEditorWithAiAddProbe(firstTrigger.id, ["Brand-New-AI-Site.ru"], {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /AI add/ }));
+
+    // Before the fix, the AI edit branch merged straight into `delta.added`
+    // without ever dispatching `domain_registered` — the domain never
+    // entered `ownDomains`, so `resolveDomainStatus` defaulted it to a fake
+    // "approved" and it silently skipped moderation. Registered here (as
+    // `pending`, same as an unknown combobox entry) proves the gap is closed.
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "brand-new-ai-site.ru:pending"
+    );
+    // The delta itself stores the SAME normalized string the registry uses
+    // (mixed-case input lowercased) — the chip renders it, one canonical form.
+    expect(screen.getByText("brand-new-ai-site.ru")).toBeInTheDocument();
+  });
+
+  it("a KNOWN trigger-domain root added via the AI edit path registers as approved, normalized the same way as the combobox", () => {
+    // "zakupki.gov.ru" is a known trigger-domain root (a different vertical),
+    // not one of firstTrigger's own system domains — typed with a leading
+    // `www.` the AI parser's `extractDomains` does NOT strip (only the
+    // combobox's `normalizeDomainInput` does), to prove the AI path is
+    // normalized consistently before it's registered/merged.
+    renderEditorWithAiAddProbe(firstTrigger.id, ["www.zakupki.gov.ru"], {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /AI add/ }));
+
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "zakupki.gov.ru:approved"
+    );
+    // No stray "www."-prefixed duplicate lives in the delta/registry.
+    expect(screen.getByText("zakupki.gov.ru")).toBeInTheDocument();
   });
 });
 
