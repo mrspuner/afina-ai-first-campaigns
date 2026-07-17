@@ -11,6 +11,26 @@ export interface AccountInterest {
 }
 
 /**
+ * Moderation status of an own-domain registration. Known trigger-domain
+ * roots (from `knownTriggerDomains()`) are auto-approved; anything else
+ * starts `pending` until reviewed (Task 7 resolves it via
+ * `domain_moderation_resolved`).
+ */
+export type DomainStatus = "pending" | "approved" | "rejected";
+
+/**
+ * A single entry in the account-level domain registry (`ownDomains`) — the
+ * SINGLE SOURCE OF TRUTH for a domain's moderation status. Campaigns only
+ * ever reference a domain by string; status is looked up here at render
+ * time, never duplicated onto the campaign.
+ */
+export interface RegisteredDomain {
+  domain: string;
+  status: DomainStatus;
+  addedAt: string;
+}
+
+/**
  * Account-level configuration shown and edited on the «Настройки» screen.
  * Distinct from `Survey` (the onboarding form) — this is the persistent
  * account record. AI seeds the initial value; the user edits every field
@@ -37,6 +57,12 @@ export interface AccountSettings {
   brandMessages: string;
   /** Block 7 — account-level domain blocklist, never used in any trigger. */
   domainBlocklist: string[];
+  /**
+   * Account-level registry of the client's own domains and their moderation
+   * status — the single source of truth `Campaign.triggerConfig` reads from
+   * at render time (never duplicated there). In-memory/session-durable only.
+   */
+  ownDomains: RegisteredDomain[];
 }
 
 export const EMPTY_ACCOUNT_SETTINGS: AccountSettings = {
@@ -50,6 +76,7 @@ export const EMPTY_ACCOUNT_SETTINGS: AccountSettings = {
   brandTone: "",
   brandMessages: "",
   domainBlocklist: [],
+  ownDomains: [],
 };
 
 /**
@@ -84,4 +111,5 @@ export const DEMO_ACCOUNT_SETTINGS: AccountSettings = {
     "Решение по кредиту за 2 минуты. Ипотека с господдержкой. " +
     "Инвестиции без комиссии в первый год.",
   domainBlocklist: ["competitor-bank.ru", "spam-aggregator.ru"],
+  ownDomains: [],
 };

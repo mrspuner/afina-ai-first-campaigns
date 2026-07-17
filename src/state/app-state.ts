@@ -23,6 +23,7 @@ import {
 } from "@/data/business-directions";
 import type { AccountSettings } from "@/types/account-settings";
 import { DEMO_ACCOUNT_SETTINGS } from "@/types/account-settings";
+import { knownTriggerDomains } from "@/data/trigger-domains";
 import {
   DEFAULT_FILTERS,
   statisticsReducer,
@@ -368,6 +369,10 @@ export type Action =
   // Спека #3 — подтверждение экрана review в Survey: проверенные данные
   // применяются в accountSettings РАЗОМ (отложенный коммит, а не молча при парсинге).
   | { type: "account_review_confirmed"; settings: AccountSettings }
+  // Реестр доменов (единый источник статуса модерации, см. `ownDomains`):
+  // известные домены (knownTriggerDomains()) регистрируются approved сразу,
+  // неизвестные — pending. Идемпотентно — уже зарегистрированный не дублируется.
+  | { type: "domain_registered"; domain: string }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
   | { type: "artifact_opened"; id: string; origin?: ArtifactOrigin }
@@ -1082,6 +1087,30 @@ export function appReducer(state: AppState, action: Action): AppState {
         accountSettings: action.settings,
         clientDirection: businessDirectionFromSurvey(action.settings.directionId),
       };
+
+    case "domain_registered": {
+      // Идемпотентно: уже зарегистрированный домен не дублируется.
+      if (
+        state.accountSettings.ownDomains.some((d) => d.domain === action.domain)
+      ) {
+        return state;
+      }
+      const isKnown = knownTriggerDomains().some((d) => d.id === action.domain);
+      return {
+        ...state,
+        accountSettings: {
+          ...state.accountSettings,
+          ownDomains: [
+            ...state.accountSettings.ownDomains,
+            {
+              domain: action.domain,
+              status: isKnown ? "approved" : "pending",
+              addedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      };
+    }
 
     case "campaign_launched": {
       const c = state.campaigns.find((cc) => cc.id === action.id);

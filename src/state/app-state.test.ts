@@ -1278,6 +1278,73 @@ describe("appReducer — settings actions", () => {
     expect(EMPTY_ACCOUNT_SETTINGS.interests).toEqual([]);
     expect(EMPTY_ACCOUNT_SETTINGS.suggestedInterests).toEqual([]);
     expect(EMPTY_ACCOUNT_SETTINGS.domainBlocklist).toEqual([]);
+    expect(EMPTY_ACCOUNT_SETTINGS.ownDomains).toEqual([]);
+  });
+});
+
+describe("appReducer — domain_registered", () => {
+  it("registers an unknown domain as pending", () => {
+    const next = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "totally-unknown-domain-xyz.ru",
+    });
+    expect(next.accountSettings.ownDomains).toContainEqual({
+      domain: "totally-unknown-domain-xyz.ru",
+      status: "pending",
+      addedAt: expect.any(String),
+    });
+  });
+
+  it("registers a known trigger domain as approved immediately", () => {
+    const next = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(next.accountSettings.ownDomains).toContainEqual({
+      domain: "sberbank.ru",
+      status: "approved",
+      addedAt: expect.any(String),
+    });
+  });
+
+  it("is idempotent — does not duplicate an already-registered domain", () => {
+    const once = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    const twice = appReducer(once, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(twice.accountSettings.ownDomains).toHaveLength(1);
+  });
+
+  it("preserves domainBlocklist untouched", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        domainBlocklist: ["excluded.ru"],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(next.accountSettings.domainBlocklist).toEqual(["excluded.ru"]);
+  });
+
+  it("does not touch survey or campaigns slices", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [makeCampaign()],
+    };
+    const next = appReducer(state, {
+      type: "domain_registered",
+      domain: "new-domain.ru",
+    });
+    expect(next.campaigns).toBe(state.campaigns);
+    expect(next.survey).toBe(state.survey);
   });
 });
 
