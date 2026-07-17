@@ -1348,6 +1348,68 @@ describe("appReducer — domain_registered", () => {
   });
 });
 
+describe("appReducer — domain_moderation_resolved", () => {
+  it("resolves named domains to approved/rejected, leaving others untouched", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [
+          { domain: "a.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+          { domain: "b.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+          { domain: "c.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+        ],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["a.ru"],
+      rejected: ["b.ru"],
+    });
+    expect(next.accountSettings.ownDomains).toEqual([
+      { domain: "a.ru", status: "approved", addedAt: "2026-07-01T00:00:00.000Z" },
+      { domain: "b.ru", status: "rejected", addedAt: "2026-07-01T00:00:00.000Z" },
+      { domain: "c.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("ignores domain names in the payload that are not in the registry", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [{ domain: "a.ru", status: "pending", addedAt: "x" }],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["unknown.ru"],
+      rejected: [],
+    });
+    expect(next.accountSettings.ownDomains).toEqual([
+      { domain: "a.ru", status: "pending", addedAt: "x" },
+    ]);
+  });
+
+  it("does not touch survey or campaigns slices", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [makeCampaign()],
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [{ domain: "a.ru", status: "pending", addedAt: "x" }],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["a.ru"],
+      rejected: [],
+    });
+    expect(next.campaigns).toBe(state.campaigns);
+    expect(next.survey).toBe(state.survey);
+  });
+});
+
 describe("appReducer — open_campaign_payment", () => {
   it("switches view to campaign-payment for an existing campaign", () => {
     const c = makeCampaign({ id: "cmp_A", name: "C" });

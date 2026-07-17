@@ -37,6 +37,7 @@ import { SettingsSection } from "@/sections/settings/settings-section";
 import { SettingsEmptyState } from "@/sections/settings/settings-empty-state";
 import { DevPanel } from "@/components/dev/dev-panel";
 import { useSeedFromWindow } from "@/components/dev/use-seed-from-window";
+import { useDomainModeration } from "@/sections/settings/use-domain-moderation";
 
 const SHELL_EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -74,6 +75,13 @@ export default function Home() {
 
   // Dev/test-only: apply a Playwright-injected state seed (no-op in production).
   useSeedFromWindow(dispatch);
+
+  // Account-level moderation timer (Task 7): resolves pending own-domains to a
+  // mixed approved/rejected outcome. Mounted globally (not scoped to the
+  // Settings screen) so it keeps ticking regardless of which screen the user
+  // is on — the registry it drives (`ownDomains`) is account-level, and other
+  // screens (e.g. the trigger card's pending-chip, Task 9) also read it.
+  useDomainModeration();
 
   // Спека #3 — первый вход в «Настройки» (анкета ещё не пройдена) монтирует тот
   // же канонический Survey вместо настроек. Тот же fullscreen-режим, что и у

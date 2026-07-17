@@ -373,6 +373,9 @@ export type Action =
   // известные домены (knownTriggerDomains()) регистрируются approved сразу,
   // неизвестные — pending. Идемпотентно — уже зарегистрированный не дублируется.
   | { type: "domain_registered"; domain: string }
+  // Прототип-симуляция таймера модерации (Task 7): переводит НАЗВАННЫЕ pending
+  // домены в approved/rejected; остальные записи реестра не трогает.
+  | { type: "domain_moderation_resolved"; approved: string[]; rejected: string[] }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
   | { type: "artifact_opened"; id: string; origin?: ArtifactOrigin }
@@ -1108,6 +1111,23 @@ export function appReducer(state: AppState, action: Action): AppState {
               addedAt: new Date().toISOString(),
             },
           ],
+        },
+      };
+    }
+
+    case "domain_moderation_resolved": {
+      const approved = new Set(action.approved);
+      const rejected = new Set(action.rejected);
+      if (approved.size === 0 && rejected.size === 0) return state;
+      return {
+        ...state,
+        accountSettings: {
+          ...state.accountSettings,
+          ownDomains: state.accountSettings.ownDomains.map((d) => {
+            if (approved.has(d.domain)) return { ...d, status: "approved" };
+            if (rejected.has(d.domain)) return { ...d, status: "rejected" };
+            return d;
+          }),
         },
       };
     }
