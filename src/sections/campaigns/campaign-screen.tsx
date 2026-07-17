@@ -13,7 +13,7 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
-import { describeWorkflow } from "@/state/graph-description";
+import { describeWorkflow, firstTouchCommunicationNodes } from "@/state/graph-description";
 import { useCampaignEditFlow } from "@/sections/shell/use-campaign-edit-flow";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
@@ -27,6 +27,7 @@ import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
 import { CampaignScenarioNodeBlock } from "./campaign-scenario-node-block";
+import { CampaignCommunicationNodeBlock } from "./campaign-communication-node-block";
 import { StatusBadge } from "./status-badge";
 import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
@@ -181,6 +182,12 @@ export function CampaignScreen() {
     });
   }
 
+  // Нодо-блоки каналов под «Первым касанием» (A2.1) — по тем же нодам, что
+  // несут строки текста описания (общий обход в graph-description.ts), так
+  // текст и блоки не расходятся. Ретрай-повтор той же ноды в этот список не
+  // попадает — это отдельный проход графа, у него своих блоков нет.
+  const firstTouchNodes = launchGraph ? firstTouchCommunicationNodes(launchGraph) : [];
+
   return (
     <EntityCardShell
       title={campaign.name}
@@ -219,9 +226,10 @@ export function CampaignScreen() {
             // Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
             // (own), стилизован под соответствующую ноду графа. Правка
             // артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
-            // read-only после запуска. Слот-карта поддерживает любой id этапа —
-            // следующая задача добавит нодо-блоки коммуникаций под
-            // «first-touch» тем же механизмом.
+            // read-only после запуска. «Первое касание» несёт один нодо-блок
+            // на каждую sms/email/push/ivr ноду первого прохода — показывает
+            // текущий шаблон и открывает СУЩЕСТВУЮЩИЙ редактор шаблона (выбор
+            // другого шаблона — вне рамок этой задачи).
             stageSlots={{
               start: (
                 <CampaignScenarioNodeBlock
@@ -229,6 +237,17 @@ export function CampaignScreen() {
                   readOnly={status !== "draft"}
                 />
               ),
+              "first-touch": firstTouchNodes.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {firstTouchNodes.map((node) => (
+                    <CampaignCommunicationNodeBlock
+                      key={node.id}
+                      node={node}
+                      readOnly={status !== "draft"}
+                    />
+                  ))}
+                </div>
+              ) : undefined,
             }}
           />
           <div className="flex flex-col gap-3 border-t border-border pt-5">

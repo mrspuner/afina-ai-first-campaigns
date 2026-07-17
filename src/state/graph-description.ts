@@ -44,6 +44,54 @@ export interface DescribableGraph {
 
 // ── Обход графа ──────────────────────────────────────────────────────────────
 
+/** Обход графа, общий для текстового описания И нодо-блоков коммуникаций
+ *  (A2.1 — «Первое касание» карточки кампании): порядок нод, коммуникационные
+ *  ноды и множество «первого прохода» (до повтора) вычисляются один раз, чтобы
+ *  оба потребителя не могли разойтись в том, что считается первым касанием. */
+interface GraphTraversal {
+  ordered: WorkflowNode[];
+  commNodes: WorkflowNode[];
+  retryWaits: WorkflowNode[];
+  isFirstPass: (node: WorkflowNode) => boolean;
+}
+
+function traverseGraph(graph: DescribableGraph): GraphTraversal {
+  const adjacency = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = adjacency.get(edge.source);
+    if (list) list.push(edge.target);
+    else adjacency.set(edge.source, [edge.target]);
+  }
+
+  const ordered = orderNodes(graph, adjacency);
+  const commNodes = ordered.filter((n) => isCommunicationNode(n.data.nodeType));
+
+  // «Повтор» — это ноды за задержкой, которая сама стоит ПОСЛЕ коммуникации.
+  // Задержка перед первым касанием (её носят легаси-шаблоны) повтором не
+  // считается, иначе первое касание осталось бы без текстов.
+  const afterAnyComm = reachableFrom(commNodes.map((n) => n.id), adjacency);
+  const retryWaits = ordered.filter(
+    (n) => n.data.nodeType === "wait" && afterAnyComm.has(n.id),
+  );
+  const afterRetry = reachableFrom(retryWaits.map((n) => n.id), adjacency);
+  const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
+
+  return { ordered, commNodes, retryWaits, isFirstPass };
+}
+
+/**
+ * Коммуникационные ноды (sms/email/push/ivr) «первого прохода» — те же, что
+ * несут строки текста под «Первым касанием» (см. `describeWorkflow`), а НЕ
+ * ноды повторного блока за задержкой. Экспортирована для карточки кампании
+ * (A2.1): нодо-блоки каналов под «Первым касанием» рендерятся по этому же
+ * набору, поэтому текст и блоки не могут разойтись.
+ */
+export function firstTouchCommunicationNodes(graph: DescribableGraph): WorkflowNode[] {
+  if (!graph.nodes.length) return [];
+  const { commNodes, isFirstPass } = traverseGraph(graph);
+  return commNodes.filter(isFirstPass);
+}
+
 /** Множество нод, достижимых из `seeds` по рёбрам (сами seeds включены). */
 function reachableFrom(seeds: string[], adjacency: Map<string, string[]>): Set<string> {
   const seen = new Set<string>(seeds);
@@ -160,25 +208,7 @@ export function describeWorkflow(
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
-  const adjacency = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    const list = adjacency.get(edge.source);
-    if (list) list.push(edge.target);
-    else adjacency.set(edge.source, [edge.target]);
-  }
-
-  const ordered = orderNodes(graph, adjacency);
-  const commNodes = ordered.filter((n) => isCommunicationNode(n.data.nodeType));
-
-  // «Повтор» — это ноды за задержкой, которая сама стоит ПОСЛЕ коммуникации.
-  // Задержка перед первым касанием (её носят легаси-шаблоны) повтором не
-  // считается, иначе первое касание осталось бы без текстов.
-  const afterAnyComm = reachableFrom(commNodes.map((n) => n.id), adjacency);
-  const retryWaits = ordered.filter(
-    (n) => n.data.nodeType === "wait" && afterAnyComm.has(n.id),
-  );
-  const afterRetry = reachableFrom(retryWaits.map((n) => n.id), adjacency);
-  const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
+  const { ordered, commNodes, retryWaits, isFirstPass } = traverseGraph(graph);
 
   // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
   // канал (дедуп по каналу и тексту, а не по ноде).

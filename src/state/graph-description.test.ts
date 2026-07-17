@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeWorkflow } from "./graph-description";
+import { describeWorkflow, firstTouchCommunicationNodes } from "./graph-description";
 import { createTemplate } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
 
@@ -133,5 +133,41 @@ describe("describeWorkflow", () => {
     it("пустой граф не роняет обход", () => {
       expect(describeWorkflow({ nodes: [], edges: [] }, T)).toEqual([]);
     });
+  });
+});
+
+describe("firstTouchCommunicationNodes", () => {
+  it("возвращает одну ноду на канал первого касания (sms+email)", () => {
+    const graph = createTemplate("Возврат", "new", ["sms", "email"]);
+    const nodes = firstTouchCommunicationNodes(graph);
+    expect(nodes.map((n) => n.data.nodeType).sort()).toEqual(["email", "sms"]);
+  });
+
+  it("исключает ноды повторного блока (за задержкой) — только первый проход", () => {
+    // «Возврат» несёт retry-повтор той же ноды sms за wait-задержкой; должна
+    // остаться ровно одна sms-нода первого прохода, а не обе.
+    const graph = createTemplate("Возврат", "new", ["sms"]);
+    const nodes = firstTouchCommunicationNodes(graph);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].data.nodeType).toBe("sms");
+  });
+
+  it("не выдумывает ноды, когда в графе нет коммуникаций", () => {
+    const graph = createTemplate("Возврат", "new", []);
+    expect(firstTouchCommunicationNodes(graph)).toEqual([]);
+  });
+
+  it("пустой граф не роняет обход", () => {
+    expect(firstTouchCommunicationNodes({ nodes: [], edges: [] })).toEqual([]);
+  });
+
+  it("для сегментированного шаблона возвращает ОТДЕЛЬНУЮ ноду на каждый сегмент (не схлопывает, в отличие от текста)", () => {
+    // Апсейл — сегментированный: 3 comm-юнита с одинаковыми sms-параметрами.
+    // Текст описания схлопывает их в одну строку (см. describeWorkflow), но
+    // нодо-блоки карточки (A2.1) идут один на КАЖДУЮ ноду графа.
+    const graph = createTemplate("Апсейл", "new", ["sms"]);
+    const nodes = firstTouchCommunicationNodes(graph);
+    expect(nodes.length).toBeGreaterThan(1);
+    expect(nodes.every((n) => n.data.nodeType === "sms")).toBe(true);
   });
 });

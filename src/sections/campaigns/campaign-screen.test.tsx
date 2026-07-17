@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
 import {
   AppStateProvider,
@@ -8,6 +8,8 @@ import {
 } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
+import { TemplatePreviewDrawer } from "./template-preview-drawer";
+import { EmailEditorPanel } from "./email-editor-panel";
 import type { Campaign, Preset } from "@/state/app-state";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
@@ -62,6 +64,23 @@ function renderCampaign(campaign: Campaign) {
       <PromptChipsProvider>
         <ChatProvider>
           <Harness campaign={campaign} />
+        </ChatProvider>
+      </PromptChipsProvider>
+    </AppStateProvider>,
+  );
+}
+
+/** Same tree as `renderCampaign` plus the two drawers the comm node-blocks
+ *  open (mirrors page.tsx's composition) — needed to assert the click
+ *  actually opens the EXISTING editor, not just flips chat-context state. */
+function renderCampaignWithDrawers(campaign: Campaign) {
+  return render(
+    <AppStateProvider>
+      <PromptChipsProvider>
+        <ChatProvider>
+          <Harness campaign={campaign} />
+          <TemplatePreviewDrawer />
+          <EmailEditorPanel />
         </ChatProvider>
       </PromptChipsProvider>
     </AppStateProvider>,
@@ -217,6 +236,126 @@ describe("CampaignScreen — нодо-блок «Старт» (A2.1 — скор
     expect(
       block.getByRole("button", { name: "Показать интересы и триггеры" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("CampaignScreen — нодо-блоки коммуникаций под «Первым касанием» (A2.1)", () => {
+  // «Возврат» — линейный (не сегментированный) шаблон: ровно одна нода на
+  // канал, без дублей от сегментов (в отличие от дефолтного «Апсейл» в
+  // baseCampaign, который сегментирован — см. graph-description.test.ts).
+  const RETURN_SCENARIO = { id: "base-return", name: "Возврат" };
+
+  it("рендерит по одному нодо-блоку на каждую первую коммуникацию (sms+email) с текущим шаблоном", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_comm_blocks",
+        scenario: RETURN_SCENARIO,
+        channels: ["sms", "email"],
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Изменить шаблон: SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Изменить шаблон: Специальное предложение" }),
+    ).toBeInTheDocument();
+  });
+
+  it("клик по блоку SMS открывает существующий дровер предпросмотра/редактора шаблона", () => {
+    renderCampaignWithDrawers(
+      baseCampaign({
+        id: "cmp_comm_sms_click",
+        scenario: RETURN_SCENARIO,
+        channels: ["sms", "email"],
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Изменить шаблон: SMS — напоминание" }),
+    );
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(within(drawer).getByText("SMS — напоминание")).toBeInTheDocument();
+  });
+
+  it("клик по блоку Email открывает СУЩЕСТВУЮЩИЙ редактор письма (другой дровер — не TemplatePreviewDrawer)", () => {
+    renderCampaignWithDrawers(
+      baseCampaign({
+        id: "cmp_comm_email_click",
+        scenario: RETURN_SCENARIO,
+        channels: ["sms", "email"],
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Изменить шаблон: Специальное предложение" }),
+    );
+    expect(screen.getByTestId("email-editor-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("template-preview-drawer")).not.toBeInTheDocument();
+    // Черновик — редактор открыт НЕ на просмотр: название письма редактируемо.
+    expect(screen.getByDisplayValue("Специальное предложение")).not.toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  it("показывает нодо-блок IVR (сценарий звонка) и открывает предпросмотр по клику", () => {
+    renderCampaignWithDrawers(
+      baseCampaign({
+        id: "cmp_comm_ivr",
+        scenario: RETURN_SCENARIO,
+        channels: ["ivr"],
+      }),
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Изменить шаблон: Персональное предложение",
+    });
+    expect(trigger).toBeInTheDocument();
+    fireEvent.click(trigger);
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(within(drawer).getByText("Персональное предложение")).toBeInTheDocument();
+  });
+
+  it("запущенная кампания: нодо-блоки коммуникаций read-only («Показать шаблон» вместо «Изменить»)", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_comm_readonly",
+        scenario: RETURN_SCENARIO,
+        channels: ["sms", "email"],
+        status: "active",
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Показать шаблон: SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Показать шаблон: Специальное предложение" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Изменить шаблон/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("запущенная кампания: клик по блоку Email открывает редактор в режиме просмотра (read-only)", () => {
+    renderCampaignWithDrawers(
+      baseCampaign({
+        id: "cmp_comm_email_readonly",
+        scenario: RETURN_SCENARIO,
+        channels: ["sms", "email"],
+        status: "active",
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Показать шаблон: Специальное предложение" }),
+    );
+    expect(screen.getByDisplayValue("Специальное предложение")).toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  it("кампания без коммуникаций не рендерит нодо-блоков каналов", () => {
+    renderCampaign(baseCampaign({ id: "cmp_comm_none", channels: [] }));
+    expect(screen.queryByText(/^Изменить шаблон/)).not.toBeInTheDocument();
   });
 });
 
