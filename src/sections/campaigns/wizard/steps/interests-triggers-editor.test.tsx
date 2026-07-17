@@ -6,7 +6,7 @@ import {
   resolveSelectionIds,
 } from "./interests-triggers-editor";
 import { getTriggerDomains } from "@/data/trigger-domains";
-import { AppStateProvider } from "@/state/app-state-context";
+import { AppStateProvider, useAppState } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { TriggerEditRegistryProvider } from "@/state/trigger-edit-context";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
@@ -32,14 +32,22 @@ beforeAll(() => {
       disconnect() {}
     } as unknown as typeof ResizeObserver;
   }
+  // cmdk (the add-domain combobox's Command list — Task 8) calls
+  // `scrollIntoView` on its selected item; absent in jsdom.
+  (
+    Element.prototype as unknown as { scrollIntoView?: () => void }
+  ).scrollIntoView ??= () => {};
 });
 
 // finance is the default clientDirection in app-state — pick its first interest,
 // that interest's first trigger, and one of that trigger's system domains so we
-// can seed the editor with a selected+expanded trigger card.
+// can seed the editor with a selected+expanded trigger card. `secondTrigger` is
+// a sibling trigger of the same interest, used by the add-domain combobox tests
+// to exercise cross-trigger registry visibility (Task 8).
 const financeInterests = resolveInterestsForDirection("finance");
 const firstInterest = financeInterests[0];
 const firstTrigger = firstInterest.triggers[0];
+const secondTrigger = firstInterest.triggers[1];
 const firstDomainGroup = getTriggerDomains(firstTrigger.id)[0];
 const firstDomain = firstDomainGroup.root;
 
@@ -57,6 +65,43 @@ function renderEditor(props: Partial<EditorProps> = {}) {
       </PromptInputProvider>
     </AppStateProvider>
   );
+}
+
+/** Reads `accountSettings.ownDomains` back out as plain `"domain:status"`
+ *  strings — a precise assertion surface for the add-domain combobox tests
+ *  (Task 8), which need to prove NOT ONLY what the delta chip shows, but
+ *  whether/how the domain landed in the account registry. */
+function OwnDomainsDebug() {
+  const { accountSettings } = useAppState();
+  return (
+    <div data-testid="own-domains">
+      {accountSettings.ownDomains.map((d) => `${d.domain}:${d.status}`).join(",")}
+    </div>
+  );
+}
+
+function renderEditorWithRegistryDebug(props: Partial<EditorProps> = {}) {
+  return render(
+    <AppStateProvider>
+      <PromptInputProvider>
+        <PromptChipsProvider>
+          <TriggerEditRegistryProvider>
+            <InterestsTriggersEditor {...props} />
+            <OwnDomainsDebug />
+          </TriggerEditRegistryProvider>
+        </PromptChipsProvider>
+      </PromptInputProvider>
+    </AppStateProvider>
+  );
+}
+
+/** Opens the Nth (0-indexed, in render order) trigger card's «Добавить свой
+ *  домен» combobox. */
+function openAddDomainCombobox(index: number) {
+  const buttons = screen.getAllByRole("button", {
+    name: /Добавить свой домен/,
+  });
+  fireEvent.click(buttons[index]);
 }
 
 describe("InterestsTriggersEditor — wizard/drawer parity", () => {
@@ -238,6 +283,93 @@ describe("InterestsTriggersEditor — domain-group chip (subdomains + overflow)"
         name: `Показать ещё ${overflowCount} доменов`,
       })
     ).toBeNull();
+  });
+});
+
+describe("InterestsTriggersEditor — add-domain combobox (Task 8)", () => {
+  afterEach(cleanup);
+
+  it("selecting a previously-registered domain from another trigger adds it active, without a new registration", async () => {
+    renderEditorWithRegistryDebug({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id, secondTrigger.id],
+    });
+
+    // Register "partner-shop.ru" (unknown — not any trigger's system domain)
+    // via trigger 2's typed-custom entry first, so it lands in the account
+    // registry as pending and becomes selectable from trigger 1's directory.
+    openAddDomainCombobox(1);
+    const input1 = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input1, { target: { value: "Partner-Shop.ru" } });
+    fireEvent.click(await screen.findByText("Добавить «Partner-Shop.ru»"));
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "partner-shop.ru:pending"
+    );
+
+    // Trigger 1's combobox now lists it as a previously-registered option —
+    // picking it must NOT create a second registry entry.
+    openAddDomainCombobox(0);
+    const options = await screen.findAllByRole("option", {
+      name: "partner-shop.ru",
+    });
+    fireEvent.click(options.at(-1)!);
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "partner-shop.ru:pending"
+    );
+  });
+
+  it("typing a domain that IS a known trigger-domain root (from another trigger) adds it active WITHOUT registering it", async () => {
+    const onChange = vi.fn();
+    renderEditorWithRegistryDebug({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+      onChange,
+    });
+
+    // "zakupki.gov.ru" is a known trigger-domain root (procurement vertical),
+    // but not one of firstTrigger's OWN system domains — typed with mixed
+    // case, a leading www. and a trailing dot to exercise normalization.
+    openAddDomainCombobox(0);
+    const input = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input, { target: { value: "WWW.Zakupki.GOV.RU." } });
+    fireEvent.click(
+      await screen.findByText("Добавить «WWW.Zakupki.GOV.RU.»")
+    );
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        triggerConfig: expect.objectContaining({
+          [firstTrigger.id]: { added: ["zakupki.gov.ru"], excluded: [] },
+        }),
+      })
+    );
+    // Known root → no registry entry created at all.
+    expect(screen.getByTestId("own-domains").textContent).toBe("");
+  });
+
+  it("typing an unknown domain registers it as pending in the account registry and adds it as a delta chip", async () => {
+    const onChange = vi.fn();
+    renderEditorWithRegistryDebug({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+      onChange,
+    });
+
+    openAddDomainCombobox(0);
+    const input = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input, { target: { value: "brand-new-site.ru" } });
+    fireEvent.click(await screen.findByText("Добавить «brand-new-site.ru»"));
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        triggerConfig: expect.objectContaining({
+          [firstTrigger.id]: { added: ["brand-new-site.ru"], excluded: [] },
+        }),
+      })
+    );
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "brand-new-site.ru:pending"
+    );
   });
 });
 

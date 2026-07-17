@@ -9,11 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Plus, X, Undo2 } from "lucide-react";
+import { Check, X, Undo2 } from "lucide-react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { VERTICALS, getInterestById } from "@/data/triggers-by-vertical";
 import { getInterestsForDirection } from "@/data/interests-by-direction";
-import { getTriggerDomains, type DomainGroup } from "@/data/trigger-domains";
+import {
+  getTriggerDomains,
+  knownTriggerDomains,
+  type DomainGroup,
+} from "@/data/trigger-domains";
 import {
   PREVIEW_VISIBLE_COUNT,
   previewDomains,
@@ -33,11 +37,12 @@ import {
   type ParsedTriggerCommand,
   type TriggerDelta,
 } from "@/lib/trigger-edit-parser";
+import { classifyTypedDomain } from "@/lib/domain-add";
 import { usePromptChips } from "@/state/prompt-chips-context";
-import { usePromptInputController } from "@/components/ai-elements/prompt-input";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
 import { InterestChip } from "@/sections/campaigns/interest-chip";
+import { AddDomainCombobox } from "./add-domain-combobox";
 import { cn } from "@/lib/utils";
 
 /** Return a copy of `obj` without the given key. Avoids the
@@ -261,7 +266,11 @@ interface TriggerCardProps {
   onRemoveDelta: (bucket: "added" | "excluded", domain: string) => void;
   onExcludeSystemDomain: (domain: string) => void;
   onRestoreSystemDomain: (domain: string) => void;
-  onAddDomain: () => void;
+  /** Account's previously-registered own-domains (any status) — the
+   *  «Добавить свой домен» combobox's directory list (Task 8). */
+  registeredDomains: readonly string[];
+  onSelectRegisteredDomain: (domain: string) => void;
+  onSubmitTypedDomain: (raw: string) => void;
 }
 
 /**
@@ -371,7 +380,9 @@ function TriggerCard({
   onRemoveDelta,
   onExcludeSystemDomain,
   onRestoreSystemDomain,
-  onAddDomain,
+  registeredDomains,
+  onSelectRegisteredDomain,
+  onSubmitTypedDomain,
 }: TriggerCardProps) {
   // Selection IS expansion: a selected trigger is highlighted, open and
   // editable; an unselected one is collapsed to a read-only domain preview.
@@ -502,14 +513,12 @@ function TriggerCard({
                 onRemove={() => onRemoveDelta("added", d)}
               />
             ))}
-            <button
-              type="button"
-              onClick={onAddDomain}
-              className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
-            >
-              <Plus className="h-3 w-3" />
-              Добавить свой домен
-            </button>
+            <AddDomainCombobox
+              alreadyAdded={delta.added}
+              registeredDomains={registeredDomains}
+              onSelectRegistered={onSelectRegisteredDomain}
+              onSubmitTyped={onSubmitTypedDomain}
+            />
           </div>
         </div>
       )}
@@ -640,10 +649,21 @@ export function InterestsTriggersEditor({
   readOnly = false,
   onChange,
 }: InterestsTriggersEditorProps) {
-  const { clientDirection, wizardRemixToken } = useAppState();
+  const { clientDirection, wizardRemixToken, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
   const { pushChip, clearChips, removeChip } = usePromptChips();
-  const { textInput } = usePromptInputController();
+  // «Добавить свой домен» combobox (Task 8): the account's previously-
+  // registered own-domains (any status) form the directory list, and the
+  // known trigger-domain roots decide whether a free-typed domain lands
+  // active immediately or needs a `domain_registered` dispatch (→ pending).
+  const registeredDomains = useMemo(
+    () => accountSettings.ownDomains.map((d) => d.domain),
+    [accountSettings.ownDomains]
+  );
+  const knownRoots = useMemo(
+    () => knownTriggerDomains().map((d) => d.id),
+    []
+  );
   const vertical = useMemo(
     () => resolveVertical(clientDirection),
     [clientDirection]
@@ -868,50 +888,28 @@ export function InterestsTriggersEditor({
     });
   }
 
-  // M2.4 (revised) — "Добавить свой домен" pulls the TRIGGER NAME into the
-  // prompt bar as a `trigger` chip, then pre-fills "добавь домен " AFTER the
-  // tag so the user only needs to type the domain. The chip lands in the
-  // contenteditable via an effect on the next commit, so the text insertion is
-  // deferred one frame to land after the chip (not before it). The full
-  // «добавь домен X.ru» is parsed by parseTriggerCommand into an add-edit, and
-  // useChatSubmit routes `trigger` chips through triggerEdit.applyToTrigger —
-  // no parser change. A stable chip id means re-clicking refreshes, not stacks.
-  function handleAddDomain(triggerId: string, triggerLabel: string) {
-    pushTriggerChip(triggerId, triggerLabel);
-    // Текст-команду вставляем ТОЛЬКО после того, как чип реально оказался в DOM
-    // (он попадает туда асинхронным эффектом ChipEditableInput). Один
-    // requestAnimationFrame порядок не гарантирует — поэтому ждём появления
-    // чипа, иначе «добавь домен » вставляется до тега и теряется/едет (S2).
-    insertCommandAfterChip(triggerId, "добавь домен ");
+  // Task 8 — «Добавить свой домен» combobox routing. Both paths write into
+  // the trigger's `delta.added` via the SAME merge as the prompt-bar edit
+  // flow (`applyEditToDelta`, through `handleApplyParsed`) — one mechanism,
+  // two entry points. Status is never stored on the delta: it's read from
+  // the registry (`accountSettings.ownDomains`) at render time.
+  //   - Picking a PREVIOUSLY-REGISTERED domain (from the directory list)
+  //     needs no (re-)registration — it's already in the registry.
+  //   - Free-typed input is normalized + classified against the known
+  //     trigger-domain roots: a known root is added directly (inherently
+  //     approved, same as system domains); anything else is registered via
+  //     `domain_registered` (→ pending in the registry) before being added.
+  function addRegisteredDomainToTrigger(triggerId: string, domain: string) {
+    handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
-  // Дожидается появления чипа триггера в contenteditable, затем вставляет
-  // text-команду после него. Поллинг по кадрам с потолком попыток — на случай
-  // если чип почему-то не материализуется.
-  function insertCommandAfterChip(
-    triggerId: string,
-    command: string,
-    attempt = 0
-  ) {
-    const ed = document.querySelector<HTMLDivElement>(
-      '[role="textbox"][contenteditable="true"]'
-    );
-    const chipReady =
-      !!ed &&
-      Array.from(ed.querySelectorAll<HTMLElement>("[data-chip-id]")).some(
-        (c) => c.dataset.chipId === `trigger_${triggerId}`
-      );
-    if (!chipReady && attempt < 6) {
-      requestAnimationFrame(() =>
-        insertCommandAfterChip(triggerId, command, attempt + 1)
-      );
-      return;
+  function addTypedDomainToTrigger(triggerId: string, raw: string) {
+    const { domain, isKnown } = classifyTypedDomain(raw, knownRoots);
+    if (!domain) return;
+    if (!isKnown) {
+      dispatch({ type: "domain_registered", domain });
     }
-    ed?.focus();
-    textInput.insertAtCursor(command, {
-      separator: "smart",
-      preserveTags: true,
-    });
+    handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
   // ---- TriggerEditApi for the PromptBar bridge ----
@@ -1121,7 +1119,13 @@ export function InterestsTriggersEditor({
               onRestoreSystemDomain={(domain) =>
                 handleRestoreSystemDomain(trigger.id, domain)
               }
-              onAddDomain={() => handleAddDomain(trigger.id, trigger.label)}
+              registeredDomains={registeredDomains}
+              onSelectRegisteredDomain={(domain) =>
+                addRegisteredDomainToTrigger(trigger.id, domain)
+              }
+              onSubmitTypedDomain={(raw) =>
+                addTypedDomainToTrigger(trigger.id, raw)
+              }
             />
           ))}
         </div>
