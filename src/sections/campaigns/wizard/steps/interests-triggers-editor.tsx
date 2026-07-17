@@ -227,6 +227,10 @@ function ReadOnlySectionHeader({ label }: { label: string }) {
  * the domain name is the only label. `rejected` is never passed in here: the
  * caller filters those out of the render list entirely (Task 9 — hidden from
  * the trigger card), so this component never needs to handle it.
+ *
+ * `onRemove` is optional (Task 9 / B2.2 fix) so `ReadOnlyTriggerCard` can
+ * reuse this same status-driven chip for its added domains without exposing
+ * a remove affordance — omitting it just hides the ✕ button.
  */
 function DeltaChip({
   domain,
@@ -237,7 +241,7 @@ function DeltaChip({
   domain: string;
   variant: "added" | "excluded";
   status?: DomainStatus;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const isPending = variant === "added" && status === "pending";
   return (
@@ -255,14 +259,16 @@ function DeltaChip({
         {domain}
       </span>
       {isPending && <Clock className="h-3 w-3 opacity-70" aria-hidden />}
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Удалить ${domain}`}
-        className="opacity-60 transition-opacity hover:opacity-100"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Удалить ${domain}`}
+          className="opacity-60 transition-opacity hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </span>
   );
 }
@@ -558,18 +564,34 @@ function TriggerCard({
 }
 
 /** Read-only trigger card: label + its active domains as static mono chips
- *  (system domains minus excluded, plus user-added). No checkbox, no editing. */
+ *  (system domains minus excluded, plus user-added). No checkbox, no editing.
+ *
+ *  B2.2 fix (Task 9 gap): the moderation timer is global and `ownDomains` is
+ *  account-wide, so a domain can flip to `rejected` while a user is looking
+ *  at a LAUNCHED campaign's read-only card (reached via
+ *  `scoring-interests-panel.tsx`). Spec B2.2 says rejected must never be
+ *  shown here — same rule the editable `TriggerCard` already enforces via
+ *  `resolveDomainStatus` — so this card resolves + filters `delta.added` the
+ *  same way, reusing that single helper (no duplicated logic). Added-domain
+ *  chips also reuse the same status-driven `DeltaChip` (amber+clock for
+ *  pending, green for approved) as the editable card, minus the remove
+ *  button (read-only). */
 function ReadOnlyTriggerCard({
   trigger,
   domains,
   delta,
+  ownDomains,
 }: {
   trigger: Trigger;
   domains: DomainGroup[];
   delta: TriggerDelta;
+  ownDomains: readonly RegisteredDomain[];
 }) {
   const { active } = splitSystemDomains(domains, delta);
-  const shownCount = active.length + delta.added.length;
+  const visibleAddedDomains = delta.added
+    .map((d) => ({ domain: d, status: resolveDomainStatus(d, ownDomains) }))
+    .filter(({ status }) => status !== "rejected");
+  const shownCount = active.length + visibleAddedDomains.length;
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-medium text-foreground">
@@ -585,13 +607,8 @@ function ReadOnlyTriggerCard({
               {group.root}
             </span>
           ))}
-          {delta.added.map((d) => (
-            <span
-              key={d}
-              className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
-            >
-              {d}
-            </span>
+          {visibleAddedDomains.map(({ domain: d, status }) => (
+            <DeltaChip key={`add-${d}`} domain={d} variant="added" status={status} />
           ))}
         </div>
       )}
@@ -1084,6 +1101,7 @@ export function InterestsTriggersEditor({
                     trigger={trigger}
                     domains={getTriggerDomains(trigger.id)}
                     delta={deltas[trigger.id] ?? EMPTY_DELTA}
+                    ownDomains={accountSettings.ownDomains}
                   />
                 ))}
             </div>

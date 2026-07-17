@@ -141,6 +141,50 @@ function renderEditorWithModerationControls(
   );
 }
 
+/** Probe (B2.2 fix) — dispatches the real `domain_registered` reducer case
+ *  to seed a domain into the account's own-domain registry as `pending`
+ *  (unknown domains default to pending, same as the add-domain-combobox
+ *  flow). Needed alongside `RejectDomainButton` for the READ-ONLY card test:
+ *  `initialDeltas` only seeds the editor's local delta (`delta.added`), not
+ *  the shared registry — but `resolveDomainStatus` (and hence the rejected
+ *  filter) reads the registry, so the domain must actually be registered
+ *  before it can be resolved to `rejected`. */
+function RegisterDomainButton({ domain }: { domain: string }) {
+  const dispatch = useAppDispatch();
+  return (
+    <button
+      type="button"
+      onClick={() => dispatch({ type: "domain_registered", domain })}
+    >
+      Register {domain}
+    </button>
+  );
+}
+
+/** Renders the READ-ONLY editor (a launched campaign's trigger card) seeded
+ *  with `initialDeltas` added-domains, plus the registry probes above — for
+ *  the B2.2 fix: a domain resolved to `rejected` while the read-only card is
+ *  on screen must disappear from it, same as the editable card. */
+function renderReadOnlyEditorWithModerationControls(
+  rejectDomain: string,
+  props: Partial<EditorProps> = {}
+) {
+  return render(
+    <AppStateProvider>
+      <PromptInputProvider>
+        <PromptChipsProvider>
+          <TriggerEditRegistryProvider>
+            <InterestsTriggersEditor readOnly {...props} />
+            <OwnDomainsDebug />
+            <RegisterDomainButton domain={rejectDomain} />
+            <RejectDomainButton domain={rejectDomain} />
+          </TriggerEditRegistryProvider>
+        </PromptChipsProvider>
+      </PromptInputProvider>
+    </AppStateProvider>
+  );
+}
+
 /** Opens the Nth (0-indexed, in render order) trigger card's «Добавить свой
  *  домен» combobox. */
 function openAddDomainCombobox(index: number) {
@@ -502,6 +546,46 @@ describe("InterestsTriggersEditor — added-domain chip renders by registry stat
     expect(
       screen.queryByRole("button", { name: "Удалить brand-new-site.ru" })
     ).toBeNull();
+  });
+});
+
+describe("InterestsTriggersEditor — read-only trigger card hides rejected domains (B2.2)", () => {
+  afterEach(cleanup);
+
+  it("a rejected added-domain is not rendered in the read-only card; a non-rejected one still is", () => {
+    const rejectedDomain = "brand-new-site.ru";
+    const keptDomain = "still-fine.ru";
+    renderReadOnlyEditorWithModerationControls(rejectedDomain, {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+      initialDeltas: {
+        [firstTrigger.id]: { added: [rejectedDomain, keptDomain], excluded: [] },
+      },
+    });
+
+    // Both added domains render on the READ-ONLY card before moderation
+    // resolves anything (keptDomain is never registered → defaults to
+    // `approved` per `resolveDomainStatus`, same as the editable card).
+    expect(screen.getByText(rejectedDomain)).toBeInTheDocument();
+    expect(screen.getByText(keptDomain)).toBeInTheDocument();
+
+    // Register (→ pending) then resolve to rejected — real reducer, same
+    // moderation flow as the editable-card Task 9 tests above. The launched
+    // campaign's read-only card is what's on screen while this happens.
+    fireEvent.click(
+      screen.getByRole("button", { name: `Register ${rejectedDomain}` })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: `Reject ${rejectedDomain}` })
+    );
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      `${rejectedDomain}:rejected`
+    );
+
+    // B2.2: rejected is NEVER shown in the trigger card — including the
+    // read-only one. The non-rejected domain stays.
+    expect(screen.queryByText(rejectedDomain)).toBeNull();
+    expect(screen.getByText(keptDomain)).toBeInTheDocument();
   });
 });
 
