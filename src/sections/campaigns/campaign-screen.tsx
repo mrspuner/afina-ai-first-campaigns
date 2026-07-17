@@ -14,6 +14,7 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
 import { describeWorkflow } from "@/state/graph-description";
+import { resolveDomainStatus } from "@/lib/domain-add";
 import { useCampaignEditFlow } from "@/sections/shell/use-campaign-edit-flow";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
@@ -36,7 +37,7 @@ function formatDate(iso: string | undefined): string {
 }
 
 export function CampaignScreen() {
-  const { view, campaigns, artifacts, templates } = useAppState();
+  const { view, campaigns, artifacts, templates, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
 
   const campaign =
@@ -79,7 +80,23 @@ export function CampaignScreen() {
   // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
   // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
   // Считается ДО ранних выходов: его же читает хук правки (правила хуков).
-  const descriptionStages = launchGraph ? describeWorkflow(launchGraph, templates) : [];
+  // Судьба доменов (Task 11): статус приходит из реестра (`ownDomains`),
+  // домены — из `triggerConfig.added`; только "pending" всплывает в описании.
+  const pendingDomains = campaign
+    ? [
+        ...new Set(
+          Object.values(campaign.triggerConfig ?? {})
+            .flatMap((delta) => delta.added)
+            .filter(
+              (domain) =>
+                resolveDomainStatus(domain, accountSettings.ownDomains) === "pending",
+            ),
+        ),
+      ]
+    : [];
+  const descriptionStages = launchGraph
+    ? describeWorkflow(launchGraph, templates, { pending: pendingDomains })
+    : [];
   // Модель получает то же описание, что видит пользователь, — не JSON графа.
   const descriptionText = descriptionStages
     .map((s) => `${s.heading} ${s.body}`)

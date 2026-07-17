@@ -23,6 +23,36 @@ describe("describeWorkflow", () => {
     });
   });
 
+  describe("Судьба доменов на модерации (Task 11)", () => {
+    const graphWithScoring = createTemplate("Возврат", "new", ["sms"]);
+
+    it("appends the domain-fate line when there are pending domains", () => {
+      const stages = describeWorkflow(graphWithScoring, [], { pending: ["my.ru"] });
+      const start = stages.find((s) => s.id === "start")!;
+      expect(start.body).toContain("отправлены на модерацию");
+    });
+
+    it("не добавляет строку судьбы доменов, когда pending пуст", () => {
+      const stages = describeWorkflow(graphWithScoring, T, { pending: [] });
+      const start = stages.find((s) => s.id === "start")!;
+      expect(start.body).not.toContain("отправлены на модерацию");
+    });
+
+    it("не добавляет строку судьбы доменов, когда domainStatuses не передан", () => {
+      const stages = describeWorkflow(graphWithScoring, T);
+      const start = stages.find((s) => s.id === "start")!;
+      expect(start.body).not.toContain("отправлены на модерацию");
+    });
+
+    it("перечисляет все pending-домены через запятую в точной формулировке", () => {
+      const stages = describeWorkflow(graphWithScoring, T, { pending: ["a.ru", "b.ru"] });
+      const start = stages.find((s) => s.id === "start")!;
+      expect(start.body).toContain(
+        "Домены a.ru, b.ru отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании",
+      );
+    });
+  });
+
   describe("Первое касание", () => {
     it("даёт по одной строке на канал: имя шаблона + текст из params", () => {
       const stages = describeWorkflow(
