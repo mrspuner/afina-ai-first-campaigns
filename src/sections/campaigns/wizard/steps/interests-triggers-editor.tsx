@@ -13,12 +13,17 @@ import { Check, Plus, X, Undo2 } from "lucide-react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { VERTICALS, getInterestById } from "@/data/triggers-by-vertical";
 import { getInterestsForDirection } from "@/data/interests-by-direction";
-import { getTriggerDomains } from "@/data/trigger-domains";
+import { getTriggerDomains, type DomainGroup } from "@/data/trigger-domains";
 import {
   PREVIEW_VISIBLE_COUNT,
   previewDomains,
   splitSystemDomains,
 } from "@/lib/trigger-domain-view";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Interest, Trigger, Vertical } from "@/types/directions";
 import type { TriggerConfig } from "@/types/campaign";
 import {
@@ -240,9 +245,15 @@ function DeltaChip({
   );
 }
 
+/** How many system domain groups the EXPANDED trigger card shows inline
+ *  before collapsing the rest into a "+N" chip (click reveals the rest).
+ *  Distinct from `PREVIEW_VISIBLE_COUNT` (3), which governs the COLLAPSED
+ *  one-line preview only. */
+const EXPANDED_VISIBLE_GROUP_COUNT = 10;
+
 interface TriggerCardProps {
   trigger: Trigger;
-  domains: string[];
+  domains: DomainGroup[];
   selected: boolean;
   delta: TriggerDelta;
   highlight: boolean;
@@ -255,42 +266,82 @@ interface TriggerCardProps {
 }
 
 /**
- * Chip for a SYSTEM domain in the expanded trigger card.
- *  - active   → neutral chip with ✕; ✕ excludes the domain (reversible).
- *  - excluded → struck-through red chip with ↩; click restores the domain.
- * System data is never deleted — exclusion lives in the user-layer delta.
+ * Chip for a SYSTEM domain GROUP in the expanded trigger card.
+ *  - active   → neutral chip with ✕; ✕ excludes the WHOLE group (reversible).
+ *  - excluded → struck-through red chip with ↩; click restores the group.
+ * Label is the group's `root`; a muted (never brand-yellow) " ·N" counter is
+ * appended when the group has subdomains. Clicking the label (when there are
+ * subdomains to show) opens a tooltip listing them — a read-only preview, no
+ * per-subdomain controls. System data is never deleted — exclusion lives in
+ * the user-layer delta, keyed by `root`.
  */
 function SystemDomainChip({
-  domain,
+  group,
   excluded,
   onExclude,
   onRestore,
 }: {
-  domain: string;
+  group: DomainGroup;
   excluded: boolean;
   onExclude: () => void;
   onRestore: () => void;
 }) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const hasSubdomains = group.subdomains.length > 0;
+
   if (excluded) {
     return (
       <button
         type="button"
         onClick={onRestore}
-        aria-label={`Вернуть ${domain}`}
+        aria-label={`Вернуть ${group.root}`}
         className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 font-mono text-xs text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
       >
-        <span className="line-through">{domain}</span>
+        <span className="line-through">{group.root}</span>
         <Undo2 className="h-3 w-3 opacity-70" />
       </button>
     );
   }
+
+  const label = (
+    <>
+      {group.root}
+      {hasSubdomains && (
+        <span className="text-muted-foreground"> ·{group.subdomains.length}</span>
+      )}
+    </>
+  );
+
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85">
-      {domain}
+      {hasSubdomains ? (
+        <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={() => setTooltipOpen((v) => !v)}
+                aria-label={`Поддомены ${group.root}`}
+              />
+            }
+          >
+            {label}
+          </TooltipTrigger>
+          <TooltipContent side="top" align="start">
+            <ul className="flex flex-col gap-0.5 font-mono">
+              {group.subdomains.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <span>{label}</span>
+      )}
       <button
         type="button"
         onClick={onExclude}
-        aria-label={`Исключить ${domain}`}
+        aria-label={`Исключить ${group.root}`}
         className="opacity-50 transition-opacity hover:opacity-100"
       >
         <X className="h-3 w-3" />
@@ -321,6 +372,15 @@ function TriggerCard({
     activeSystemDomains,
     PREVIEW_VISIBLE_COUNT
   );
+  // Expanded card: first EXPANDED_VISIBLE_GROUP_COUNT groups (all of them —
+  // active + excluded, same order as the system list), then a "+N" chip that
+  // reveals the rest on click. Local + one-way (no re-collapse) — this is a
+  // reveal affordance, not a toggle.
+  const [allGroupsShown, setAllGroupsShown] = useState(false);
+  const visibleGroups = allGroupsShown
+    ? domains
+    : domains.slice(0, EXPANDED_VISIBLE_GROUP_COUNT);
+  const groupOverflowCount = domains.length - EXPANDED_VISIBLE_GROUP_COUNT;
 
   return (
     <div
@@ -379,12 +439,12 @@ function TriggerCard({
           aria-label="Выбрать и раскрыть триггер"
           className="flex w-full flex-wrap items-center gap-1.5 border-t border-primary/20 bg-background/40 px-3 py-3 text-left"
         >
-          {collapsedPreview.visible.map((d) => (
+          {collapsedPreview.visible.map((group) => (
             <span
-              key={d}
+              key={group.root}
               className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
             >
-              {d}
+              {group.root}
             </span>
           ))}
           {collapsedPreview.overflowCount > 0 && (
@@ -395,23 +455,35 @@ function TriggerCard({
         </button>
       )}
 
-      {/* Expanded (selected): every domain as a chip. System domains carry a
-          reversible ✕; user-added domains are green chips; the dashed button
-          adds a new domain via the prompt bar. */}
+      {/* Expanded (selected): first EXPANDED_VISIBLE_GROUP_COUNT domain GROUPS
+          as chips, then (if more exist) a "+N" chip revealing the rest, then
+          user-added domains as green chips, then the dashed button that adds
+          a new domain via the prompt bar. System domain groups carry a
+          reversible ✕ that excludes the whole group. */}
       {selected && (
         <div className="animate-in fade-in-0 slide-in-from-top-1 border-t border-primary/20 bg-background/40 px-3 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            {domains.map((d) => (
+            {visibleGroups.map((group) => (
               <SystemDomainChip
-                key={`sys-${d}`}
-                domain={d}
+                key={`sys-${group.root}`}
+                group={group}
                 excluded={excludedSystemDomains.some(
-                  (e) => e.toLowerCase() === d.toLowerCase()
+                  (e) => e.root.toLowerCase() === group.root.toLowerCase()
                 )}
-                onExclude={() => onExcludeSystemDomain(d)}
-                onRestore={() => onRestoreSystemDomain(d)}
+                onExclude={() => onExcludeSystemDomain(group.root)}
+                onRestore={() => onRestoreSystemDomain(group.root)}
               />
             ))}
+            {!allGroupsShown && groupOverflowCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAllGroupsShown(true)}
+                aria-label={`Показать ещё ${groupOverflowCount} доменов`}
+                className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
+              >
+                +{groupOverflowCount}
+              </button>
+            )}
             {delta.added.map((d) => (
               <DeltaChip
                 key={`add-${d}`}
@@ -443,19 +515,27 @@ function ReadOnlyTriggerCard({
   delta,
 }: {
   trigger: Trigger;
-  domains: string[];
+  domains: DomainGroup[];
   delta: TriggerDelta;
 }) {
   const { active } = splitSystemDomains(domains, delta);
-  const shown = [...active, ...delta.added];
+  const shownCount = active.length + delta.added.length;
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-medium text-foreground">
         {trigger.label}
       </div>
-      {shown.length > 0 && (
+      {shownCount > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-background/40 px-3 py-3">
-          {shown.map((d) => (
+          {active.map((group) => (
+            <span
+              key={group.root}
+              className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
+            >
+              {group.root}
+            </span>
+          ))}
+          {delta.added.map((d) => (
             <span
               key={d}
               className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
@@ -841,12 +921,14 @@ export function InterestsTriggersEditor({
       // Scope to the active trigger when given (its tag is in the bar),
       // otherwise fall back to all selected triggers.
       const scope = triggerId ? [triggerId] : selectedTriggersRef.current;
-      // Pool of currently-active system domains for the scoped trigger(s).
+      // Pool of currently-active system domain GROUPS for the scoped
+      // trigger(s), keyed by root (excluding a domain here excludes its
+      // whole group, same as the ✕ on SystemDomainChip).
       const pool: Array<{ triggerId: string; domain: string }> = [];
       for (const tId of scope) {
         const delta = deltasRef.current[tId] ?? EMPTY_DELTA;
         const { active } = splitSystemDomains(getTriggerDomains(tId), delta);
-        for (const domain of active) pool.push({ triggerId: tId, domain });
+        for (const group of active) pool.push({ triggerId: tId, domain: group.root });
       }
       if (pool.length === 0) return 0;
 
@@ -891,7 +973,10 @@ export function InterestsTriggersEditor({
       ),
       domainsByTrigger: Object.fromEntries(
         interestsForDirection.flatMap((i) =>
-          i.triggers.map((t) => [t.id, getTriggerDomains(t.id)])
+          i.triggers.map((t) => [
+            t.id,
+            getTriggerDomains(t.id).map((g) => g.root),
+          ])
         )
       ),
     };

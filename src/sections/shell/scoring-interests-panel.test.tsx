@@ -20,7 +20,8 @@ vi.mock("next/image", () => ({
 const financeInterests = resolveInterestsForDirection("finance");
 const interest = financeInterests[0];
 const trigger = interest.triggers[0];
-const domain = getTriggerDomains(trigger.id)[0];
+const domainGroup = getTriggerDomains(trigger.id)[0];
+const domain = domainGroup.root;
 
 const dispatchSpy = vi.fn();
 let scoringDrawer = {

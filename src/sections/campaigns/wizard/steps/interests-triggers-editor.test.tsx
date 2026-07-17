@@ -25,7 +25,8 @@ vi.mock("next/image", () => ({
 const financeInterests = resolveInterestsForDirection("finance");
 const firstInterest = financeInterests[0];
 const firstTrigger = firstInterest.triggers[0];
-const firstDomain = getTriggerDomains(firstTrigger.id)[0];
+const firstDomainGroup = getTriggerDomains(firstTrigger.id)[0];
+const firstDomain = firstDomainGroup.root;
 
 type EditorProps = React.ComponentProps<typeof InterestsTriggersEditor>;
 
