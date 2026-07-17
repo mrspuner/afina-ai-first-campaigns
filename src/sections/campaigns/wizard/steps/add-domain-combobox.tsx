@@ -15,7 +15,10 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { availableRegisteredDomains } from "@/lib/domain-add";
+import {
+  availableRegisteredDomains,
+  normalizeDomainInput,
+} from "@/lib/domain-add";
 
 export interface AddDomainComboboxProps {
   /** Domains already in THIS trigger's `delta.added` — excluded from the
@@ -54,11 +57,14 @@ export function AddDomainCombobox({
   );
 
   const trimmed = query.trim();
-  const addedLower = new Set(alreadyAdded.map((d) => d.toLowerCase()));
+  const normalizedTrimmed = normalizeDomainInput(trimmed);
+  const addedNormalized = new Set(
+    alreadyAdded.map((d) => normalizeDomainInput(d))
+  );
   const showCustom =
     trimmed.length > 0 &&
-    !available.some((d) => d.toLowerCase() === trimmed.toLowerCase()) &&
-    !addedLower.has(trimmed.toLowerCase());
+    !available.some((d) => normalizeDomainInput(d) === normalizedTrimmed) &&
+    !addedNormalized.has(normalizedTrimmed);
 
   function reset() {
     setQuery("");

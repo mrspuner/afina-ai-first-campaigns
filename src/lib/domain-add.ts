@@ -48,8 +48,11 @@ export interface TypedDomainClassification {
 
 /**
  * Normalize + classify a free-typed domain against the known trigger-domain
- * roots. The caller is responsible for the actual routing (add to
- * `delta.added` always; dispatch `domain_registered` only when `!isKnown`).
+ * roots. The caller is responsible for the actual routing: add to
+ * `delta.added` always, and dispatch `domain_registered` unconditionally too
+ * (B2.5 — every user-added domain lives in the registry; `isKnown` just
+ * predicts whether that dispatch lands `approved` or `pending`, the reducer
+ * is idempotent either way).
  */
 export function classifyTypedDomain(
   raw: string,

@@ -318,7 +318,7 @@ describe("InterestsTriggersEditor — add-domain combobox (Task 8)", () => {
     );
   });
 
-  it("typing a domain that IS a known trigger-domain root (from another trigger) adds it active WITHOUT registering it", async () => {
+  it("typing a domain that IS a known trigger-domain root (from another trigger) adds it active AND registers it as approved", async () => {
     const onChange = vi.fn();
     renderEditorWithRegistryDebug({
       initialInterestIds: [firstInterest.id],
@@ -343,8 +343,11 @@ describe("InterestsTriggersEditor — add-domain combobox (Task 8)", () => {
         }),
       })
     );
-    // Known root → no registry entry created at all.
-    expect(screen.getByTestId("own-domains").textContent).toBe("");
+    // Known root → still registered (B2.5: single source of truth), but
+    // idempotently routed straight to `approved`.
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "zakupki.gov.ru:approved"
+    );
   });
 
   it("typing an unknown domain registers it as pending in the account registry and adds it as a delta chip", async () => {

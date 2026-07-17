@@ -895,20 +895,22 @@ export function InterestsTriggersEditor({
   // the registry (`accountSettings.ownDomains`) at render time.
   //   - Picking a PREVIOUSLY-REGISTERED domain (from the directory list)
   //     needs no (re-)registration — it's already in the registry.
-  //   - Free-typed input is normalized + classified against the known
-  //     trigger-domain roots: a known root is added directly (inherently
-  //     approved, same as system domains); anything else is registered via
-  //     `domain_registered` (→ pending in the registry) before being added.
+  //   - Free-typed input is normalized + always registered via
+  //     `domain_registered` before being added (B2.5: every user-added
+  //     domain lives in the registry, one source of truth). A known
+  //     trigger-domain root routes to `approved` there (same reducer,
+  //     idempotent for already-registered domains); anything else lands
+  //     `pending`.
   function addRegisteredDomainToTrigger(triggerId: string, domain: string) {
     handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
   function addTypedDomainToTrigger(triggerId: string, raw: string) {
-    const { domain, isKnown } = classifyTypedDomain(raw, knownRoots);
+    const { domain } = classifyTypedDomain(raw, knownRoots);
     if (!domain) return;
-    if (!isKnown) {
-      dispatch({ type: "domain_registered", domain });
-    }
+    // B2.5: every user-added domain lives in the registry — known roots
+    // route to `approved` there (idempotent, see `domain_registered`).
+    dispatch({ type: "domain_registered", domain });
     handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
