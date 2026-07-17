@@ -26,6 +26,7 @@ import { getCachedGraph } from "./workflow-graph-cache";
 import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
+import { CampaignScenarioNodeBlock } from "./campaign-scenario-node-block";
 import { StatusBadge } from "./status-badge";
 import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
@@ -198,10 +199,12 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Как работает кампания — описание и мини-граф про одно и то же, поэтому
-          живут в одном блоке: текст → «Изменить» (правка идёт через текст) →
-          кликабельная миниатюра, открывающая полный граф. */}
-      <CardSection label="Как работает кампания">
+      {/* Сценарий кампании — описание, нодо-блок «Старта» (артефакты: база /
+          интересы-триггеры или файл сигнала) и мини-граф про одно и то же,
+          поэтому живут в одном блоке: текст → «Изменить» (правка идёт через
+          текст) → нодо-блок (правка артефактов, без ИИ) → кликабельная
+          миниатюра, открывающая полный граф. */}
+      <CardSection label="Сценарий кампании">
         <div className="flex flex-col gap-5">
           {/* Правка — только до запуска (статус «Не запущена»), как read-only
               режим скоринг-дровера у запущенной кампании. */}
@@ -213,6 +216,17 @@ export function CampaignScreen() {
             onSubmitEdit={editFlow.submit}
             onCancelEdit={editFlow.cancel}
           />
+          {/* Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
+              (own), стилизован под соответствующую ноду графа. Правка
+              артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
+              read-only после запуска. Показываем только когда граф вообще
+              есть (тот же граф, что уже описан текстом выше). */}
+          {descriptionStages.length > 0 && (
+            <CampaignScenarioNodeBlock
+              campaign={campaign}
+              readOnly={status !== "draft"}
+            />
+          )}
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Граф кампании

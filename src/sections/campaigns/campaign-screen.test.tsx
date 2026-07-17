@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
 import {
   AppStateProvider,
@@ -68,10 +68,10 @@ function renderCampaign(campaign: Campaign) {
   );
 }
 
-describe("CampaignScreen — блок «Как работает кампания»", () => {
+describe("CampaignScreen — блок «Сценарий кампании»", () => {
   it("заменяет секцию «Workflow» на объединённый блок с описанием", () => {
     renderCampaign(baseCampaign({ id: "cmp_desc", channels: ["sms"] }));
-    expect(screen.getByText("Как работает кампания")).toBeInTheDocument();
+    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
     expect(screen.queryByText("Workflow")).not.toBeInTheDocument();
   });
 
@@ -100,7 +100,7 @@ describe("CampaignScreen — блок «Как работает кампания
       }),
     );
     // Описание остаётся — read-only, как у скоринг-дровера launched-кампании.
-    expect(screen.getByText("Как работает кампания")).toBeInTheDocument();
+    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
   });
 
@@ -118,7 +118,7 @@ describe("CampaignScreen — блок «Как работает кампания
     const { container } = renderCampaign(
       baseCampaign({ id: "cmp_desc_order", channels: ["sms"] }),
     );
-    const section = screen.getByText("Как работает кампания").closest("section")!;
+    const section = screen.getByText("Сценарий кампании").closest("section")!;
     const edit = screen.getByRole("button", { name: "Изменить" });
     const graph = container.querySelector(".react-flow")!;
 
@@ -135,6 +135,67 @@ describe("CampaignScreen — блок «Как работает кампания
     expect(screen.getByText("Старт.")).toBeInTheDocument();
     expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
+  });
+});
+
+describe("CampaignScreen — нодо-блок «Старт» (A2.1 — скоринг/сигнал)", () => {
+  it("new/stream (черновик): нодо-блок скоринга — «База» с файлами, «Добавить файл» и сводка интересов/триггеров", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_node_scoring",
+        sourceType: "new",
+        files: [{ name: "base-1.csv", rowCount: 1200 }],
+        interests: ["Кредитование"],
+        triggers: ["Заявка на кредит"],
+      }),
+    );
+    // Scoped to the node-block: the mini-preview graph below ALSO renders a
+    // «Скоринг»/«Сигнал» node label (aria-hidden, but text queries still see
+    // it), so an unscoped getByText would match twice.
+    const block = within(screen.getByTestId("scenario-node-block"));
+    expect(block.getByText("Скоринг")).toBeInTheDocument();
+    expect(block.getByText("base-1.csv")).toBeInTheDocument();
+    expect(block.getByRole("button", { name: "Добавить файл" })).toBeInTheDocument();
+    expect(block.getByText("1 интерес, 1 триггер")).toBeInTheDocument();
+  });
+
+  it("own (черновик): нодо-блок сигнала — файл, без строки «Интересы и триггеры»", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_node_signal",
+        sourceType: "own",
+        files: [{ name: "crm-export.csv", rowCount: 500 }],
+      }),
+    );
+    const block = within(screen.getByTestId("scenario-node-block"));
+    expect(block.getByText("Сигнал")).toBeInTheDocument();
+    expect(block.getByText("crm-export.csv")).toBeInTheDocument();
+    expect(block.queryByText("Интересы и триггеры")).not.toBeInTheDocument();
+    expect(block.queryByText("Скоринг")).not.toBeInTheDocument();
+  });
+
+  it("запущенная кампания: нодо-блок скоринга read-only — файлы видны, «Добавить файл» и удаление нет", () => {
+    renderCampaign(
+      baseCampaign({
+        id: "cmp_node_readonly",
+        sourceType: "new",
+        status: "active",
+        phase: "communicating",
+        launchedAt: "2026-06-02T00:00:00.000Z",
+        files: [{ name: "base-1.csv", rowCount: 1200 }],
+      }),
+    );
+    const block = within(screen.getByTestId("scenario-node-block"));
+    expect(block.getByText("base-1.csv")).toBeInTheDocument();
+    expect(
+      block.queryByRole("button", { name: "Добавить файл" }),
+    ).not.toBeInTheDocument();
+    expect(
+      block.queryByRole("button", { name: /Удалить файл/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      block.getByRole("button", { name: "Показать интересы и триггеры" }),
+    ).toBeInTheDocument();
   });
 });
 

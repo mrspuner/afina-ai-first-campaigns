@@ -89,10 +89,10 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   await page.getByRole("button", { name: "Далее" }).last().click();
 
   // 10. Campaign card (draft) — the wizard lands here, not in the graph editor.
-  //     Its «Как работает кампания» block carries the mini-graph; the card's
+  //     Its «Сценарий кампании» block carries the mini-graph; the card's
   //     «Запустить» validates the graph and routes to the payment screen (a
   //     routing hop, not the launch).
-  await expect(page.getByText("Как работает кампания")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
   await page
     .locator('[data-slot="button"]')

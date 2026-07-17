@@ -101,9 +101,9 @@ async function createCampaignViaWizard(
   // Финал визарда приземляет в карточку кампании. Её мини-граф рендерит тот же
   // launchGraph, поэтому проверять состав нод надо в ПОЛНОМ редакторе, иначе
   // тест молча смотрел бы на превью.
-  await expect(page.getByText("Как работает кампания")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 8_000 });
   await page.getByRole("button", { name: "Открыть workflow" }).click();
-  await expect(page.getByText("Как работает кампания")).toHaveCount(0);
+  await expect(page.getByText("Сценарий кампании")).toHaveCount(0);
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 8_000 });
 }
 
