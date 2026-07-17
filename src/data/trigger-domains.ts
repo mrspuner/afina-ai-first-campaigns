@@ -1,6 +1,18 @@
 import type { TriggerId } from "@/types/directions";
 
 /**
+ * Группа доменов: корневой домен + его поддомены (напр. `sberbank.ru` +
+ * `online.sberbank.ru`). View-логика (splitSystemDomains/previewDomains в
+ * trigger-domain-view.ts) работает по группам, а не по плоскому списку
+ * строк — сравнение/партиционирование идёт по `root`, поддомены следуют
+ * за своей группой.
+ */
+export interface DomainGroup {
+  root: string;
+  subdomains: string[];
+}
+
+/**
  * Дефолтный набор доменов, входящих в каждый триггер. Раскрывается в карточке
  * триггера на step-2 (см. docs/triggers-ai-edit-ux.md). Это «магия Afina» —
  * пользователь может просмотреть, какие сайты считаются сигналом интента.
