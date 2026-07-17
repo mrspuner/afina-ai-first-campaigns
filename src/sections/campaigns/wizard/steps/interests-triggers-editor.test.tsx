@@ -6,7 +6,11 @@ import {
   resolveSelectionIds,
 } from "./interests-triggers-editor";
 import { getTriggerDomains } from "@/data/trigger-domains";
-import { AppStateProvider, useAppState } from "@/state/app-state-context";
+import {
+  AppStateProvider,
+  useAppState,
+  useAppDispatch,
+} from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { TriggerEditRegistryProvider } from "@/state/trigger-edit-context";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
@@ -88,6 +92,48 @@ function renderEditorWithRegistryDebug(props: Partial<EditorProps> = {}) {
           <TriggerEditRegistryProvider>
             <InterestsTriggersEditor {...props} />
             <OwnDomainsDebug />
+          </TriggerEditRegistryProvider>
+        </PromptChipsProvider>
+      </PromptInputProvider>
+    </AppStateProvider>
+  );
+}
+
+/** Probe (Task 9) — dispatches the real `domain_moderation_resolved` reducer
+ *  case to flip a registered domain to `rejected`, so tests can assert the
+ *  trigger card hides it WITHOUT storing status on the delta itself (the
+ *  registry, `AccountSettings.ownDomains`, stays the single source of
+ *  truth). Real reducer, no mocking — same pattern as `OwnDomainsDebug`. */
+function RejectDomainButton({ domain }: { domain: string }) {
+  const dispatch = useAppDispatch();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        dispatch({
+          type: "domain_moderation_resolved",
+          approved: [],
+          rejected: [domain],
+        })
+      }
+    >
+      Reject {domain}
+    </button>
+  );
+}
+
+function renderEditorWithModerationControls(
+  rejectDomain: string,
+  props: Partial<EditorProps> = {}
+) {
+  return render(
+    <AppStateProvider>
+      <PromptInputProvider>
+        <PromptChipsProvider>
+          <TriggerEditRegistryProvider>
+            <InterestsTriggersEditor {...props} />
+            <OwnDomainsDebug />
+            <RejectDomainButton domain={rejectDomain} />
           </TriggerEditRegistryProvider>
         </PromptChipsProvider>
       </PromptInputProvider>
@@ -373,6 +419,89 @@ describe("InterestsTriggersEditor — add-domain combobox (Task 8)", () => {
     expect(screen.getByTestId("own-domains").textContent).toBe(
       "brand-new-site.ru:pending"
     );
+  });
+});
+
+describe("InterestsTriggersEditor — added-domain chip renders by registry status (Task 9)", () => {
+  afterEach(cleanup);
+
+  it("an added domain with pending registry status renders the clock affordance and no status text", async () => {
+    renderEditorWithModerationControls("brand-new-site.ru", {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+
+    // "brand-new-site.ru" is unknown → lands `pending` in the registry
+    // (same flow exercised in the Task 8 describe block above).
+    openAddDomainCombobox(0);
+    const input = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input, { target: { value: "brand-new-site.ru" } });
+    fireEvent.click(await screen.findByText("Добавить «brand-new-site.ru»"));
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "brand-new-site.ru:pending"
+    );
+
+    // The chip itself (the domain text's immediate parent <span>) carries the
+    // clock icon and the amber warning tone, with NO extra status text — the
+    // chip's only text content is the domain name.
+    const chip = screen.getByText("brand-new-site.ru").parentElement!;
+    expect(chip.querySelector("svg.lucide-clock")).not.toBeNull();
+    expect(chip.className).toMatch(/amber/);
+    expect(chip.className).not.toMatch(/emerald/);
+    // Not the brand yellow CTA token (PRODUCT.md reserves `--brand`/`#FFEC00`
+    // for CTA/AI signal) — a distinct warning tone.
+    expect(chip.className).not.toMatch(/\bbrand\b/);
+    expect(chip.textContent).toBe("brand-new-site.ru");
+  });
+
+  it("an added domain with approved registry status renders green, no clock", async () => {
+    renderEditorWithModerationControls("zakupki.gov.ru", {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+
+    // "zakupki.gov.ru" is a KNOWN trigger-domain root (a different vertical)
+    // → registers as `approved` immediately (same flow as the Task 8 test).
+    openAddDomainCombobox(0);
+    const input = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input, { target: { value: "zakupki.gov.ru" } });
+    fireEvent.click(await screen.findByText("Добавить «zakupki.gov.ru»"));
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "zakupki.gov.ru:approved"
+    );
+
+    const chip = screen.getByText("zakupki.gov.ru").parentElement!;
+    expect(chip.querySelector("svg.lucide-clock")).toBeNull();
+    expect(chip.className).toMatch(/emerald/);
+    expect(chip.className).not.toMatch(/amber/);
+  });
+
+  it("an added domain whose registry status is resolved to rejected disappears from the trigger card", async () => {
+    renderEditorWithModerationControls("brand-new-site.ru", {
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+
+    openAddDomainCombobox(0);
+    const input = await screen.findByPlaceholderText("Домен (example.ru)");
+    fireEvent.change(input, { target: { value: "brand-new-site.ru" } });
+    fireEvent.click(await screen.findByText("Добавить «brand-new-site.ru»"));
+    expect(screen.getByText("brand-new-site.ru")).toBeInTheDocument();
+
+    // Moderation resolves the domain to `rejected` — the registry updates,
+    // but the delta itself is untouched (status is never stored there).
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reject brand-new-site.ru" })
+    );
+    expect(screen.getByTestId("own-domains").textContent).toBe(
+      "brand-new-site.ru:rejected"
+    );
+
+    // Hidden from the trigger card entirely — not just re-colored.
+    expect(screen.queryByText("brand-new-site.ru")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Удалить brand-new-site.ru" })
+    ).toBeNull();
   });
 });
 

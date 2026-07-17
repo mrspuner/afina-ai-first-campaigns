@@ -9,6 +9,8 @@
  * combobox's React wiring.
  */
 
+import type { DomainStatus } from "@/types/account-settings";
+
 /**
  * Normalize a typed domain: trim whitespace, lowercase, strip a leading
  * `www.`, strip a trailing dot. Does NOT strip protocols/paths — the
@@ -82,4 +84,21 @@ export function availableRegisteredDomains(
     out.push(domain);
   }
   return out.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Resolve a domain's moderation status from the registry (Task 9) — status
+ * is NEVER stored on the delta, only looked up here at render time.
+ * Case-insensitive, matching the registry's own matching convention. A
+ * domain absent from the registry (shouldn't happen after Task 8, since
+ * every added domain is registered on the way in) defensively resolves to
+ * `"approved"` rather than crashing or hiding it.
+ */
+export function resolveDomainStatus(
+  domain: string,
+  ownDomains: readonly { domain: string; status: DomainStatus }[]
+): DomainStatus {
+  const lower = domain.toLowerCase();
+  const found = ownDomains.find((d) => d.domain.toLowerCase() === lower);
+  return found ? found.status : "approved";
 }

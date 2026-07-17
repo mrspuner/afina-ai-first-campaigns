@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, X, Undo2 } from "lucide-react";
+import { Check, X, Undo2, Clock } from "lucide-react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { VERTICALS, getInterestById } from "@/data/triggers-by-vertical";
 import { getInterestsForDirection } from "@/data/interests-by-direction";
@@ -37,13 +37,14 @@ import {
   type ParsedTriggerCommand,
   type TriggerDelta,
 } from "@/lib/trigger-edit-parser";
-import { classifyTypedDomain } from "@/lib/domain-add";
+import { classifyTypedDomain, resolveDomainStatus } from "@/lib/domain-add";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
 import { InterestChip } from "@/sections/campaigns/interest-chip";
 import { AddDomainCombobox } from "./add-domain-combobox";
 import { cn } from "@/lib/utils";
+import type { DomainStatus, RegisteredDomain } from "@/types/account-settings";
 
 /** Return a copy of `obj` without the given key. Avoids the
  *  `const { [k]: _, ...rest } = obj` pattern that triggers
@@ -216,27 +217,44 @@ function ReadOnlySectionHeader({ label }: { label: string }) {
   );
 }
 
+/**
+ * Chip for a user-layer domain delta (added or excluded). Added-domain color
+ * is driven by its registry status (Task 9) — `status` is only meaningful
+ * for `variant: "added"` (excluded domains have no moderation status, they
+ * always render as the rose "removed" tone). `pending` renders a distinct
+ * warning tone (amber — NOT the brand yellow `--brand`, which PRODUCT.md
+ * reserves for CTA/AI signal) with a clock icon replacing any status text —
+ * the domain name is the only label. `rejected` is never passed in here: the
+ * caller filters those out of the render list entirely (Task 9 — hidden from
+ * the trigger card), so this component never needs to handle it.
+ */
 function DeltaChip({
   domain,
   variant,
+  status,
   onRemove,
 }: {
   domain: string;
   variant: "added" | "excluded";
+  status?: DomainStatus;
   onRemove: () => void;
 }) {
+  const isPending = variant === "added" && status === "pending";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs",
-        variant === "added"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+        variant === "excluded"
+          ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+          : isPending
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
       )}
     >
       <span className={cn(variant === "excluded" && "line-through")}>
         {domain}
       </span>
+      {isPending && <Clock className="h-3 w-3 opacity-70" aria-hidden />}
       <button
         type="button"
         onClick={onRemove}
@@ -269,6 +287,11 @@ interface TriggerCardProps {
   /** Account's previously-registered own-domains (any status) — the
    *  «Добавить свой домен» combobox's directory list (Task 8). */
   registeredDomains: readonly string[];
+  /** The full domain registry (Task 9) — looked up per `delta.added` entry
+   *  to decide the chip's color/icon (pending) or whether it renders at all
+   *  (rejected). Single source of truth; status is never stored on the
+   *  delta itself. */
+  ownDomains: readonly RegisteredDomain[];
   onSelectRegisteredDomain: (domain: string) => void;
   onSubmitTypedDomain: (raw: string) => void;
 }
@@ -381,6 +404,7 @@ function TriggerCard({
   onExcludeSystemDomain,
   onRestoreSystemDomain,
   registeredDomains,
+  ownDomains,
   onSelectRegisteredDomain,
   onSubmitTypedDomain,
 }: TriggerCardProps) {
@@ -388,6 +412,12 @@ function TriggerCard({
   // editable; an unselected one is collapsed to a read-only domain preview.
   const { active: activeSystemDomains, excluded: excludedSystemDomains } =
     splitSystemDomains(domains, delta);
+  // Task 9: resolve each added domain's registry status, then drop rejected
+  // ones entirely (hidden from the trigger card) — never rendered as a
+  // DeltaChip, reversible only from the (out-of-scope) moderation surface.
+  const visibleAddedDomains = delta.added
+    .map((d) => ({ domain: d, status: resolveDomainStatus(d, ownDomains) }))
+    .filter(({ status }) => status !== "rejected");
   // Collapsed preview: first PREVIEW_VISIBLE_COUNT active domains as chips + "+N".
   const collapsedPreview = previewDomains(
     activeSystemDomains,
@@ -505,11 +535,12 @@ function TriggerCard({
                 +{groupOverflowCount}
               </button>
             )}
-            {delta.added.map((d) => (
+            {visibleAddedDomains.map(({ domain: d, status }) => (
               <DeltaChip
                 key={`add-${d}`}
                 domain={d}
                 variant="added"
+                status={status}
                 onRemove={() => onRemoveDelta("added", d)}
               />
             ))}
@@ -1122,6 +1153,7 @@ export function InterestsTriggersEditor({
                 handleRestoreSystemDomain(trigger.id, domain)
               }
               registeredDomains={registeredDomains}
+              ownDomains={accountSettings.ownDomains}
               onSelectRegisteredDomain={(domain) =>
                 addRegisteredDomainToTrigger(trigger.id, domain)
               }
