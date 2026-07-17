@@ -119,6 +119,40 @@ describe("InterestsTriggersEditor — wizard/drawer parity", () => {
     );
   });
 
+  it("prunes triggerConfig for a trigger once it's deselected (no orphan entry survives)", () => {
+    const onChange = vi.fn();
+    renderEditor({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+      onChange,
+    });
+
+    // Exclude a system domain — the trigger is still selected, so its delta
+    // IS surfaced in the emitted triggerConfig.
+    fireEvent.click(
+      screen.getByRole("button", { name: `Исключить ${firstDomain}` })
+    );
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        triggers: [firstTrigger.label],
+        triggerConfig: {
+          [firstTrigger.id]: { added: [], excluded: [firstDomain] },
+        },
+      })
+    );
+
+    // Deselect the trigger via its checkbox — the orphaned delta entry must
+    // NOT survive into the emitted payload (it has no matching `triggers`
+    // label), or a later persist would leak the excluded domain forward.
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Снять выбор триггера" })
+    );
+    const lastPayload = onChange.mock.calls.at(-1)?.[0];
+    expect(lastPayload.triggers).toEqual([]);
+    expect(lastPayload.triggerConfig).toEqual({});
+    expect(lastPayload.triggerConfig).not.toHaveProperty(firstTrigger.id);
+  });
+
   it("read-only mode renders selected interests as static text (no toggles)", () => {
     renderEditor({
       initialInterestIds: [firstInterest.id],

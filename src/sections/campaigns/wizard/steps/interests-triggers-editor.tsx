@@ -722,11 +722,20 @@ export function InterestsTriggersEditor({
       .map((id) => interestsForDirection.find((i) => i.id === id)?.label)
       .filter((l): l is string => Boolean(l));
     const triggerLabels: string[] = [];
+    // Only surface config for triggers currently selected — `deltas` retains
+    // entries for deselected triggers (so reselecting within the session
+    // restores them), but the emitted payload must prune them, or a leaked
+    // orphan entry (no matching `triggers` label) persists onto
+    // Campaign.triggerConfig/StepData.triggerConfig.
+    const triggerConfig: Record<string, TriggerDelta> = {};
     for (const triggerId of selectedTriggers) {
       const t = triggerById.get(triggerId);
-      if (t) triggerLabels.push(t.label);
+      if (!t) continue;
+      triggerLabels.push(t.label);
+      const d = deltas[triggerId];
+      if (d) triggerConfig[triggerId] = d;
     }
-    onChange({ interests: interestLabels, triggers: triggerLabels, triggerConfig: deltas });
+    onChange({ interests: interestLabels, triggers: triggerLabels, triggerConfig });
   }, [
     selectedInterests,
     selectedTriggers,
