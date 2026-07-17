@@ -83,6 +83,9 @@ export function useDomainModeration(): void {
 
   // Ключ, а не сам массив, как зависимость эффекта — иначе эффект
   // перезапускался бы на каждый рендер (новый []-инстанс от .filter/.map).
+  // Побочный эффект: любое изменение пула (в т.ч. добавление нового pending-домена
+  // на середине отсчёта) меняет pendingKey и перезапускает MODERATION_DELAY_MS для
+  // ВСЕГО пула — это ожидаемо для прототипа (нет per-domain SLA), не баг «залипания».
   const pendingKey = pendingDomains.join("|");
 
   useEffect(() => {
