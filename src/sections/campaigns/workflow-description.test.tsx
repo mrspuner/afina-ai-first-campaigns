@@ -186,6 +186,44 @@ describe("WorkflowDescription", () => {
   });
 });
 
+describe("WorkflowDescription — stageSlots (нодо-блоки под конкретным этапом)", () => {
+  it("рендерит слот сразу под текстом своего этапа, а не после всего описания", () => {
+    render(
+      <WorkflowDescription
+        stages={STAGES}
+        canEdit
+        stageSlots={{ start: <div data-testid="start-slot">блок старта</div> }}
+      />,
+    );
+    const start = screen.getByText("Старт.");
+    const slot = screen.getByTestId("start-slot");
+    const firstTouch = screen.getByText("Первое касание.");
+
+    expect(
+      start.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      slot.compareDocumentPosition(firstTouch) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("не рендерит ничего для этапа без слота в карте", () => {
+    render(
+      <WorkflowDescription
+        stages={STAGES}
+        canEdit
+        stageSlots={{ start: <div data-testid="start-slot" /> }}
+      />,
+    );
+    expect(screen.queryByTestId("outcome-slot")).not.toBeInTheDocument();
+  });
+
+  it("без stageSlots поведение не меняется (пусто по умолчанию)", () => {
+    render(<WorkflowDescription stages={STAGES} canEdit />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Изменить"]);
+  });
+});
+
 describe("WorkflowDescription — пустая отправка", () => {
   it("не зовёт onSubmitEdit и оставляет инпут открытым", () => {
     const onSubmitEdit = vi.fn();

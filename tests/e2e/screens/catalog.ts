@@ -26,6 +26,14 @@ export type Screen = {
    * растёт вместе с вьюпортом (расширение уходит в разнос).
    */
   expand?: boolean;
+  /**
+   * Экран участвует в `npm run test:visual` (пиксельный снапшот). По умолчанию
+   * `true`. Поставь `false` для экранов, у которых ещё нет baseline PNG —
+   * они всё равно покрываются smoke-тестом (screens.smoke.spec.ts), просто без
+   * пиксельного сравнения. Baseline генерируются вне ворктри (см. AGENTS.md:
+   * не запускать `playwright ... --update-snapshots` из ворктри).
+   */
+  visual?: boolean;
 };
 
 // Shared, survey-passed, intro-skipped, funded base applied to every screen.
@@ -315,6 +323,8 @@ export const SCREENS: Screen[] = [
       },
     },
     expect: 'h1:has-text("Черновик кампании")',
+    // Нет baseline PNG ещё — покрыт smoke, но исключён из @visual.
+    visual: false,
   },
   {
     id: "campaign-card-own",
@@ -330,6 +340,8 @@ export const SCREENS: Screen[] = [
       },
     },
     expect: 'h1:has-text("Своя база")',
+    // Нет baseline PNG ещё — покрыт smoke, но исключён из @visual.
+    visual: false,
   },
   {
     id: "campaign-payment",

@@ -52,7 +52,10 @@ async function expandViewportToContent(page: Page) {
 }
 
 test.describe("@visual screens", () => {
-  for (const screen of SCREENS) {
+  // Экраны без baseline PNG (visual: false) остаются в SCREENS для smoke, но
+  // выпадают из пиксельного сравнения — иначе test:visual падает на
+  // отсутствующем снапшоте.
+  for (const screen of SCREENS.filter((s) => s.visual !== false)) {
     test(`visual: ${screen.name} (${screen.id})`, async ({ page }) => {
       await seedScreen(page, screen);
       if (screen.expand) await expandViewportToContent(page);

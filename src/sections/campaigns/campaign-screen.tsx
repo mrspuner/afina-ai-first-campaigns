@@ -201,9 +201,10 @@ export function CampaignScreen() {
     >
       {/* Сценарий кампании — описание, нодо-блок «Старта» (артефакты: база /
           интересы-триггеры или файл сигнала) и мини-граф про одно и то же,
-          поэтому живут в одном блоке: текст → «Изменить» (правка идёт через
-          текст) → нодо-блок (правка артефактов, без ИИ) → кликабельная
-          миниатюра, открывающая полный граф. */}
+          поэтому живут в одном блоке: текст этапа «Старт» → нодо-блок (правка
+          артефактов, без ИИ, через per-stage слот WorkflowDescription) →
+          остальные этапы → «Изменить» (правка идёт через текст) →
+          кликабельная миниатюра, открывающая полный граф. */}
       <CardSection label="Сценарий кампании">
         <div className="flex flex-col gap-5">
           {/* Правка — только до запуска (статус «Не запущена»), как read-only
@@ -215,18 +216,21 @@ export function CampaignScreen() {
             error={editFlow.error}
             onSubmitEdit={editFlow.submit}
             onCancelEdit={editFlow.cancel}
+            // Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
+            // (own), стилизован под соответствующую ноду графа. Правка
+            // артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
+            // read-only после запуска. Слот-карта поддерживает любой id этапа —
+            // следующая задача добавит нодо-блоки коммуникаций под
+            // «first-touch» тем же механизмом.
+            stageSlots={{
+              start: (
+                <CampaignScenarioNodeBlock
+                  campaign={campaign}
+                  readOnly={status !== "draft"}
+                />
+              ),
+            }}
           />
-          {/* Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
-              (own), стилизован под соответствующую ноду графа. Правка
-              артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
-              read-only после запуска. Показываем только когда граф вообще
-              есть (тот же граф, что уже описан текстом выше). */}
-          {descriptionStages.length > 0 && (
-            <CampaignScenarioNodeBlock
-              campaign={campaign}
-              readOnly={status !== "draft"}
-            />
-          )}
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Граф кампании

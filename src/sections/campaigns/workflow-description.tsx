@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { DescriptionMessage, DescriptionStage } from "@/state/graph-description";
+import type {
+  DescriptionMessage,
+  DescriptionStage,
+  DescriptionStageId,
+} from "@/state/graph-description";
 import { DRAWER_HINT, SPINNER_TEXT, type EditPhase } from "@/sections/shell/use-campaign-edit-flow";
 
 const PLACEHOLDER = "Что вы хотите исправить?";
@@ -31,6 +35,13 @@ interface WorkflowDescriptionProps {
   error?: string | null;
   onSubmitEdit?: (text: string) => void;
   onCancelEdit?: () => void;
+  /**
+   * Доп. контент, вставляемый ПОД текстом конкретного этапа (напр. нодо-блок
+   * «Старта» — A2.1 — или, в дальнейшем, нодо-блоки коммуникаций под
+   * «Первым касанием»). Ключ — id этапа, поэтому механизм не завязан на
+   * конкретный этап и переиспользуется для любого следующего.
+   */
+  stageSlots?: Partial<Record<DescriptionStageId, React.ReactNode>>;
 }
 
 /**
@@ -51,6 +62,7 @@ export function WorkflowDescription({
   error = null,
   onSubmitEdit,
   onCancelEdit,
+  stageSlots,
 }: WorkflowDescriptionProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -109,6 +121,9 @@ export function WorkflowDescription({
                   </li>
                 ))}
               </ul>
+            )}
+            {stageSlots?.[stage.id] && (
+              <div className="pt-1">{stageSlots[stage.id]}</div>
             )}
           </div>
         ))}

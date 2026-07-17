@@ -136,6 +136,27 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
+
+  it("ставит нодо-блок «Старта» под текстом «Старт.», ДО «Первого касания» — не хвостом после всего описания", () => {
+    renderCampaign(
+      baseCampaign({ id: "cmp_desc_slot", channels: ["sms"] }),
+    );
+    const start = screen.getByText("Старт.");
+    const block = screen.getByTestId("scenario-node-block");
+    const firstTouch = screen.getByText("Первое касание.");
+    const edit = screen.getByRole("button", { name: "Изменить" });
+
+    // Порядок в документе: «Старт.» → нодо-блок → «Первое касание.» → … → «Изменить».
+    expect(
+      start.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      block.compareDocumentPosition(firstTouch) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      firstTouch.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 describe("CampaignScreen — нодо-блок «Старт» (A2.1 — скоринг/сигнал)", () => {
