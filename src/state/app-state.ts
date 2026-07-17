@@ -4,6 +4,7 @@ import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
+import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
@@ -71,6 +72,15 @@ export type Campaign = {
   /** Wizard-selected behavioral triggers (intent signals). Mirrors `interests`;
    *  surfaced read-only in the scoring node's «Интересы и триггеры» drawer. */
   triggers?: string[];
+  /**
+   * Per-trigger domain edits (added/excluded domains), keyed by trigger id —
+   * same key + shape as `StepData.triggerConfig` (see its doc comment), so no
+   * conversion happens between the wizard and the campaign. In-memory,
+   * session-durable: this is what the shared editor's `initialDeltas` prop
+   * seeds from, so add/exclude edits survive the drawer being closed and
+   * reopened, or the wizard step being re-entered.
+   */
+  triggerConfig?: Record<string, TriggerDelta>;
   files?: CampaignFile[];
   /** Расчётный дневной бюджет (communication / STREAM_DAYS). Производная от
    *  стоимости графа — пересчитывается и перезаписывается при запуске. */
@@ -320,7 +330,7 @@ export type Action =
   | { type: "campaign_renamed"; id: string; name: string }
   | { type: "campaign_file_added"; campaignId: string; file: CampaignFile }
   | { type: "campaign_file_removed"; campaignId: string; index: number }
-  | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[] }
+  | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[]; triggerConfig?: Record<string, TriggerDelta> }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
@@ -531,6 +541,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         channels: sd.channels,
         interests: sd.interests,
         triggers: sd.triggers,
+        triggerConfig:
+          Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
         files,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,
@@ -647,7 +659,12 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         campaigns: state.campaigns.map((c) =>
           c.id === action.id
-            ? { ...c, interests: action.interests, triggers: action.triggers }
+            ? {
+                ...c,
+                interests: action.interests,
+                triggers: action.triggers,
+                triggerConfig: action.triggerConfig ?? c.triggerConfig,
+              }
             : c
         ),
       };

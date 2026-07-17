@@ -77,6 +77,7 @@ export function ScoringInterestsPanel() {
           id: campaignId,
           interests: next.interests,
           triggers: next.triggers,
+          triggerConfig: next.triggerConfig,
         });
       }
       // … and the node's own params, so the open card reflects it immediately.
@@ -121,6 +122,7 @@ export function ScoringInterestsPanel() {
             key={`${campaignId}:${nodeId}`}
             initialInterestIds={initial.interestIds}
             initialTriggerIds={initial.triggerIds}
+            initialDeltas={campaign?.triggerConfig}
             readOnly={!editable}
             onChange={editable ? persist : undefined}
           />

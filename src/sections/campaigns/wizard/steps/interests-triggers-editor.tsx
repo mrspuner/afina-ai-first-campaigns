@@ -25,7 +25,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Interest, Trigger, Vertical } from "@/types/directions";
-import type { TriggerConfig } from "@/types/campaign";
 import {
   applyEditToDelta,
   EMPTY_DELTA,
@@ -563,7 +562,8 @@ function ReadOnlyTriggerCard({
 export interface InterestsTriggersEditorSelection {
   interests: string[];
   triggers: string[];
-  triggerConfig: Record<string, TriggerConfig>;
+  /** Keyed by trigger id — see the doc comment on `StepData.triggerConfig`. */
+  triggerConfig: Record<string, TriggerDelta>;
 }
 
 export interface InterestsTriggersEditorProps {
@@ -574,6 +574,15 @@ export interface InterestsTriggersEditorProps {
    */
   initialInterestIds?: string[];
   initialTriggerIds?: string[];
+  /**
+   * Per-trigger domain edits to seed the editor's internal `deltas` state
+   * with, keyed by trigger id (`StepData.triggerConfig` / durable
+   * `Campaign.triggerConfig` — same key, no conversion). Read once on mount,
+   * same contract as `initialInterestIds`/`initialTriggerIds`. Passing this
+   * is what makes domain add/exclude edits survive a remount (drawer
+   * close/reopen, wizard step re-entry).
+   */
+  initialDeltas?: Record<string, TriggerDelta>;
   /**
    * When true AND there is no initial selection, seed the selection via the
    * deterministic AI-fill random pick (the wizard's "already prepared for you"
@@ -625,6 +634,7 @@ function pickN<T>(items: readonly T[], n: number, rng: () => number): T[] {
 export function InterestsTriggersEditor({
   initialInterestIds = [],
   initialTriggerIds = [],
+  initialDeltas,
   seedWhenEmpty = false,
   enableRemix = false,
   readOnly = false,
@@ -675,7 +685,9 @@ export function InterestsTriggersEditor({
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>(
     initialPrefill.triggerIds
   );
-  const [deltas, setDeltas] = useState<Record<string, TriggerDelta>>({});
+  const [deltas, setDeltas] = useState<Record<string, TriggerDelta>>(
+    () => initialDeltas ?? {}
+  );
   const [highlightedTriggerIds, setHighlightedTriggerIds] = useState<
     Set<string>
   >(() => new Set());
@@ -700,28 +712,21 @@ export function InterestsTriggersEditor({
     return m;
   }, [availableTriggers]);
 
-  // Surface the current selection to the caller as LABELS + triggerConfig
-  // whenever it changes (the wizard advances on it, the drawer persists it).
+  // Surface the current selection to the caller as LABELS (interests/
+  // triggers — the pre-existing convention downstream reads/displays) plus
+  // triggerConfig, which is just `deltas` passed through unchanged: both are
+  // keyed by trigger id, so there is no re-keying to do here.
   useEffect(() => {
     if (!onChange) return;
     const interestLabels = selectedInterests
       .map((id) => interestsForDirection.find((i) => i.id === id)?.label)
       .filter((l): l is string => Boolean(l));
-    const triggerConfig: Record<string, TriggerConfig> = {};
     const triggerLabels: string[] = [];
     for (const triggerId of selectedTriggers) {
       const t = triggerById.get(triggerId);
-      if (!t) continue;
-      triggerLabels.push(t.label);
-      const d = deltas[triggerId];
-      if (d) {
-        triggerConfig[t.label] = {
-          add: d.added.join(", "),
-          exclude: d.excluded.join(", "),
-        };
-      }
+      if (t) triggerLabels.push(t.label);
     }
-    onChange({ interests: interestLabels, triggers: triggerLabels, triggerConfig });
+    onChange({ interests: interestLabels, triggers: triggerLabels, triggerConfig: deltas });
   }, [
     selectedInterests,
     selectedTriggers,

@@ -12,6 +12,7 @@ import {
   DEMO_ACCOUNT_SETTINGS,
   EMPTY_ACCOUNT_SETTINGS,
 } from "@/types/account-settings";
+import { initialStepData, type StepData } from "@/types/campaign";
 
 function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   return {
@@ -23,6 +24,16 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   };
 }
 
+function makeStepData(overrides: Partial<StepData> = {}): StepData {
+  return {
+    ...initialStepData,
+    scenario: "registration",
+    sourceType: "new",
+    channels: ["sms"],
+    ...overrides,
+  };
+}
+
 describe("appReducer — initial state", () => {
   it("has an empty campaigns array", () => {
     expect(initialState.campaigns).toEqual([]);
@@ -30,6 +41,42 @@ describe("appReducer — initial state", () => {
 
   it("starts on welcome view", () => {
     expect(initialState.view).toEqual({ kind: "welcome" });
+  });
+});
+
+describe("appReducer — triggerConfig persistence (domain edits, Task 5)", () => {
+  it("persists triggerConfig from wizard onto the campaign", () => {
+    const sd = makeStepData({
+      triggerConfig: { "credit-banks": { added: ["my.ru"], excluded: [] } },
+    });
+    const s = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: sd,
+      scenarioName: "Регистрация",
+    });
+    const c = s.campaigns.at(-1)!;
+    expect(c.triggerConfig?.["credit-banks"]).toEqual({
+      added: ["my.ru"],
+      excluded: [],
+    });
+  });
+
+  it("campaign_scoring_set persists triggerConfig onto the campaign", () => {
+    const draft = makeCampaign({ id: "c1" });
+    const next = appReducer(
+      { ...initialState, campaigns: [draft] },
+      {
+        type: "campaign_scoring_set",
+        id: "c1",
+        interests: ["Ипотека"],
+        triggers: ["Заявка на ипотеку"],
+        triggerConfig: { "mortgage-calculators": { added: ["a.ru"], excluded: ["b.ru"] } },
+      }
+    );
+    expect(next.campaigns[0].triggerConfig?.["mortgage-calculators"]).toEqual({
+      added: ["a.ru"],
+      excluded: ["b.ru"],
+    });
   });
 });
 

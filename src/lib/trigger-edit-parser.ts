@@ -122,6 +122,16 @@ export function parseTriggerCommand(rawInput: string): ParsedTriggerCommand {
 // Delta merge
 // ----------------------------------------------------------------------------
 
+/**
+ * A trigger's user-layer edit: domains added on top of the system list, and
+ * system domains excluded from it. `added`/`excluded` are domain STRING
+ * references only — this is the durable shape persisted on
+ * `Campaign.triggerConfig` / `StepData.triggerConfig`, both keyed by trigger
+ * **id** (see `src/types/campaign.ts`). Per-domain account/availability
+ * status is intentionally NOT stored here — it lives in a separate account
+ * registry (Task 6), keyed off these same domain strings, so this delta stays
+ * the single source of truth for "what the user asked to add/exclude".
+ */
 export interface TriggerDelta {
   added: string[];
   excluded: string[];
