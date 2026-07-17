@@ -25,10 +25,10 @@ export const TRIGGER_DOMAINS: Record<TriggerId, DomainGroup[]> = {
   // Финансы — кредиты
   "credit-banks": [
     g("sberbank.ru", "online.sberbank.ru", "kredit.sberbank.ru", "ipoteka.sberbank.ru"),
-    g("vtb.ru"),
-    g("alfabank.ru"),
+    g("vtb.ru", "online.vtb.ru", "kredit.vtb.ru"),
+    g("alfabank.ru", "online.alfabank.ru", "credit.alfabank.ru"),
     g("gazprombank.ru"),
-    g("tinkoff.ru"),
+    g("tinkoff.ru", "credit.tinkoff.ru", "id.tinkoff.ru"),
     g("raiffeisen.ru"),
     g("otkritie.ru"),
     g("rshb.ru"),
@@ -179,16 +179,17 @@ export const TRIGGER_DOMAINS: Record<TriggerId, DomainGroup[]> = {
 
   // Авто — б/у
   "used-car-listings": [
-    g("auto.ru"),
-    g("drom.ru"),
+    g("auto.ru", "msk.auto.ru", "spb.auto.ru"),
+    g("drom.ru", "moscow.drom.ru", "baza.drom.ru"),
     g("avito.ru", "avto.avito.ru"),
-    g("youla.ru", "avto.youla.ru"),
-    g("farpost.ru", "avto.farpost.ru"),
-    g("irr.ru", "avto.irr.ru"),
-    g("am.ru", "used.am.ru"),
-    g("cars.ru", "used.cars.ru"),
-    g("sberauto.com"),
-    g("maxposter.ru"),
+    g("youla.ru", "auto.youla.ru"),
+    g("am.ru"),
+    g("carsguru.ru"),
+    g("bibinet.ru"),
+    g("avtomarket.ru"),
+    g("cars.ru"),
+    g("quto.ru"),
+    g("kolesa.ru"),
   ],
   "used-car-history": [
     g("avtokod.ru"), g("autoteka.ru"), g("avtocod.ru"), g("avtoved.ru"), g("reginfo.ru"),
@@ -265,8 +266,17 @@ export const TRIGGER_DOMAINS: Record<TriggerId, DomainGroup[]> = {
 
   // Телеком — мобильная связь
   "mobile-competitors": [
-    g("mts.ru"), g("megafon.ru"), g("beeline.ru"), g("tele2.ru"), g("yota.ru"),
-    g("sbermobile.ru"), g("rt.ru"), g("danycom.ru"), g("tinkoff.ru", "mobile.tinkoff.ru"), g("letai.ru"),
+    g("mts.ru", "login.mts.ru", "shop.mts.ru"),
+    g("megafon.ru", "lk.megafon.ru", "shop.megafon.ru"),
+    g("beeline.ru", "my.beeline.ru", "shop.beeline.ru"),
+    g("tele2.ru", "msk.tele2.ru", "spb.tele2.ru"),
+    g("yota.ru"),
+    g("rostelecom.ru", "lk.rostelecom.ru"),
+    g("sbermobile.ru"),
+    g("tinkoff-mobile.ru"),
+    g("motiv.ru"),
+    g("danycom.ru"),
+    g("gazprombank-mobile.ru"),
   ],
   "mobile-tariff-compare": [
     g("tarifkin.ru"),
