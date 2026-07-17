@@ -286,6 +286,11 @@ function SystemDomainChip({
   onExclude: () => void;
   onRestore: () => void;
 }) {
+  // Controlled (click-driven), unlike the rest of the codebase's uncontrolled
+  // hover Tooltips: the domains spec requires the subdomain list to be
+  // reachable deterministically (click), not only on hover — so `open` is
+  // owned here and only forced true on click; base-ui's own hover/focus/
+  // outside-click/escape handling still drives it closed via `onOpenChange`.
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const hasSubdomains = group.subdomains.length > 0;
 
@@ -317,10 +322,16 @@ function SystemDomainChip({
       {hasSubdomains ? (
         <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
           <TooltipTrigger
+            // Base-ui's Tooltip.Trigger closes on its own reference-press
+            // dismiss by default (`closeOnClick` defaults true), which would
+            // immediately re-close the tooltip we just opened via onClick
+            // below. Disable it — this trigger is click-to-open, not
+            // click-to-toggle.
+            closeOnClick={false}
             render={
               <button
                 type="button"
-                onClick={() => setTooltipOpen((v) => !v)}
+                onClick={() => setTooltipOpen(true)}
                 aria-label={`Поддомены ${group.root}`}
               />
             }

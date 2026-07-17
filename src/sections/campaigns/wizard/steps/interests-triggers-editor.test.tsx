@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import {
   InterestsTriggersEditor,
@@ -18,6 +18,21 @@ vi.mock("next/image", () => ({
     return <img {...(props as Record<string, string>)} />;
   },
 }));
+
+// The subdomain Tooltip (base-ui) positions itself via floating-ui, which
+// touches ResizeObserver on mount — absent in jsdom. Same shim used by other
+// popover-ish tests in this codebase (node-field-combobox.test.tsx,
+// campaign-screen.test.tsx); without it the tooltip popup silently never
+// mounts.
+beforeAll(() => {
+  if (typeof globalThis.ResizeObserver === "undefined") {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
 
 // finance is the default clientDirection in app-state — pick its first interest,
 // that interest's first trigger, and one of that trigger's system domains so we
@@ -117,6 +132,78 @@ describe("InterestsTriggersEditor — wizard/drawer parity", () => {
     // Read-only still shows the trigger + its domains (content parity).
     expect(screen.getByText(firstTrigger.label)).toBeInTheDocument();
     expect(screen.getByText(firstDomain)).toBeInTheDocument();
+  });
+});
+
+describe("InterestsTriggersEditor — domain-group chip (subdomains + overflow)", () => {
+  afterEach(cleanup);
+
+  // firstTrigger ("credit-banks") is the finance direction's first trigger —
+  // it has 12 domain groups (> the expanded card's 10-visible cap) and its
+  // first group (sberbank.ru) has 3 subdomains, so it exercises both the
+  // muted "·N" counter/tooltip and the "+N" overflow chip in one fixture.
+  const allGroups = getTriggerDomains(firstTrigger.id);
+
+  it("renders the muted ·N subdomain counter on a group chip that has subdomains", () => {
+    renderEditor({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+    expect(
+      screen.getByText(`·${firstDomainGroup.subdomains.length}`)
+    ).toBeInTheDocument();
+  });
+
+  it("clicking a domain-group chip with subdomains opens the tooltip listing them", async () => {
+    renderEditor({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+    const chip = screen.getByRole("button", {
+      name: `Поддомены ${firstDomain}`,
+    });
+    // base-ui's Tooltip.Trigger only applies its `closeOnClick` override on
+    // `pointerdown` (before the `click` fires) — a real browser click always
+    // fires pointerdown first, but fireEvent.click alone does not, so we fire
+    // it explicitly here to match a real user click.
+    fireEvent.pointerDown(chip);
+    fireEvent.click(chip);
+    for (const sub of firstDomainGroup.subdomains) {
+      expect(await screen.findByText(sub)).toBeInTheDocument();
+    }
+  });
+
+  it("shows exactly 10 domain groups plus a +N overflow chip; clicking it reveals the rest", () => {
+    renderEditor({
+      initialInterestIds: [firstInterest.id],
+      initialTriggerIds: [firstTrigger.id],
+    });
+    const overflowCount = allGroups.length - 10;
+    // Sanity: this fixture must have >10 groups, or the test below is vacuous.
+    expect(overflowCount).toBeGreaterThan(0);
+
+    for (const group of allGroups.slice(0, 10)) {
+      expect(screen.getByText(group.root)).toBeInTheDocument();
+    }
+    const hiddenGroups = allGroups.slice(10);
+    for (const group of hiddenGroups) {
+      expect(screen.queryByText(group.root)).toBeNull();
+    }
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Показать ещё ${overflowCount} доменов`,
+      })
+    );
+
+    for (const group of hiddenGroups) {
+      expect(screen.getByText(group.root)).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("button", {
+        name: `Показать ещё ${overflowCount} доменов`,
+      })
+    ).toBeNull();
   });
 });
 
