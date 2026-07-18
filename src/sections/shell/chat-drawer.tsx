@@ -58,7 +58,7 @@ export function ChatDrawer({ placeholder }: { placeholder: string }) {
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
-          style={{ right: "var(--email-preview-width, 0px)" }}
+          style={{ right: "var(--right-rail-width, 0px)" }}
           className="fixed top-0 z-30 flex h-screen w-[420px] flex-col gap-3 border-l border-white/10 bg-[rgba(10,10,10,0.85)] p-4 backdrop-blur-[2px] transition-[right] duration-300"
         >
           <ChatPanelHeader

@@ -70,7 +70,15 @@ export function PromptBar({ children, onOpenDrawer, slot, cardClassName, glow }:
   }, []);
 
   return (
-    <div className="fixed left-[120px] right-0 bottom-5 z-30 flex justify-center px-6">
+    <div
+      // Правая граница = ширина активного правого дровера (реестр
+      // right-rail, A2.5) — вместо хардкода right-0. Внутренний
+      // max-w-[720px] (ниже) пере-центрируется в оставшейся видимой области
+      // (viewport − sidebar 120px − rail) автоматически через justify-center,
+      // т.к. сам блок сужается вместе с right.
+      style={{ right: "var(--right-rail-width, 0px)" }}
+      className="fixed left-[120px] bottom-5 z-30 flex justify-center px-6 transition-[right] duration-300"
+    >
       <div
         ref={cardRef}
         // data-onboarding: цель дыры-затемнения онбординга на весь блок (спека #5).
