@@ -63,8 +63,8 @@ function renderCampaign(campaign: Campaign) {
     <AppStateProvider>
       {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
           mirror the real app tree, where PromptChipsProvider wraps the screen.
-          ChatProvider — потому что карточка ведёт правку через ИИ-дровер
-          (useCampaignEditFlow), как и в page.tsx. */}
+          ChatProvider — коммуникационные нодо-блоки (CampaignCommunicationNodeBlock)
+          открывают дровер редактора шаблона через useChat(), как и в page.tsx. */}
       <PromptChipsProvider>
         <ChatProvider>
           <Harness campaign={campaign} />
@@ -115,43 +115,37 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.getByText("Граф кампании")).toBeInTheDocument();
   });
 
-  it("прячет «Изменить» у запущенной кампании", () => {
-    renderCampaign(
-      baseCampaign({
-        id: "cmp_desc_active",
-        status: "active",
-        phase: "communicating",
-        launchedAt: "2026-06-02T00:00:00.000Z",
-      }),
-    );
-    // Описание остаётся — read-only, как у скоринг-дровера launched-кампании.
-    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
-  });
-
-  it("прячет «Изменить» у остановленной и завершённой", () => {
-    for (const status of ["paused", "completed"] as const) {
+  it("не показывает инлайн-«Изменить» ни при каком статусе кампании — правка идёт через граф", () => {
+    for (const status of ["draft", "active", "paused", "completed"] as const) {
       const { unmount } = renderCampaign(
-        baseCampaign({ id: `cmp_desc_${status}`, status }),
+        baseCampaign({
+          id: `cmp_desc_${status}`,
+          status,
+          ...(status === "active" || status === "completed"
+            ? { phase: "communicating" as const, launchedAt: "2026-06-02T00:00:00.000Z" }
+            : {}),
+        }),
       );
+      // Описание остаётся видимым при любом статусе — только affordance правки снят.
+      expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
       unmount();
     }
   });
 
-  it("ставит «Изменить» между текстом и мини-графом", () => {
+  it("ставит мини-граф сразу после текста описания в том же блоке", () => {
     const { container } = renderCampaign(
       baseCampaign({ id: "cmp_desc_order", channels: ["sms"] }),
     );
     const section = screen.getByText("Сценарий кампании").closest("section")!;
-    const edit = screen.getByRole("button", { name: "Изменить" });
+    const description = screen.getByText("Старт.");
     const graph = container.querySelector(".react-flow")!;
 
-    expect(section.contains(edit)).toBe(true);
+    expect(section.contains(description)).toBe(true);
     expect(section.contains(graph)).toBe(true);
-    // Порядок в документе: текст → «Изменить» → мини-граф.
+    // Порядок в документе: текст описания → мини-граф.
     expect(
-      edit.compareDocumentPosition(graph) & Node.DOCUMENT_POSITION_FOLLOWING,
+      description.compareDocumentPosition(graph) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -169,17 +163,13 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     const start = screen.getByText("Старт.");
     const block = screen.getByTestId("scenario-node-block");
     const firstTouch = screen.getByText("Первое касание.");
-    const edit = screen.getByRole("button", { name: "Изменить" });
 
-    // Порядок в документе: «Старт.» → нодо-блок → «Первое касание.» → … → «Изменить».
+    // Порядок в документе: «Старт.» → нодо-блок → «Первое касание.».
     expect(
       start.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       block.compareDocumentPosition(firstTouch) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      firstTouch.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 });

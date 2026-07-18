@@ -14,7 +14,6 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
 import { describeWorkflow, firstTouchCommunicationNodes } from "@/state/graph-description";
-import { useCampaignEditFlow } from "@/sections/shell/use-campaign-edit-flow";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
   CampaignProgress,
@@ -94,13 +93,7 @@ export function CampaignScreen() {
     : null;
   // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
   // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
-  // Считается ДО ранних выходов: его же читает хук правки (правила хуков).
   const descriptionStages = launchGraph ? describeWorkflow(launchGraph, templates) : [];
-  // Модель получает то же описание, что видит пользователь, — не JSON графа.
-  const descriptionText = descriptionStages
-    .map((s) => `${s.heading} ${s.body}`)
-    .join("\n");
-  const editFlow = useCampaignEditFlow(campaignId ?? "", descriptionText);
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -251,19 +244,12 @@ export function CampaignScreen() {
           интересы-триггеры или файл сигнала) и мини-граф про одно и то же,
           поэтому живут в одном блоке: текст этапа «Старт» → нодо-блок (правка
           артефактов, без ИИ, через per-stage слот WorkflowDescription) →
-          остальные этапы → «Изменить» (правка идёт через текст) →
-          кликабельная миниатюра, открывающая полный граф. */}
+          остальные этапы → кликабельная миниатюра, открывающая полный граф
+          (правка логики — там, инлайн-«Изменить» на карточке снят). */}
       <CardSection label="Сценарий кампании">
         <div className="flex flex-col gap-5">
-          {/* Правка — только до запуска (статус «Не запущена»), как read-only
-              режим скоринг-дровера у запущенной кампании. */}
           <WorkflowDescription
             stages={descriptionStages}
-            canEdit={status === "draft"}
-            phase={editFlow.phase}
-            error={editFlow.error}
-            onSubmitEdit={editFlow.submit}
-            onCancelEdit={editFlow.cancel}
             // Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
             // (own), стилизован под соответствующую ноду графа. Правка
             // артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
