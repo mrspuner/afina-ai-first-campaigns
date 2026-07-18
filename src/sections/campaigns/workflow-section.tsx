@@ -326,11 +326,11 @@ export function WorkflowSection() {
         toast={toast}
         onDismissToast={dismissToast}
         mode={view.launched ? "read-only" : "edit"}
-        onBack={
-          view.launched
-            ? () =>
-                dispatch({ type: "campaign_opened", id: currentCampaign.id })
-            : undefined
+        // Inverse of `openWorkflow`/`open_workflow` — always available so the
+        // user can get back to the campaign card from either the read-only
+        // (launched) or the editable (draft) workflow view.
+        onBack={() =>
+          dispatch({ type: "campaign_opened", id: currentCampaign.id })
         }
         saveState={saveState}
         onSave={isDraftEditable ? handleSave : undefined}

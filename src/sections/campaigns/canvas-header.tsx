@@ -40,18 +40,20 @@ interface CanvasHeaderProps {
   /**
    * Visual mode of the header.
    * - "edit" (default) — full editable canvas header used while a campaign
-   *   is a draft; no back arrow, scenario name as subtitle.
+   *   is a draft; scenario name as subtitle.
    * - "read-only" — used when the workflow is opened in launched/preview
-   *   mode. Adds a large «Back» arrow to the left of the title and replaces
-   *   the scenario subtitle with a static «Просмотр workflow» label.
-   *   Pencil-edit of the campaign name is preserved — renaming a launched
-   *   campaign is allowed. The only status action surfaced here is start/stop
-   *   (запуск/остановка); дублирование и статистика живут в карточке кампании.
+   *   mode. Replaces the scenario subtitle with a static «Просмотр workflow»
+   *   label. Pencil-edit of the campaign name is preserved — renaming a
+   *   launched campaign is allowed. The only status action surfaced here is
+   *   start/stop (запуск/остановка); дублирование и статистика живут в
+   *   карточке кампании.
    */
   mode?: "edit" | "read-only";
   /**
-   * Required when `mode === "read-only"`. Invoked when the user clicks the
-   * back arrow. Ignored in edit mode.
+   * Invoked when the user clicks the «Назад» arrow to the left of the title
+   * — the back affordance is shown in both modes (edit and read-only) and
+   * navigates to the campaign card, the inverse of `openWorkflow`. Omit to
+   * hide the arrow.
    */
   onBack?: () => void;
   /**
@@ -226,7 +228,7 @@ export function CanvasHeader({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          {isReadOnly && onBack && (
+          {onBack && (
             <Button
               variant="ghost"
               size="icon-lg"
