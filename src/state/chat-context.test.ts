@@ -20,7 +20,6 @@ const empty: ChatState = {
     previewTemplate: null,
   },
   scoringDrawer: { open: false, editable: false, nodeId: null, campaignId: null },
-  campaignEditDrawer: { open: false, campaignId: null, questions: [], index: 0, answers: [] },
 };
 
 function msg(partial: Partial<ChatMessage> & Pick<ChatMessage, "role" | "text">): ChatMessage {
@@ -386,98 +385,5 @@ describe("chatReducer — scoringDrawer slice", () => {
     // Закрытие ИИ-дровера не должно закрывать слой «Интересы и триггеры».
     expect(s.scoringDrawer.open).toBe(true);
     expect(s.scoringDrawer.nodeId).toBe("n_scoring");
-  });
-});
-
-// ── campaignEditDrawer (правка кампании текстом) ─────────────────────────────
-
-const Q1 = {
-  prompt: "Какой канал оставить?",
-  allowFreeInput: true,
-  options: [{ id: "email", label: "Только Email" }],
-};
-const Q2 = {
-  prompt: "Менять ли паузу?",
-  allowFreeInput: true,
-  options: [{ id: "keep", label: "Оставить 2 дня" }],
-};
-
-describe("chatReducer — campaignEditDrawer", () => {
-  it("open_campaign_edit ставит очередь вопросов и открывает первый", () => {
-    const s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1, Q2],
-    });
-    expect(s.campaignEditDrawer.open).toBe(true);
-    expect(s.campaignEditDrawer.campaignId).toBe("cmp_1");
-    expect(s.campaignEditDrawer.index).toBe(0);
-    expect(s.campaignEditDrawer.answers).toEqual([]);
-    expect(s.campaignEditDrawer.questions).toHaveLength(2);
-  });
-
-  it("answer_campaign_edit копит ответ и продвигает к следующему вопросу", () => {
-    let s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1, Q2],
-    });
-    s = chatReducer(s, { type: "answer_campaign_edit", answer: "Только Email" });
-    expect(s.campaignEditDrawer.index).toBe(1);
-    expect(s.campaignEditDrawer.answers).toEqual(["Только Email"]);
-    expect(s.campaignEditDrawer.open).toBe(true);
-  });
-
-  it("после последнего ответа index уходит за конец очереди — вопросов больше нет", () => {
-    let s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1, Q2],
-    });
-    s = chatReducer(s, { type: "answer_campaign_edit", answer: "Только Email" });
-    s = chatReducer(s, { type: "answer_campaign_edit", answer: "Оставить 2 дня" });
-    expect(s.campaignEditDrawer.index).toBe(2);
-    expect(s.campaignEditDrawer.answers).toEqual(["Только Email", "Оставить 2 дня"]);
-    // Очередь исчерпана — пикер гасится, дровер остаётся открытым под финальный ответ.
-    expect(s.campaignEditDrawer.questions[s.campaignEditDrawer.index]).toBeUndefined();
-  });
-
-  it("лишний ответ после конца очереди не ломает стейт", () => {
-    let s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1],
-    });
-    s = chatReducer(s, { type: "answer_campaign_edit", answer: "Только Email" });
-    s = chatReducer(s, { type: "answer_campaign_edit", answer: "лишний" });
-    expect(s.campaignEditDrawer.answers).toEqual(["Только Email"]);
-    expect(s.campaignEditDrawer.index).toBe(1);
-  });
-
-  it("close_campaign_edit сбрасывает слой полностью", () => {
-    let s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1, Q2],
-    });
-    s = chatReducer(s, { type: "close_campaign_edit" });
-    expect(s.campaignEditDrawer).toEqual({
-      open: false,
-      campaignId: null,
-      questions: [],
-      index: 0,
-      answers: [],
-    });
-  });
-
-  it("слой независим от ИИ-дровера: close_sidebar его не трогает", () => {
-    let s = chatReducer(empty, {
-      type: "open_campaign_edit",
-      campaignId: "cmp_1",
-      questions: [Q1],
-    });
-    s = chatReducer(s, { type: "open_sidebar" });
-    s = chatReducer(s, { type: "close_sidebar" });
-    expect(s.campaignEditDrawer.open).toBe(true);
   });
 });
