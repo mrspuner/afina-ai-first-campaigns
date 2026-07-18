@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import { nanoid } from "nanoid";
 import { BarChart3, Copy, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePromptChips } from "@/state/prompt-chips-context";
 import {
   EntityCardShell,
   CardTag,
@@ -54,6 +56,7 @@ function formatNumber(n: number): string {
 export function CampaignScreen() {
   const { view, campaigns, artifacts, templates } = useAppState();
   const dispatch = useAppDispatch();
+  const { pushChip } = usePromptChips();
 
   const campaign =
     view.kind === "campaign"
@@ -170,6 +173,22 @@ export function CampaignScreen() {
     });
   }
 
+  // ИИ-иконка у «Сценарий кампании» (spec §2): кладёт тег «Логика кампании» в
+  // промпт-бар и запускает правку СТРУКТУРЫ графа через тот же ИИ-движок, что в
+  // графе. Фокус на бар следует автоматически — ChipEditableInput фокусируется
+  // при вставке нового чипа, а свёрнутый бар смонтирован на экране карточки.
+  // Только до запуска (draft) — правки логики допустимы лишь до старта.
+  function editLogic() {
+    if (!campaignId) return;
+    pushChip({
+      id: `campaign-logic_${campaignId}`,
+      kind: "campaign-logic",
+      label: "Логика кампании",
+      payload: { campaignId },
+      removable: true,
+    });
+  }
+
   const duplicateAction: EntityCardAction = {
     label: "Дублировать",
     onClick: () => {
@@ -258,7 +277,22 @@ export function CampaignScreen() {
           артефактов, без ИИ, через per-stage слот WorkflowDescription) →
           остальные этапы → кликабельная миниатюра, открывающая полный граф
           (правка логики — там, инлайн-«Изменить» на карточке снят). */}
-      <CardSection label="Сценарий кампании">
+      <CardSection
+        label="Сценарий кампании"
+        action={
+          status === "draft" ? (
+            <button
+              type="button"
+              aria-label="Изменить логику кампании с ИИ"
+              title="Изменить логику кампании с ИИ"
+              onClick={editLogic}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-muted transition-colors hover:bg-brand/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
+            </button>
+          ) : undefined
+        }
+      >
         <div className="flex flex-col gap-5">
           <WorkflowDescription
             stages={descriptionStages}

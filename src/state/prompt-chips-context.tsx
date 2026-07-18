@@ -11,7 +11,12 @@ import {
 import { nanoid } from "nanoid";
 import { useScopeReset } from "./use-scope-reset";
 
-export type PromptChipKind = "trigger" | "mode" | "node" | "section";
+export type PromptChipKind =
+  | "trigger"
+  | "mode"
+  | "node"
+  | "section"
+  | "campaign-logic";
 
 export interface PromptChip {
   id: string;
@@ -45,6 +50,27 @@ export function isNodeTagPayload(payload: unknown): payload is NodeTagPayload {
     typeof (payload as NodeTagPayload).nodeId === "string" &&
     typeof (payload as NodeTagPayload).nodeType === "string" &&
     typeof (payload as NodeTagPayload).color === "string"
+  );
+}
+
+/**
+ * Payload тега «Логика кампании» (правка структуры графа с карточки). Несёт id
+ * кампании, чей граф правит ИИ-оркестратор — отдельный kind, чтобы не
+ * перегружать `node` (см. spec §2).
+ */
+export interface CampaignLogicPayload {
+  /** id кампании, чью логику (граф) правим. */
+  campaignId: string;
+}
+
+/** Type guard: payload чипа — это CampaignLogicPayload. */
+export function isCampaignLogicPayload(
+  payload: unknown
+): payload is CampaignLogicPayload {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as CampaignLogicPayload).campaignId === "string"
   );
 }
 

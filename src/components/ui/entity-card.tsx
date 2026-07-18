@@ -174,20 +174,30 @@ export function CardTag({ children }: { children: ReactNode }) {
 
 export function CardSection({
   label,
+  action,
   children,
   className,
 }: {
   label?: string;
+  /** Optional affordance rendered next to the section label (e.g. an AI icon). */
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={cn("rounded-xl border border-border bg-card p-5", className)}>
-      {label && (
+      {label && action ? (
+        <div className="mb-3 flex items-center gap-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            {label}
+          </p>
+          {action}
+        </div>
+      ) : label ? (
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           {label}
         </p>
-      )}
+      ) : null}
       {children}
     </section>
   );
