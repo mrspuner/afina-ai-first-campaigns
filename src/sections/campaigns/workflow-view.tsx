@@ -311,8 +311,13 @@ export function WorkflowView({
     /** Если задан — переиспользуем существующий pending-пузырь (создал раннер),
      *  иначе создаём свой. Так на AI-правке графа пузырь ровно один. */
     replyId?: string;
+    /** Вызывается после того, как setGraph(...) осел (тот же non-render
+     *  момент, что и setCyclePhase("reveal") / chat.updatePending) — сюда
+     *  выносят dispatch'и, которые apply() не может делать сам, потому что
+     *  apply вызывается внутри React-апдейтера setGraph. */
+    onApplied?: () => void;
   }) {
-    const { durationMs, apply, finalReply } = opts;
+    const { durationMs, apply, finalReply, onApplied } = opts;
     thinkDurationMsRef.current = durationMs;
     cycleTimersRef.current.forEach(clearTimeout);
     cycleTimersRef.current = [];
@@ -348,6 +353,7 @@ export function WorkflowView({
       // актуального состояния графа в момент применения.
       chat.updatePending(replyId, finalReply ?? "Готово.");
       pendingReplyIdRef.current = null;
+      onApplied?.();
     }, durationMs);
 
     const t2 = setTimeout(() => {
@@ -490,7 +496,6 @@ export function WorkflowView({
       // Пересчитываем ops от prev, чтобы не затереть эти правки.
       apply: (prev) => {
         aiSnapshotRef.current = prev;
-        dispatch({ type: "workflow_ai_undo_availability", available: true });
         const live = applyStructuralOps(prev, structuralOps);
         return {
           graph: live.graph,
@@ -499,6 +504,8 @@ export function WorkflowView({
         };
       },
       finalReply: early.reply,
+      onApplied: () =>
+        dispatch({ type: "workflow_ai_undo_availability", available: true }),
     });
 
     if (state.workflowReplyId) dispatch({ type: "workflow_reply_id_clear" });
@@ -520,7 +527,6 @@ export function WorkflowView({
       replyId,
       apply: (prev) => {
         aiSnapshotRef.current = prev;
-        dispatch({ type: "workflow_ai_undo_availability", available: true });
         return {
           graph: early.graph,
           changedIds: early.changedIds,
@@ -528,6 +534,8 @@ export function WorkflowView({
         };
       },
       finalReply: early.reply,
+      onApplied: () =>
+        dispatch({ type: "workflow_ai_undo_availability", available: true }),
     });
     if (replyId) dispatch({ type: "workflow_reply_id_clear" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
