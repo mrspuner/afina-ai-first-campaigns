@@ -24,8 +24,13 @@ import {
   type CampaignCost,
 } from "./campaign-cost";
 
-/** Fallback audience base when neither a file nor an artifact is available. */
-const FALLBACK_BASE = 10_000;
+/**
+ * Fallback audience base when neither a file nor an artifact is available.
+ * Exported so the campaign card's «Запуск» block (campaign-screen.tsx) derives
+ * `audienceSize` with the exact same rule — one of the reasons its payments
+ * figure always matches this screen's (A2.3 §6).
+ */
+export const FALLBACK_BASE = 10_000;
 
 type Mode = "recommended" | "custom";
 

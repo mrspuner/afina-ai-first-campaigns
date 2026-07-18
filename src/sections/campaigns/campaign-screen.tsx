@@ -31,10 +31,24 @@ import { CampaignCommunicationNodeBlock } from "./campaign-communication-node-bl
 import { StatusBadge } from "./status-badge";
 import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
+// «Запуск» block (A2.3) reuses the SAME cost modules the payment screen uses,
+// imported from the exact same paths as campaign-payment-screen.tsx, so the
+// payments figure shown here is guaranteed to equal the payment screen's.
+import { estimateTouches, computeCampaignCost } from "./campaign-cost";
+import { splitCampaignPayments } from "./campaign-payments";
+import { BudgetBreakdown } from "./budget-breakdown";
+import { groupCommunicationLines } from "./communication-breakdown";
+import { campaignBaseRows } from "./campaign-metrics";
+import { formatRubPlain } from "@/lib/format-rub";
+import { scoringLineDisplay, FALLBACK_BASE } from "./campaign-payment-screen";
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ru-RU");
+}
+
+function formatNumber(n: number): string {
+  return n.toLocaleString("ru-RU");
 }
 
 export function CampaignScreen() {
@@ -188,6 +202,33 @@ export function CampaignScreen() {
   // попадает — это отдельный проход графа, у него своих блоков нет.
   const firstTouchNodes = launchGraph ? firstTouchCommunicationNodes(launchGraph) : [];
 
+  // Блок «Запуск» (A2.3, только draft): прогноз касаний → платежи → «К
+  // оплате». Считаем ТЕМИ ЖЕ модулями и по ТЕМ ЖЕ входам (launchGraph,
+  // audienceSize), что и экран оплаты (campaign-payment-screen.tsx) —
+  // поэтому число здесь и там совпадает; при смене базы/шаблонов launchGraph
+  // меняется на ре-рендере, и число пересчитывается вместе с ним.
+  const audienceSize =
+    campaignBaseRows(campaign) ?? campaignArtifact?.count ?? FALLBACK_BASE;
+  const draftCost =
+    status === "draft" && launchGraph
+      ? computeCampaignCost(launchGraph.nodes, launchGraph.edges, audienceSize)
+      : null;
+  const draftPaymentSplit =
+    status === "draft"
+      ? (() => {
+          const flat = splitCampaignPayments({
+            sourceType: campaign.sourceType ?? "new",
+            channels: campaign.channels ?? [],
+            baseSize: audienceSize,
+          });
+          const communication = draftCost ? draftCost.total : flat.communication;
+          return { ...flat, communication, total: flat.scoring + communication };
+        })()
+      : null;
+  const draftRecommended = draftPaymentSplit?.total ?? 0;
+  const draftTouches = estimateTouches(draftRecommended, audienceSize);
+  const draftCommGroups = draftCost ? groupCommunicationLines(draftCost.lines) : null;
+
   return (
     <EntityCardShell
       title={campaign.name}
@@ -274,7 +315,8 @@ export function CampaignScreen() {
         </CardSection>
       )}
 
-      {/* Завершённая → статус; готовый черновик/пауза → CTA «Запустить». */}
+      {/* Завершённая → статус; пауза → «Возобновить» (без оплаты); черновик →
+          прогноз касаний → платежи → «К оплате» (A2.3). */}
       {isCompleted ? (
         <CardSection label="Статус">
           <p className="text-sm text-muted-foreground">
@@ -284,21 +326,64 @@ export function CampaignScreen() {
         </CardSection>
       ) : showLaunch ? (
         <CardSection label="Запуск">
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">
-              {status === "paused"
-                ? "Кампания остановлена. Возобновите её, чтобы снова подключить провайдеров."
-                : "Запустите кампанию — провайдеры начнут подключаться после оплаты."}
-            </p>
-            <Button
-              onClick={launch}
-              disabled={!canLaunch}
-              className="gap-2 self-start"
-            >
-              <Play className="h-4 w-4" />
-              Запустить
-            </Button>
-          </div>
+          {status === "paused" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Кампания остановлена. Возобновите её, чтобы снова подключить
+                провайдеров.
+              </p>
+              <Button
+                onClick={launch}
+                disabled={!canLaunch}
+                className="gap-2 self-start"
+              >
+                <Play className="h-4 w-4" />
+                Запустить
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Запустите кампанию — провайдеры начнут подключаться после
+                оплаты.
+              </p>
+              {/* Прогноз касаний — та же оценка (estimateTouches), что и на
+                  экране оплаты, на рекомендуемой сумме. */}
+              <p className="text-sm text-muted-foreground">
+                Прогноз касаний:{" "}
+                <span className="font-medium text-foreground">
+                  {draftTouches > 0 ? formatNumber(draftTouches) : "—"}
+                </span>
+              </p>
+              {/* Платежи — BudgetBreakdown на splitCampaignPayments +
+                  computeCampaignCost, рекомендуемая сумма. То же число, что на
+                  экране оплаты (общие модули, см. campaign-cost-parity.test.ts). */}
+              {draftPaymentSplit && draftPaymentSplit.total > 0 && (
+                <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+                  <BudgetBreakdown
+                    signalsDisplay={scoringLineDisplay({
+                      sourceType: campaign.sourceType ?? "new",
+                      scoring: draftPaymentSplit.scoring,
+                    })}
+                    communicationDisplay={formatRubPlain(
+                      draftPaymentSplit.communication,
+                    )}
+                    totalDisplay={formatRubPlain(draftPaymentSplit.total)}
+                    commGroups={draftCommGroups}
+                    formatCell={formatRubPlain}
+                  />
+                </div>
+              )}
+              <Button
+                onClick={launch}
+                disabled={!canLaunch}
+                className="gap-2 self-start"
+              >
+                <Play className="h-4 w-4" />
+                К оплате
+              </Button>
+            </div>
+          )}
         </CardSection>
       ) : null}
 
