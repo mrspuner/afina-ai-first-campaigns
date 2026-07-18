@@ -10,7 +10,11 @@ import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
 import { TemplatePreviewDrawer } from "./template-preview-drawer";
 import { EmailEditorPanel } from "./email-editor-panel";
+import { PRESET_TEMPLATES } from "@/state/app-state";
 import type { Campaign, Preset } from "@/state/app-state";
+import { createTemplate } from "@/state/workflow-templates";
+import { setCachedGraph } from "./workflow-graph-cache";
+import type { Channel } from "@/types/campaign";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
 // mount — absent in jsdom. Provide a minimal no-op shim so the screen renders.
@@ -70,9 +74,11 @@ function renderCampaign(campaign: Campaign) {
   );
 }
 
-/** Same tree as `renderCampaign` plus the two drawers the comm node-blocks
- *  open (mirrors page.tsx's composition) — needed to assert the click
- *  actually opens the EXISTING editor, not just flips chat-context state. */
+/** Same tree as `renderCampaign` plus `TemplatePreviewDrawer` (the drawer ALL
+ *  comm node-blocks open post-fix) and `EmailEditorPanel` (mirrors page.tsx's
+ *  composition; kept mounted so tests can assert it stays CLOSED — proof the
+ *  email block no longer routes there) — needed to assert the click actually
+ *  opens the EXISTING drawer, not just flips chat-context state. */
 function renderCampaignWithDrawers(campaign: Campaign) {
   return render(
     <AppStateProvider>
@@ -245,10 +251,38 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
   // baseCampaign, который сегментирован — см. graph-description.test.ts).
   const RETURN_SCENARIO = { id: "base-return", name: "Возврат" };
 
+  /**
+   * `channelTemplateParams("email")` (channel-nodes.ts) не совпадает ни с одним
+   * пресетом библиотеки (см. graph-description.test.ts — «шаблон не
+   * резолвится»), в отличие от sms/push, которые нарочно совпадают со своим
+   * пресетом. Чтобы протестировать «резолвнутый шаблон» путь для email — ровно
+   * так же, как sms/push, — патчим email-ноду свежепостроенного графа content'ом
+   * реального пресета и кладём граф в durable-кэш кампании (тот же кэш, что несёт
+   * ручные правки пользователя — CampaignScreen читает именно его).
+   */
+  function seedMatchedEmailGraph(campaignId: string, channels: Channel[]) {
+    const graph = createTemplate("Возврат", "new", channels);
+    const emailTemplate = PRESET_TEMPLATES.find(
+      (t) =>
+        t.channel === "email" &&
+        t.content.kind === "email" &&
+        t.content.emailId === "eml_offer",
+    )!;
+    const nodes = graph.nodes.map((n) =>
+      n.data.nodeType === "email"
+        ? { ...n, data: { ...n.data, params: { ...emailTemplate.content } } }
+        : n,
+    );
+    setCachedGraph(campaignId, { nodes, edges: graph.edges });
+    return emailTemplate;
+  }
+
   it("рендерит по одному нодо-блоку на каждую первую коммуникацию (sms+email) с текущим шаблоном", () => {
+    const campaignId = "cmp_comm_blocks";
+    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
     renderCampaign(
       baseCampaign({
-        id: "cmp_comm_blocks",
+        id: campaignId,
         scenario: RETURN_SCENARIO,
         channels: ["sms", "email"],
       }),
@@ -257,7 +291,7 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
       screen.getByRole("button", { name: "Изменить шаблон: SMS — напоминание" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Изменить шаблон: Специальное предложение" }),
+      screen.getByRole("button", { name: `Изменить шаблон: ${emailTemplate.name}` }),
     ).toBeInTheDocument();
   });
 
@@ -276,23 +310,25 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
     expect(within(drawer).getByText("SMS — напоминание")).toBeInTheDocument();
   });
 
-  it("клик по блоку Email открывает СУЩЕСТВУЮЩИЙ редактор письма (другой дровер — не TemplatePreviewDrawer)", () => {
+  // Fix: email раньше открывал EmailEditorPanel — другой дровер, чем графовая
+  // нода (которая с #9bbf9fc резолвит «Шаблон» через control:"template" →
+  // TemplatePreviewDrawer, как sms/push). Теперь блок открывает ТОТ ЖЕ дровер.
+  it("клик по блоку Email открывает TemplatePreviewDrawer — тот же дровер, что и sms/push/граф", () => {
+    const campaignId = "cmp_comm_email_click";
+    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
     renderCampaignWithDrawers(
       baseCampaign({
-        id: "cmp_comm_email_click",
+        id: campaignId,
         scenario: RETURN_SCENARIO,
         channels: ["sms", "email"],
       }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Изменить шаблон: Специальное предложение" }),
+      screen.getByRole("button", { name: `Изменить шаблон: ${emailTemplate.name}` }),
     );
-    expect(screen.getByTestId("email-editor-panel")).toBeInTheDocument();
-    expect(screen.queryByTestId("template-preview-drawer")).not.toBeInTheDocument();
-    // Черновик — редактор открыт НЕ на просмотр: название письма редактируемо.
-    expect(screen.getByDisplayValue("Специальное предложение")).not.toHaveAttribute(
-      "readonly",
-    );
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(within(drawer).getByText(emailTemplate.name)).toBeInTheDocument();
+    expect(screen.queryByTestId("email-editor-panel")).not.toBeInTheDocument();
   });
 
   it("показывает нодо-блок IVR (сценарий звонка) и открывает предпросмотр по клику", () => {
@@ -313,9 +349,11 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
   });
 
   it("запущенная кампания: нодо-блоки коммуникаций read-only («Показать шаблон» вместо «Изменить»)", () => {
+    const campaignId = "cmp_comm_readonly";
+    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
     renderCampaign(
       baseCampaign({
-        id: "cmp_comm_readonly",
+        id: campaignId,
         scenario: RETURN_SCENARIO,
         channels: ["sms", "email"],
         status: "active",
@@ -327,17 +365,23 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
       screen.getByRole("button", { name: "Показать шаблон: SMS — напоминание" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Показать шаблон: Специальное предложение" }),
+      screen.getByRole("button", { name: `Показать шаблон: ${emailTemplate.name}` }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Изменить шаблон/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("запущенная кампания: клик по блоку Email открывает редактор в режиме просмотра (read-only)", () => {
+  // Fix: read-only меняет только аффорданс блока (Eye/«Показать») — клик
+  // по-прежнему открывает ТОТ ЖЕ TemplatePreviewDrawer, что и до запуска
+  // (правка внутри дровера ограничивается его собственным usedInCampaigns,
+  // не статусом кампании — см. doc-comment CampaignCommunicationNodeBlock).
+  it("запущенная кампания: клик по блоку Email открывает тот же TemplatePreviewDrawer (не EmailEditorPanel)", () => {
+    const campaignId = "cmp_comm_email_readonly";
+    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
     renderCampaignWithDrawers(
       baseCampaign({
-        id: "cmp_comm_email_readonly",
+        id: campaignId,
         scenario: RETURN_SCENARIO,
         channels: ["sms", "email"],
         status: "active",
@@ -346,11 +390,11 @@ describe("CampaignScreen — нодо-блоки коммуникаций под
       }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Показать шаблон: Специальное предложение" }),
+      screen.getByRole("button", { name: `Показать шаблон: ${emailTemplate.name}` }),
     );
-    expect(screen.getByDisplayValue("Специальное предложение")).toHaveAttribute(
-      "readonly",
-    );
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(within(drawer).getByText(emailTemplate.name)).toBeInTheDocument();
+    expect(screen.queryByTestId("email-editor-panel")).not.toBeInTheDocument();
   });
 
   it("кампания без коммуникаций не рендерит нодо-блоков каналов", () => {

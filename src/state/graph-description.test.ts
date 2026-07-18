@@ -161,13 +161,15 @@ describe("firstTouchCommunicationNodes", () => {
     expect(firstTouchCommunicationNodes({ nodes: [], edges: [] })).toEqual([]);
   });
 
-  it("для сегментированного шаблона возвращает ОТДЕЛЬНУЮ ноду на каждый сегмент (не схлопывает, в отличие от текста)", () => {
+  it("для сегментированного шаблона схлопывает одинаковые сегменты в ОДИН блок на канал (Fix: как и текст описания)", () => {
     // Апсейл — сегментированный: 3 comm-юнита с одинаковыми sms-параметрами.
-    // Текст описания схлопывает их в одну строку (см. describeWorkflow), но
-    // нодо-блоки карточки (A2.1) идут один на КАЖДУЮ ноду графа.
+    // Раньше нодо-блоки карточки (A2.1) шли один на КАЖДУЮ ноду графа — три
+    // визуально идентичных SMS-блока под одной подписью «SMS». Теперь дедуп —
+    // тот же ключ channel|text, что и у describeWorkflow, поэтому блоков и
+    // строк текста поровну: ровно один на канал.
     const graph = createTemplate("Апсейл", "new", ["sms"]);
     const nodes = firstTouchCommunicationNodes(graph);
-    expect(nodes.length).toBeGreaterThan(1);
-    expect(nodes.every((n) => n.data.nodeType === "sms")).toBe(true);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].data.nodeType).toBe("sms");
   });
 });

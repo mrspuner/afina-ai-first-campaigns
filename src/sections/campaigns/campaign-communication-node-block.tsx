@@ -5,11 +5,6 @@ import type { WorkflowNode } from "@/types/workflow";
 import { useAppState } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import {
-  draftFromRecord,
-  generateEmailDraft,
-  getEmail,
-} from "@/state/email-directory";
-import {
   channelForNodeKind,
   ivrNodePreviewTemplate,
   templateOptionsForKind,
@@ -19,9 +14,12 @@ import { NODE_STYLES, NODE_ICON } from "./node-visuals";
 
 /** Ключ params, по которому текущий контент ноды сверяется с библиотекой
  *  шаблонов — совпадает с `TEMPLATE_MATCH_KEY` в graph-description.ts (то же
- *  сравнение, что и в тексте описания и в селекте «Шаблон» графа). */
-const TEMPLATE_MATCH_KEY: Partial<Record<"sms" | "push", string>> = {
+ *  сравнение, что и в тексте описания и в селекте «Шаблон» графа). Email тоже
+ *  сверяется по `body`: с миграции «Шаблон» на `control:"template"` (см.
+ *  `NODE_FIELD_EDITABILITY`) email резолвится РОВНО как sms/push. */
+const TEMPLATE_MATCH_KEY: Partial<Record<"sms" | "email" | "push", string>> = {
   sms: "text",
+  email: "body",
   push: "body",
 };
 
@@ -45,14 +43,11 @@ interface Resolved {
  * не резолвится к библиотеке, блок просто показывает сырой текст без клика,
  * как и в графе (нет «глаза» без резолвнутого шаблона).
  *
- * - sms/push: резолв как у `NodeTemplateSelect` — совпадение текущего
+ * - sms/email/push: резолв как у `NodeTemplateSelect` — совпадение текущего
  *   text/body с содержимым шаблона канала; открывает `TemplatePreviewDrawer`.
- * - email: резолв как у `EmailField` — по `emailId`, иначе по теме (легаси);
- *   открывает `EmailEditorPanel` (другой дровер — email использует
- *   собственный справочник писем, не библиотеку `templates`). `preview`
- *   передаётся явно, т.к. `EmailEditorPanel` сам считает read-only только по
- *   `view.kind==="workflow"` — карточка кампании (`view.kind==="campaign"`)
- *   под это не подпадает.
+ *   Email после миграции «Шаблон» на `control:"template"` (см.
+ *   `NODE_FIELD_EDITABILITY`) резолвится ТАК ЖЕ, как sms/push — `EmailField`/
+ *   `EmailEditorPanel` для графовых нод больше не используются.
  * - ivr: сценарий никогда не хранится в библиотеке — оборачивается в
  *   шаблон-однодневку (`ivrNodePreviewTemplate`), как «глаз» combo-поля
  *   «Текст» в графе; всегда кликабелен, если сценарий не пуст.
@@ -60,8 +55,8 @@ interface Resolved {
  * `readOnly` (после запуска кампании) влияет только на иконку-аффорданс
  * (Pencil/Eye) — сам клик работает одинаково, ровно как «Изменить»/«Показать»
  * у `ScoringRow`: read-only ограничивает ПРАВКУ (её накладывает сам дровер —
- * использованный шаблон блокируется через `usedInCampaigns`, письмо — через
- * переданный `preview`), а не возможность посмотреть.
+ * использованный шаблон блокируется через `usedInCampaigns`), а не
+ * возможность посмотреть.
  */
 export function CampaignCommunicationNodeBlock({
   node,
@@ -71,7 +66,7 @@ export function CampaignCommunicationNodeBlock({
   readOnly: boolean;
 }) {
   const { templates } = useAppState();
-  const { openTemplatePreview, openEmailEditor } = useChat();
+  const { openTemplatePreview } = useChat();
   const params = node.data.params;
   const nodeType = node.data.nodeType;
   const style = NODE_STYLES[nodeType];
@@ -84,7 +79,7 @@ export function CampaignCommunicationNodeBlock({
 
   let resolved: Resolved | null = null;
 
-  if (params.kind === "sms" || params.kind === "push") {
+  if (params.kind === "sms" || params.kind === "email" || params.kind === "push") {
     const matchKey = TEMPLATE_MATCH_KEY[params.kind]!;
     const current = (params as unknown as Record<string, unknown>)[matchKey];
     const matched = templateOptionsForKind(templates, params.kind).find(
@@ -93,34 +88,6 @@ export function CampaignCommunicationNodeBlock({
     resolved = matched
       ? { label: matched.name, open: () => openTemplatePreview(matched.id) }
       : { label: (current as string) || "—" };
-  } else if (params.kind === "email") {
-    const selected = params.emailId
-      ? getEmail(params.emailId)
-      : undefined;
-    const label = selected?.name ?? params.subject ?? "—";
-    const hasSelection = Boolean(selected || params.subject);
-    resolved = {
-      label,
-      open: hasSelection
-        ? () => {
-            const draft = selected
-              ? draftFromRecord(selected)
-              : {
-                  ...generateEmailDraft(""),
-                  name: params.subject || "Письмо",
-                  subject: params.subject,
-                  body: params.body,
-                  link: params.link ?? "",
-                  sender: params.sender,
-                };
-            openEmailEditor(node.id, {
-              emailId: selected?.id,
-              draft,
-              preview: readOnly,
-            });
-          }
-        : undefined,
-    };
   } else if (params.kind === "ivr") {
     const text = params.scenario.trim();
     resolved = {
