@@ -16,6 +16,13 @@ interface WorkflowMiniPreviewProps {
   /** Selected communication channels — passed to createTemplate for accurate preview. */
   channels?: Channel[];
   /**
+   * Cache-version token (workflow-graph-cache `useCachedGraphVersion`). Bumped
+   * whenever the cached graph is written — e.g. by the headless card applier.
+   * Included in the memo deps so the preview rebuilds after a card logic-edit
+   * even though `campaignId`/`signalType`/`sourceType`/`channels` are unchanged.
+   */
+  graphVersion?: number;
+  /**
    * When supplied, the mini preview becomes a clickable `role="button"` element
    * and invokes this handler on click / Enter / Space. It is intentionally NOT
    * a native `<button>`: the preview embeds a react-flow graph whose zoom
@@ -39,6 +46,7 @@ export function WorkflowMiniPreview({
   signalType,
   sourceType,
   channels,
+  graphVersion,
   onClick,
 }: WorkflowMiniPreviewProps) {
   const graph = useMemo(() => {
@@ -53,7 +61,10 @@ export function WorkflowMiniPreview({
       return { nodes: t.nodes, edges: t.edges };
     }
     return { nodes: [], edges: [] };
-  }, [campaignId, signalType, sourceType, channels]);
+    // graphVersion is a cache-invalidation token: it has no direct use inside
+    // the memo, but bumping it must recompute the graph from the updated cache.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, signalType, sourceType, channels, graphVersion]);
 
   const innerGraph = (
     <div

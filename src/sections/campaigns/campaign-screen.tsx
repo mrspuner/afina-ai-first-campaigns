@@ -21,7 +21,8 @@ import {
   communicatingThresholdMs,
 } from "./campaign-progress";
 import { canLaunchWithGraph } from "./campaign-launch-gate";
-import { getCachedGraph } from "./workflow-graph-cache";
+import { getCachedGraph, useCachedGraphVersion } from "./workflow-graph-cache";
+import { useCampaignGraphApplier } from "./use-campaign-graph-applier";
 import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
@@ -60,6 +61,17 @@ export function CampaignScreen() {
       : undefined;
 
   const campaignId = campaign?.id;
+
+  // Headless applier: consumes the workflow mailbox slot (structural ops /
+  // rebuild) submitted from the CARD — where the graph view is unmounted and
+  // would otherwise never apply the edit (chat bubble spinning forever). Mounted
+  // unconditionally (hooks rules) and self-guards to `view.kind === "campaign"`.
+  useCampaignGraphApplier(campaignId);
+  // Re-render when the applier writes the cache, so `launchGraph` /
+  // `describeWorkflow` below re-read the freshly edited graph. Threaded into the
+  // mini-preview so its memoized graph rebuilds too.
+  const graphVersion = useCachedGraphVersion();
+
   // Пост-лонч: на пороге коммуникации (после «Обработки базы») переводим фазу и
   // создаём артефакт. Старые кампании (elapsed > порога) — сразу без таймера.
   const launchedAtMs =
@@ -286,6 +298,7 @@ export function CampaignScreen() {
               signalType={signalType}
               sourceType={campaign.sourceType}
               channels={campaign.channels}
+              graphVersion={graphVersion}
               onClick={openWorkflow}
             />
           </div>
