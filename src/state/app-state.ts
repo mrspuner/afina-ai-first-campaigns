@@ -4,6 +4,7 @@ import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
 import type { StepData, Channel, SourceType } from "@/types/campaign";
+import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
 import { defaultCampaignName } from "./scenario-display";
@@ -22,6 +23,7 @@ import {
 } from "@/data/business-directions";
 import type { AccountSettings } from "@/types/account-settings";
 import { DEMO_ACCOUNT_SETTINGS } from "@/types/account-settings";
+import { knownTriggerDomains } from "@/data/trigger-domains";
 import {
   DEFAULT_FILTERS,
   statisticsReducer,
@@ -71,6 +73,15 @@ export type Campaign = {
   /** Wizard-selected behavioral triggers (intent signals). Mirrors `interests`;
    *  surfaced read-only in the scoring node's «Интересы и триггеры» drawer. */
   triggers?: string[];
+  /**
+   * Per-trigger domain edits (added/excluded domains), keyed by trigger id —
+   * same key + shape as `StepData.triggerConfig` (see its doc comment), so no
+   * conversion happens between the wizard and the campaign. In-memory,
+   * session-durable: this is what the shared editor's `initialDeltas` prop
+   * seeds from, so add/exclude edits survive the drawer being closed and
+   * reopened, or the wizard step being re-entered.
+   */
+  triggerConfig?: Record<string, TriggerDelta>;
   files?: CampaignFile[];
   /** Расчётный дневной бюджет (communication / STREAM_DAYS). Производная от
    *  стоимости графа — пересчитывается и перезаписывается при запуске. */
@@ -320,7 +331,7 @@ export type Action =
   | { type: "campaign_renamed"; id: string; name: string }
   | { type: "campaign_file_added"; campaignId: string; file: CampaignFile }
   | { type: "campaign_file_removed"; campaignId: string; index: number }
-  | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[] }
+  | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[]; triggerConfig?: Record<string, TriggerDelta> }
   | { type: "campaign_saved_draft"; id: string }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
@@ -358,6 +369,13 @@ export type Action =
   // Спека #3 — подтверждение экрана review в Survey: проверенные данные
   // применяются в accountSettings РАЗОМ (отложенный коммит, а не молча при парсинге).
   | { type: "account_review_confirmed"; settings: AccountSettings }
+  // Реестр доменов (единый источник статуса модерации, см. `ownDomains`):
+  // известные домены (knownTriggerDomains()) регистрируются approved сразу,
+  // неизвестные — pending. Идемпотентно — уже зарегистрированный не дублируется.
+  | { type: "domain_registered"; domain: string }
+  // Прототип-симуляция таймера модерации (Task 7): переводит НАЗВАННЫЕ pending
+  // домены в approved/rejected; остальные записи реестра не трогает.
+  | { type: "domain_moderation_resolved"; approved: string[]; rejected: string[] }
   | { type: "dev_survey_force_complete" }
   | { type: "balance_topup"; amount: number }
   | { type: "artifact_opened"; id: string; origin?: ArtifactOrigin }
@@ -531,6 +549,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         channels: sd.channels,
         interests: sd.interests,
         triggers: sd.triggers,
+        triggerConfig:
+          Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
         files,
         budget: sd.budget ?? undefined,
         dailyBudget: sd.dailyBudget,
@@ -647,7 +667,12 @@ export function appReducer(state: AppState, action: Action): AppState {
         ...state,
         campaigns: state.campaigns.map((c) =>
           c.id === action.id
-            ? { ...c, interests: action.interests, triggers: action.triggers }
+            ? {
+                ...c,
+                interests: action.interests,
+                triggers: action.triggers,
+                triggerConfig: action.triggerConfig ?? c.triggerConfig,
+              }
             : c
         ),
       };
@@ -1065,6 +1090,47 @@ export function appReducer(state: AppState, action: Action): AppState {
         accountSettings: action.settings,
         clientDirection: businessDirectionFromSurvey(action.settings.directionId),
       };
+
+    case "domain_registered": {
+      // Идемпотентно: уже зарегистрированный домен не дублируется.
+      if (
+        state.accountSettings.ownDomains.some((d) => d.domain === action.domain)
+      ) {
+        return state;
+      }
+      const isKnown = knownTriggerDomains().some((d) => d.id === action.domain);
+      return {
+        ...state,
+        accountSettings: {
+          ...state.accountSettings,
+          ownDomains: [
+            ...state.accountSettings.ownDomains,
+            {
+              domain: action.domain,
+              status: isKnown ? "approved" : "pending",
+              addedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      };
+    }
+
+    case "domain_moderation_resolved": {
+      const approved = new Set(action.approved);
+      const rejected = new Set(action.rejected);
+      if (approved.size === 0 && rejected.size === 0) return state;
+      return {
+        ...state,
+        accountSettings: {
+          ...state.accountSettings,
+          ownDomains: state.accountSettings.ownDomains.map((d) => {
+            if (approved.has(d.domain)) return { ...d, status: "approved" };
+            if (rejected.has(d.domain)) return { ...d, status: "rejected" };
+            return d;
+          }),
+        },
+      };
+    }
 
     case "campaign_launched": {
       const c = state.campaigns.find((cc) => cc.id === action.id);

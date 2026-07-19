@@ -8,6 +8,7 @@ import { getTriggerDomains } from "@/data/trigger-domains";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { TriggerEditRegistryProvider } from "@/state/trigger-edit-context";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
+import { EMPTY_ACCOUNT_SETTINGS } from "@/types/account-settings";
 
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
@@ -20,7 +21,8 @@ vi.mock("next/image", () => ({
 const financeInterests = resolveInterestsForDirection("finance");
 const interest = financeInterests[0];
 const trigger = interest.triggers[0];
-const domain = getTriggerDomains(trigger.id)[0];
+const domainGroup = getTriggerDomains(trigger.id)[0];
+const domain = domainGroup.root;
 
 const dispatchSpy = vi.fn();
 let scoringDrawer = {
@@ -53,6 +55,9 @@ vi.mock("@/state/app-state-context", () => ({
       launched: false,
     },
     wizardRemixToken: 0,
+    // Read by the add-domain combobox (Task 8) for its registered-domains
+    // directory — empty here, no test in this file exercises it.
+    accountSettings: EMPTY_ACCOUNT_SETTINGS,
   }),
   useAppDispatch: () => dispatchSpy,
 }));

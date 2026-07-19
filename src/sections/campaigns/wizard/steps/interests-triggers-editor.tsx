@@ -9,18 +9,26 @@ import {
   type ReactNode,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Plus, X, Undo2 } from "lucide-react";
+import { Check, X, Undo2, Clock } from "lucide-react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { VERTICALS, getInterestById } from "@/data/triggers-by-vertical";
 import { getInterestsForDirection } from "@/data/interests-by-direction";
-import { getTriggerDomains } from "@/data/trigger-domains";
+import {
+  getTriggerDomains,
+  knownTriggerDomains,
+  type DomainGroup,
+} from "@/data/trigger-domains";
 import {
   PREVIEW_VISIBLE_COUNT,
   previewDomains,
   splitSystemDomains,
 } from "@/lib/trigger-domain-view";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Interest, Trigger, Vertical } from "@/types/directions";
-import type { TriggerConfig } from "@/types/campaign";
 import {
   applyEditToDelta,
   EMPTY_DELTA,
@@ -29,12 +37,18 @@ import {
   type ParsedTriggerCommand,
   type TriggerDelta,
 } from "@/lib/trigger-edit-parser";
+import {
+  classifyTypedDomain,
+  normalizeDomainInput,
+  resolveDomainStatus,
+} from "@/lib/domain-add";
 import { usePromptChips } from "@/state/prompt-chips-context";
-import { usePromptInputController } from "@/components/ai-elements/prompt-input";
 import { useRegisterTriggerEdit, type TriggerEditApi } from "@/state/trigger-edit-context";
 import { computeRandomRemix } from "@/lib/random-remix";
 import { InterestChip } from "@/sections/campaigns/interest-chip";
+import { AddDomainCombobox } from "./add-domain-combobox";
 import { cn } from "@/lib/utils";
+import type { DomainStatus, RegisteredDomain } from "@/types/account-settings";
 
 /** Return a copy of `obj` without the given key. Avoids the
  *  `const { [k]: _, ...rest } = obj` pattern that triggers
@@ -207,42 +221,71 @@ function ReadOnlySectionHeader({ label }: { label: string }) {
   );
 }
 
+/**
+ * Chip for a user-layer domain delta (added or excluded). Added-domain color
+ * is driven by its registry status (Task 9) — `status` is only meaningful
+ * for `variant: "added"` (excluded domains have no moderation status, they
+ * always render as the rose "removed" tone). `pending` renders a distinct
+ * warning tone (amber — NOT the brand yellow `--brand`, which PRODUCT.md
+ * reserves for CTA/AI signal) with a clock icon replacing any status text —
+ * the domain name is the only label. `rejected` is never passed in here: the
+ * caller filters those out of the render list entirely (Task 9 — hidden from
+ * the trigger card), so this component never needs to handle it.
+ *
+ * `onRemove` is optional (Task 9 / B2.2 fix) so `ReadOnlyTriggerCard` can
+ * reuse this same status-driven chip for its added domains without exposing
+ * a remove affordance — omitting it just hides the ✕ button.
+ */
 function DeltaChip({
   domain,
   variant,
+  status,
   onRemove,
 }: {
   domain: string;
   variant: "added" | "excluded";
-  onRemove: () => void;
+  status?: DomainStatus;
+  onRemove?: () => void;
 }) {
+  const isPending = variant === "added" && status === "pending";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs",
-        variant === "added"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+        variant === "excluded"
+          ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+          : isPending
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
       )}
     >
       <span className={cn(variant === "excluded" && "line-through")}>
         {domain}
       </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Удалить ${domain}`}
-        className="opacity-60 transition-opacity hover:opacity-100"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      {isPending && <Clock className="h-3 w-3 opacity-70" aria-hidden />}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Удалить ${domain}`}
+          className="opacity-60 transition-opacity hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </span>
   );
 }
 
+/** How many system domain groups the EXPANDED trigger card shows inline
+ *  before collapsing the rest into a "+N" chip (click reveals the rest).
+ *  Distinct from `PREVIEW_VISIBLE_COUNT` (3), which governs the COLLAPSED
+ *  one-line preview only. */
+const EXPANDED_VISIBLE_GROUP_COUNT = 10;
+
 interface TriggerCardProps {
   trigger: Trigger;
-  domains: string[];
+  domains: DomainGroup[];
   selected: boolean;
   delta: TriggerDelta;
   highlight: boolean;
@@ -251,46 +294,106 @@ interface TriggerCardProps {
   onRemoveDelta: (bucket: "added" | "excluded", domain: string) => void;
   onExcludeSystemDomain: (domain: string) => void;
   onRestoreSystemDomain: (domain: string) => void;
-  onAddDomain: () => void;
+  /** Account's previously-registered own-domains (any status) — the
+   *  «Добавить свой домен» combobox's directory list (Task 8). */
+  registeredDomains: readonly string[];
+  /** The full domain registry (Task 9) — looked up per `delta.added` entry
+   *  to decide the chip's color/icon (pending) or whether it renders at all
+   *  (rejected). Single source of truth; status is never stored on the
+   *  delta itself. */
+  ownDomains: readonly RegisteredDomain[];
+  onSelectRegisteredDomain: (domain: string) => void;
+  onSubmitTypedDomain: (raw: string) => void;
 }
 
 /**
- * Chip for a SYSTEM domain in the expanded trigger card.
- *  - active   → neutral chip with ✕; ✕ excludes the domain (reversible).
- *  - excluded → struck-through red chip with ↩; click restores the domain.
- * System data is never deleted — exclusion lives in the user-layer delta.
+ * Chip for a SYSTEM domain GROUP in the expanded trigger card.
+ *  - active   → neutral chip with ✕; ✕ excludes the WHOLE group (reversible).
+ *  - excluded → struck-through red chip with ↩; click restores the group.
+ * Label is the group's `root`; a muted (never brand-yellow) " ·N" counter is
+ * appended when the group has subdomains. Clicking the label (when there are
+ * subdomains to show) opens a tooltip listing them — a read-only preview, no
+ * per-subdomain controls. System data is never deleted — exclusion lives in
+ * the user-layer delta, keyed by `root`.
  */
 function SystemDomainChip({
-  domain,
+  group,
   excluded,
   onExclude,
   onRestore,
 }: {
-  domain: string;
+  group: DomainGroup;
   excluded: boolean;
   onExclude: () => void;
   onRestore: () => void;
 }) {
+  // Controlled (click-driven), unlike the rest of the codebase's uncontrolled
+  // hover Tooltips: the domains spec requires the subdomain list to be
+  // reachable deterministically (click), not only on hover — so `open` is
+  // owned here and only forced true on click; base-ui's own hover/focus/
+  // outside-click/escape handling still drives it closed via `onOpenChange`.
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const hasSubdomains = group.subdomains.length > 0;
+
   if (excluded) {
     return (
       <button
         type="button"
         onClick={onRestore}
-        aria-label={`Вернуть ${domain}`}
+        aria-label={`Вернуть ${group.root}`}
         className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 font-mono text-xs text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
       >
-        <span className="line-through">{domain}</span>
+        <span className="line-through">{group.root}</span>
         <Undo2 className="h-3 w-3 opacity-70" />
       </button>
     );
   }
+
+  const label = (
+    <>
+      {group.root}
+      {hasSubdomains && (
+        <span className="text-muted-foreground"> ·{group.subdomains.length}</span>
+      )}
+    </>
+  );
+
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85">
-      {domain}
+      {hasSubdomains ? (
+        <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+          <TooltipTrigger
+            // Base-ui's Tooltip.Trigger closes on its own reference-press
+            // dismiss by default (`closeOnClick` defaults true), which would
+            // immediately re-close the tooltip we just opened via onClick
+            // below. Disable it — this trigger is click-to-open, not
+            // click-to-toggle.
+            closeOnClick={false}
+            render={
+              <button
+                type="button"
+                onClick={() => setTooltipOpen(true)}
+                aria-label={`Поддомены ${group.root}`}
+              />
+            }
+          >
+            {label}
+          </TooltipTrigger>
+          <TooltipContent side="top" align="start">
+            <ul className="flex flex-col gap-0.5 font-mono">
+              {group.subdomains.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <span>{label}</span>
+      )}
       <button
         type="button"
         onClick={onExclude}
-        aria-label={`Исключить ${domain}`}
+        aria-label={`Исключить ${group.root}`}
         className="opacity-50 transition-opacity hover:opacity-100"
       >
         <X className="h-3 w-3" />
@@ -310,17 +413,35 @@ function TriggerCard({
   onRemoveDelta,
   onExcludeSystemDomain,
   onRestoreSystemDomain,
-  onAddDomain,
+  registeredDomains,
+  ownDomains,
+  onSelectRegisteredDomain,
+  onSubmitTypedDomain,
 }: TriggerCardProps) {
   // Selection IS expansion: a selected trigger is highlighted, open and
   // editable; an unselected one is collapsed to a read-only domain preview.
   const { active: activeSystemDomains, excluded: excludedSystemDomains } =
     splitSystemDomains(domains, delta);
+  // Task 9: resolve each added domain's registry status, then drop rejected
+  // ones entirely (hidden from the trigger card) — never rendered as a
+  // DeltaChip, reversible only from the (out-of-scope) moderation surface.
+  const visibleAddedDomains = delta.added
+    .map((d) => ({ domain: d, status: resolveDomainStatus(d, ownDomains) }))
+    .filter(({ status }) => status !== "rejected");
   // Collapsed preview: first PREVIEW_VISIBLE_COUNT active domains as chips + "+N".
   const collapsedPreview = previewDomains(
     activeSystemDomains,
     PREVIEW_VISIBLE_COUNT
   );
+  // Expanded card: first EXPANDED_VISIBLE_GROUP_COUNT groups (all of them —
+  // active + excluded, same order as the system list), then a "+N" chip that
+  // reveals the rest on click. Local + one-way (no re-collapse) — this is a
+  // reveal affordance, not a toggle.
+  const [allGroupsShown, setAllGroupsShown] = useState(false);
+  const visibleGroups = allGroupsShown
+    ? domains
+    : domains.slice(0, EXPANDED_VISIBLE_GROUP_COUNT);
+  const groupOverflowCount = domains.length - EXPANDED_VISIBLE_GROUP_COUNT;
 
   return (
     <div
@@ -379,12 +500,12 @@ function TriggerCard({
           aria-label="Выбрать и раскрыть триггер"
           className="flex w-full flex-wrap items-center gap-1.5 border-t border-primary/20 bg-background/40 px-3 py-3 text-left"
         >
-          {collapsedPreview.visible.map((d) => (
+          {collapsedPreview.visible.map((group) => (
             <span
-              key={d}
+              key={group.root}
               className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
             >
-              {d}
+              {group.root}
             </span>
           ))}
           {collapsedPreview.overflowCount > 0 && (
@@ -395,39 +516,50 @@ function TriggerCard({
         </button>
       )}
 
-      {/* Expanded (selected): every domain as a chip. System domains carry a
-          reversible ✕; user-added domains are green chips; the dashed button
-          adds a new domain via the prompt bar. */}
+      {/* Expanded (selected): first EXPANDED_VISIBLE_GROUP_COUNT domain GROUPS
+          as chips, then (if more exist) a "+N" chip revealing the rest, then
+          user-added domains as green chips, then the dashed button that adds
+          a new domain via the prompt bar. System domain groups carry a
+          reversible ✕ that excludes the whole group. */}
       {selected && (
         <div className="animate-in fade-in-0 slide-in-from-top-1 border-t border-primary/20 bg-background/40 px-3 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            {domains.map((d) => (
+            {visibleGroups.map((group) => (
               <SystemDomainChip
-                key={`sys-${d}`}
-                domain={d}
+                key={`sys-${group.root}`}
+                group={group}
                 excluded={excludedSystemDomains.some(
-                  (e) => e.toLowerCase() === d.toLowerCase()
+                  (e) => e.root.toLowerCase() === group.root.toLowerCase()
                 )}
-                onExclude={() => onExcludeSystemDomain(d)}
-                onRestore={() => onRestoreSystemDomain(d)}
+                onExclude={() => onExcludeSystemDomain(group.root)}
+                onRestore={() => onRestoreSystemDomain(group.root)}
               />
             ))}
-            {delta.added.map((d) => (
+            {!allGroupsShown && groupOverflowCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAllGroupsShown(true)}
+                aria-label={`Показать ещё ${groupOverflowCount} доменов`}
+                className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
+              >
+                +{groupOverflowCount}
+              </button>
+            )}
+            {visibleAddedDomains.map(({ domain: d, status }) => (
               <DeltaChip
                 key={`add-${d}`}
                 domain={d}
                 variant="added"
+                status={status}
                 onRemove={() => onRemoveDelta("added", d)}
               />
             ))}
-            <button
-              type="button"
-              onClick={onAddDomain}
-              className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
-            >
-              <Plus className="h-3 w-3" />
-              Добавить свой домен
-            </button>
+            <AddDomainCombobox
+              alreadyAdded={delta.added}
+              registeredDomains={registeredDomains}
+              onSelectRegistered={onSelectRegisteredDomain}
+              onSubmitTyped={onSubmitTypedDomain}
+            />
           </div>
         </div>
       )}
@@ -436,32 +568,51 @@ function TriggerCard({
 }
 
 /** Read-only trigger card: label + its active domains as static mono chips
- *  (system domains minus excluded, plus user-added). No checkbox, no editing. */
+ *  (system domains minus excluded, plus user-added). No checkbox, no editing.
+ *
+ *  B2.2 fix (Task 9 gap): the moderation timer is global and `ownDomains` is
+ *  account-wide, so a domain can flip to `rejected` while a user is looking
+ *  at a LAUNCHED campaign's read-only card (reached via
+ *  `scoring-interests-panel.tsx`). Spec B2.2 says rejected must never be
+ *  shown here — same rule the editable `TriggerCard` already enforces via
+ *  `resolveDomainStatus` — so this card resolves + filters `delta.added` the
+ *  same way, reusing that single helper (no duplicated logic). Added-domain
+ *  chips also reuse the same status-driven `DeltaChip` (amber+clock for
+ *  pending, green for approved) as the editable card, minus the remove
+ *  button (read-only). */
 function ReadOnlyTriggerCard({
   trigger,
   domains,
   delta,
+  ownDomains,
 }: {
   trigger: Trigger;
-  domains: string[];
+  domains: DomainGroup[];
   delta: TriggerDelta;
+  ownDomains: readonly RegisteredDomain[];
 }) {
   const { active } = splitSystemDomains(domains, delta);
-  const shown = [...active, ...delta.added];
+  const visibleAddedDomains = delta.added
+    .map((d) => ({ domain: d, status: resolveDomainStatus(d, ownDomains) }))
+    .filter(({ status }) => status !== "rejected");
+  const shownCount = active.length + visibleAddedDomains.length;
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-medium text-foreground">
         {trigger.label}
       </div>
-      {shown.length > 0 && (
+      {shownCount > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-background/40 px-3 py-3">
-          {shown.map((d) => (
+          {active.map((group) => (
             <span
-              key={d}
+              key={group.root}
               className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs text-foreground/85"
             >
-              {d}
+              {group.root}
             </span>
+          ))}
+          {visibleAddedDomains.map(({ domain: d, status }) => (
+            <DeltaChip key={`add-${d}`} domain={d} variant="added" status={status} />
           ))}
         </div>
       )}
@@ -472,7 +623,8 @@ function ReadOnlyTriggerCard({
 export interface InterestsTriggersEditorSelection {
   interests: string[];
   triggers: string[];
-  triggerConfig: Record<string, TriggerConfig>;
+  /** Keyed by trigger id — see the doc comment on `StepData.triggerConfig`. */
+  triggerConfig: Record<string, TriggerDelta>;
 }
 
 export interface InterestsTriggersEditorProps {
@@ -483,6 +635,15 @@ export interface InterestsTriggersEditorProps {
    */
   initialInterestIds?: string[];
   initialTriggerIds?: string[];
+  /**
+   * Per-trigger domain edits to seed the editor's internal `deltas` state
+   * with, keyed by trigger id (`StepData.triggerConfig` / durable
+   * `Campaign.triggerConfig` — same key, no conversion). Read once on mount,
+   * same contract as `initialInterestIds`/`initialTriggerIds`. Passing this
+   * is what makes domain add/exclude edits survive a remount (drawer
+   * close/reopen, wizard step re-entry).
+   */
+  initialDeltas?: Record<string, TriggerDelta>;
   /**
    * When true AND there is no initial selection, seed the selection via the
    * deterministic AI-fill random pick (the wizard's "already prepared for you"
@@ -534,15 +695,27 @@ function pickN<T>(items: readonly T[], n: number, rng: () => number): T[] {
 export function InterestsTriggersEditor({
   initialInterestIds = [],
   initialTriggerIds = [],
+  initialDeltas,
   seedWhenEmpty = false,
   enableRemix = false,
   readOnly = false,
   onChange,
 }: InterestsTriggersEditorProps) {
-  const { clientDirection, wizardRemixToken } = useAppState();
+  const { clientDirection, wizardRemixToken, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
   const { pushChip, clearChips, removeChip } = usePromptChips();
-  const { textInput } = usePromptInputController();
+  // «Добавить свой домен» combobox (Task 8): the account's previously-
+  // registered own-domains (any status) form the directory list, and the
+  // known trigger-domain roots decide whether a free-typed domain lands
+  // active immediately or needs a `domain_registered` dispatch (→ pending).
+  const registeredDomains = useMemo(
+    () => accountSettings.ownDomains.map((d) => d.domain),
+    [accountSettings.ownDomains]
+  );
+  const knownRoots = useMemo(
+    () => knownTriggerDomains().map((d) => d.id),
+    []
+  );
   const vertical = useMemo(
     () => resolveVertical(clientDirection),
     [clientDirection]
@@ -584,7 +757,9 @@ export function InterestsTriggersEditor({
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>(
     initialPrefill.triggerIds
   );
-  const [deltas, setDeltas] = useState<Record<string, TriggerDelta>>({});
+  const [deltas, setDeltas] = useState<Record<string, TriggerDelta>>(
+    () => initialDeltas ?? {}
+  );
   const [highlightedTriggerIds, setHighlightedTriggerIds] = useState<
     Set<string>
   >(() => new Set());
@@ -609,26 +784,28 @@ export function InterestsTriggersEditor({
     return m;
   }, [availableTriggers]);
 
-  // Surface the current selection to the caller as LABELS + triggerConfig
-  // whenever it changes (the wizard advances on it, the drawer persists it).
+  // Surface the current selection to the caller as LABELS (interests/
+  // triggers — the pre-existing convention downstream reads/displays) plus
+  // triggerConfig, which is just `deltas` passed through unchanged: both are
+  // keyed by trigger id, so there is no re-keying to do here.
   useEffect(() => {
     if (!onChange) return;
     const interestLabels = selectedInterests
       .map((id) => interestsForDirection.find((i) => i.id === id)?.label)
       .filter((l): l is string => Boolean(l));
-    const triggerConfig: Record<string, TriggerConfig> = {};
     const triggerLabels: string[] = [];
+    // Only surface config for triggers currently selected — `deltas` retains
+    // entries for deselected triggers (so reselecting within the session
+    // restores them), but the emitted payload must prune them, or a leaked
+    // orphan entry (no matching `triggers` label) persists onto
+    // Campaign.triggerConfig/StepData.triggerConfig.
+    const triggerConfig: Record<string, TriggerDelta> = {};
     for (const triggerId of selectedTriggers) {
       const t = triggerById.get(triggerId);
       if (!t) continue;
       triggerLabels.push(t.label);
       const d = deltas[triggerId];
-      if (d) {
-        triggerConfig[t.label] = {
-          add: d.added.join(", "),
-          exclude: d.excluded.join(", "),
-        };
-      }
+      if (d) triggerConfig[triggerId] = d;
     }
     onChange({ interests: interestLabels, triggers: triggerLabels, triggerConfig });
   }, [
@@ -693,6 +870,26 @@ export function InterestsTriggersEditor({
     setSelectedTriggers((prev) =>
       prev.includes(triggerId) ? prev : [...prev, triggerId]
     );
+    // B2.5 (final-review gap) — this is the SHARED merge choke point for
+    // every add path: the AI prompt-bar edit (`triggerEditApi.applyToTrigger`,
+    // driven by `use-assist-runner.ts`) and the add-domain combobox both
+    // route here. Without registering here, an AI-added domain never entered
+    // `accountSettings.ownDomains`, so `resolveDomainStatus` defaulted it to
+    // a fake "approved" and it skipped moderation entirely. Register every
+    // `add` domain — known trigger-domain roots route to `approved`, anything
+    // else lands `pending` (idempotent, see the `domain_registered` reducer
+    // case). `exclude` never registers — excluding an existing domain isn't
+    // "adding" one. Normalize FIRST (`normalizeDomainInput`, the same helper
+    // the combobox uses) so the registered string and the one merged into the
+    // delta always agree: the AI parser (`extractDomains`) already lowercases
+    // but doesn't strip a leading `www.`, so registering the raw token could
+    // register one variant while the delta stores another — silently
+    // duplicating the domain in the registry.
+    const normalizedAdd =
+      parsed.kind === "edit" ? parsed.add.map(normalizeDomainInput) : [];
+    for (const domain of normalizedAdd) {
+      dispatch({ type: "domain_registered", domain });
+    }
     setDeltas((prev) => {
       const current = prev[triggerId] ?? EMPTY_DELTA;
       let updated: TriggerDelta;
@@ -701,7 +898,7 @@ export function InterestsTriggersEditor({
       } else if (parsed.kind === "clear-excluded") {
         updated = { ...current, excluded: [] };
       } else {
-        updated = applyEditToDelta(current, parsed.add, parsed.exclude);
+        updated = applyEditToDelta(current, normalizedAdd, parsed.exclude);
       }
       const next = { ...prev };
       if (isDeltaEmpty(updated)) delete next[triggerId];
@@ -763,50 +960,28 @@ export function InterestsTriggersEditor({
     });
   }
 
-  // M2.4 (revised) — "Добавить свой домен" pulls the TRIGGER NAME into the
-  // prompt bar as a `trigger` chip, then pre-fills "добавь домен " AFTER the
-  // tag so the user only needs to type the domain. The chip lands in the
-  // contenteditable via an effect on the next commit, so the text insertion is
-  // deferred one frame to land after the chip (not before it). The full
-  // «добавь домен X.ru» is parsed by parseTriggerCommand into an add-edit, and
-  // useChatSubmit routes `trigger` chips through triggerEdit.applyToTrigger —
-  // no parser change. A stable chip id means re-clicking refreshes, not stacks.
-  function handleAddDomain(triggerId: string, triggerLabel: string) {
-    pushTriggerChip(triggerId, triggerLabel);
-    // Текст-команду вставляем ТОЛЬКО после того, как чип реально оказался в DOM
-    // (он попадает туда асинхронным эффектом ChipEditableInput). Один
-    // requestAnimationFrame порядок не гарантирует — поэтому ждём появления
-    // чипа, иначе «добавь домен » вставляется до тега и теряется/едет (S2).
-    insertCommandAfterChip(triggerId, "добавь домен ");
+  // Task 8 — «Добавить свой домен» combobox routing. Both paths write into
+  // the trigger's `delta.added` via the SAME merge as the prompt-bar edit
+  // flow (`applyEditToDelta`, through `handleApplyParsed`) — one mechanism,
+  // two entry points. Status is never stored on the delta: it's read from
+  // the registry (`accountSettings.ownDomains`) at render time.
+  // `handleApplyParsed` itself now registers every `add` domain (B2.5,
+  // final-review gap — it's the shared choke point every add path funnels
+  // through, including the AI prompt-bar edit), so neither helper below
+  // dispatches `domain_registered` directly anymore:
+  //   - Picking a PREVIOUSLY-REGISTERED domain (from the directory list) is
+  //     already in the registry — the dispatch is idempotent, a no-op.
+  //   - Free-typed input is normalized (`classifyTypedDomain` /
+  //     `normalizeDomainInput`) before being added — a known trigger-domain
+  //     root routes to `approved`, anything else lands `pending`.
+  function addRegisteredDomainToTrigger(triggerId: string, domain: string) {
+    handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
-  // Дожидается появления чипа триггера в contenteditable, затем вставляет
-  // text-команду после него. Поллинг по кадрам с потолком попыток — на случай
-  // если чип почему-то не материализуется.
-  function insertCommandAfterChip(
-    triggerId: string,
-    command: string,
-    attempt = 0
-  ) {
-    const ed = document.querySelector<HTMLDivElement>(
-      '[role="textbox"][contenteditable="true"]'
-    );
-    const chipReady =
-      !!ed &&
-      Array.from(ed.querySelectorAll<HTMLElement>("[data-chip-id]")).some(
-        (c) => c.dataset.chipId === `trigger_${triggerId}`
-      );
-    if (!chipReady && attempt < 6) {
-      requestAnimationFrame(() =>
-        insertCommandAfterChip(triggerId, command, attempt + 1)
-      );
-      return;
-    }
-    ed?.focus();
-    textInput.insertAtCursor(command, {
-      separator: "smart",
-      preserveTags: true,
-    });
+  function addTypedDomainToTrigger(triggerId: string, raw: string) {
+    const { domain } = classifyTypedDomain(raw, knownRoots);
+    if (!domain) return;
+    handleApplyParsed(triggerId, { kind: "edit", add: [domain], exclude: [] });
   }
 
   // ---- TriggerEditApi for the PromptBar bridge ----
@@ -841,12 +1016,14 @@ export function InterestsTriggersEditor({
       // Scope to the active trigger when given (its tag is in the bar),
       // otherwise fall back to all selected triggers.
       const scope = triggerId ? [triggerId] : selectedTriggersRef.current;
-      // Pool of currently-active system domains for the scoped trigger(s).
+      // Pool of currently-active system domain GROUPS for the scoped
+      // trigger(s), keyed by root (excluding a domain here excludes its
+      // whole group, same as the ✕ on SystemDomainChip).
       const pool: Array<{ triggerId: string; domain: string }> = [];
       for (const tId of scope) {
         const delta = deltasRef.current[tId] ?? EMPTY_DELTA;
         const { active } = splitSystemDomains(getTriggerDomains(tId), delta);
-        for (const domain of active) pool.push({ triggerId: tId, domain });
+        for (const group of active) pool.push({ triggerId: tId, domain: group.root });
       }
       if (pool.length === 0) return 0;
 
@@ -891,7 +1068,10 @@ export function InterestsTriggersEditor({
       ),
       domainsByTrigger: Object.fromEntries(
         interestsForDirection.flatMap((i) =>
-          i.triggers.map((t) => [t.id, getTriggerDomains(t.id)])
+          i.triggers.map((t) => [
+            t.id,
+            getTriggerDomains(t.id).map((g) => g.root),
+          ])
         )
       ),
     };
@@ -943,6 +1123,7 @@ export function InterestsTriggersEditor({
                     trigger={trigger}
                     domains={getTriggerDomains(trigger.id)}
                     delta={deltas[trigger.id] ?? EMPTY_DELTA}
+                    ownDomains={accountSettings.ownDomains}
                   />
                 ))}
             </div>
@@ -1011,7 +1192,14 @@ export function InterestsTriggersEditor({
               onRestoreSystemDomain={(domain) =>
                 handleRestoreSystemDomain(trigger.id, domain)
               }
-              onAddDomain={() => handleAddDomain(trigger.id, trigger.label)}
+              registeredDomains={registeredDomains}
+              ownDomains={accountSettings.ownDomains}
+              onSelectRegisteredDomain={(domain) =>
+                addRegisteredDomainToTrigger(trigger.id, domain)
+              }
+              onSubmitTypedDomain={(raw) =>
+                addTypedDomainToTrigger(trigger.id, raw)
+              }
             />
           ))}
         </div>

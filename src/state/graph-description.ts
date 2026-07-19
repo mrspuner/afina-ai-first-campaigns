@@ -154,9 +154,20 @@ function waitPhrase(params: Extract<NodeParams, { kind: "wait" }>): string {
 
 // ── Сборка описания ──────────────────────────────────────────────────────────
 
+/**
+ * Pending-domain input for the `start` stage — the moderation "fate" line
+ * (Task 11). Statuses live in the account registry (`ownDomains`) and are
+ * resolved by the CALLER against `Campaign.triggerConfig`; this function
+ * stays a pure graph→text transform and never reads state itself.
+ */
+export interface DomainStatuses {
+  pending: string[];
+}
+
 export function describeWorkflow(
   graph: DescribableGraph,
   templates: MessageTemplate[],
+  domainStatuses?: DomainStatuses,
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
@@ -202,12 +213,18 @@ export function describeWorkflow(
 
   const stages: DescriptionStage[] = [];
 
+  const startBody = hasScoring
+    ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
+    : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
+  // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
+  // есть pending-домены — граф + статусы решают, LLM тут ни при чём.
+  const pendingDomains = domainStatuses?.pending ?? [];
   stages.push({
     id: "start",
     heading: "Старт.",
-    body: hasScoring
-      ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
-      : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.",
+    body: pendingDomains.length
+      ? `${startBody} Домены ${pendingDomains.join(", ")} отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании.`
+      : startBody,
   });
 
   if (messages.length) {

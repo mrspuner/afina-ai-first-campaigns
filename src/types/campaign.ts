@@ -1,4 +1,5 @@
 import type { SignalType } from "@/state/app-state";
+import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 
 export type SourceType = "new" | "stream" | "own";
 
@@ -23,16 +24,20 @@ export type Channel = "sms" | "push" | "email" | "ivr";
 
 export const CHANNELS = ["sms", "push", "email", "ivr"] as const satisfies readonly Channel[];
 
-export interface TriggerConfig {
-  add: string;
-  exclude: string;
-}
-
 export interface StepData {
   scenario: string | null;
   interests: string[];
   triggers: string[];
-  triggerConfig: Record<string, TriggerConfig>;
+  /**
+   * Per-trigger domain edits (added/excluded domains) made in the shared
+   * interests/triggers editor. Keyed by trigger **id** — the same id the
+   * editor's internal `deltas` state and `Campaign.triggerConfig` use, so no
+   * conversion happens moving between StepData and Campaign. `interests`/
+   * `triggers` above stay LABEL arrays (unrelated, pre-existing convention);
+   * the label↔id resolution for THOSE lives in `resolveSelectionIds`
+   * (interests-triggers-editor.tsx) — triggerConfig never needs it.
+   */
+  triggerConfig: Record<string, TriggerDelta>;
   sourceType: SourceType;
   /** Step-2 branch key (A/B/C). Replaces sourceType as the primary branch. */
   intent: CampaignIntent;

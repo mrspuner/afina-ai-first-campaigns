@@ -60,6 +60,7 @@ export function Step2Interests({ data, onNext, onBack, active }: StepProps) {
         <InterestsTriggersEditor
           initialInterestIds={data.interests}
           initialTriggerIds={data.triggers}
+          initialDeltas={data.triggerConfig}
           seedWhenEmpty
           enableRemix
           onChange={setSelection}

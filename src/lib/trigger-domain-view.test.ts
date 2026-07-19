@@ -1,75 +1,65 @@
-// src/lib/trigger-domain-view.test.ts
 import { describe, it, expect } from "vitest";
-import {
-  PREVIEW_VISIBLE_COUNT,
-  splitSystemDomains,
-  previewDomains,
-} from "./trigger-domain-view";
-import { EMPTY_DELTA, type TriggerDelta } from "./trigger-edit-parser";
+import { splitSystemDomains, previewDomains, PREVIEW_VISIBLE_COUNT } from "./trigger-domain-view";
+import type { DomainGroup } from "@/data/trigger-domains";
 
-const SYS = ["vtb.ru", "alfabank.ru", "gazprombank.ru", "sberbank.ru"];
+const g = (root: string, ...subs: string[]): DomainGroup => ({ root, subdomains: subs });
 
-describe("splitSystemDomains", () => {
-  it("без правок все системные домены активны, исключённых нет", () => {
-    const r = splitSystemDomains(SYS, EMPTY_DELTA);
-    expect(r.active).toEqual(SYS);
-    expect(r.excluded).toEqual([]);
+describe("splitSystemDomains (groups)", () => {
+  it("partitions by root, case-insensitive, keeps order", () => {
+    const groups = [g("sberbank.ru", "online.sberbank.ru"), g("vtb.ru"), g("alfabank.ru")];
+    const res = splitSystemDomains(groups, { added: [], excluded: ["VTB.ru"] });
+    expect(res.active.map((x) => x.root)).toEqual(["sberbank.ru", "alfabank.ru"]);
+    expect(res.excluded.map((x) => x.root)).toEqual(["vtb.ru"]);
   });
 
-  it("домен из delta.excluded уходит из active в excluded", () => {
-    const delta: TriggerDelta = { added: [], excluded: ["sberbank.ru"] };
-    const r = splitSystemDomains(SYS, delta);
-    expect(r.active).toEqual(["vtb.ru", "alfabank.ru", "gazprombank.ru"]);
-    expect(r.excluded).toEqual(["sberbank.ru"]);
+  it("with an empty delta, all groups stay active and none are excluded", () => {
+    const groups = [g("sberbank.ru"), g("vtb.ru"), g("alfabank.ru")];
+    const res = splitSystemDomains(groups, { added: [], excluded: [] });
+    expect(res.active.map((x) => x.root)).toEqual(["sberbank.ru", "vtb.ru", "alfabank.ru"]);
+    expect(res.excluded).toEqual([]);
   });
 
-  it("сравнение исключений регистронезависимо", () => {
-    const delta: TriggerDelta = { added: [], excluded: ["SberBank.RU"] };
-    const r = splitSystemDomains(SYS, delta);
-    expect(r.active).not.toContain("sberbank.ru");
-    expect(r.excluded).toEqual(["sberbank.ru"]);
+  it("ignores excluded entries that don't match any group's root", () => {
+    const groups = [g("sberbank.ru"), g("vtb.ru")];
+    const res = splitSystemDomains(groups, { added: [], excluded: ["tinkoff.ru"] });
+    expect(res.active.map((x) => x.root)).toEqual(["sberbank.ru", "vtb.ru"]);
+    expect(res.excluded).toEqual([]);
   });
 
-  it("исключённый домен, которого нет в системном списке, игнорируется", () => {
-    const delta: TriggerDelta = { added: [], excluded: ["nonsystem.ru"] };
-    const r = splitSystemDomains(SYS, delta);
-    expect(r.active).toEqual(SYS);
-    expect(r.excluded).toEqual([]);
-  });
-
-  it("порядок системных доменов сохраняется", () => {
-    const delta: TriggerDelta = { added: [], excluded: ["alfabank.ru"] };
-    const r = splitSystemDomains(SYS, delta);
-    expect(r.active).toEqual(["vtb.ru", "gazprombank.ru", "sberbank.ru"]);
+  it("keeps subdomains attached to their group through the partition", () => {
+    const groups = [g("sberbank.ru", "online.sberbank.ru", "kredit.sberbank.ru"), g("vtb.ru")];
+    const res = splitSystemDomains(groups, { added: [], excluded: ["vtb.ru"] });
+    expect(res.active).toEqual([
+      g("sberbank.ru", "online.sberbank.ru", "kredit.sberbank.ru"),
+    ]);
+    expect(res.active[0].subdomains).toEqual(["online.sberbank.ru", "kredit.sberbank.ru"]);
   });
 });
 
-describe("previewDomains", () => {
-  it("PREVIEW_VISIBLE_COUNT равен 3", () => {
-    expect(PREVIEW_VISIBLE_COUNT).toBe(3);
+describe("previewDomains (groups)", () => {
+  it("returns first N groups + overflow", () => {
+    const groups = [g("a.ru"), g("b.ru"), g("c.ru"), g("d.ru"), g("e.ru")];
+    const res = previewDomains(groups, PREVIEW_VISIBLE_COUNT);
+    expect(res.visible.map((x) => x.root)).toEqual(["a.ru", "b.ru", "c.ru"]);
+    expect(res.overflowCount).toBe(2);
   });
 
-  it("список короче лимита — показывает всё, overflow 0", () => {
-    const r = previewDomains(["a.ru", "b.ru"], 3);
-    expect(r.visible).toEqual(["a.ru", "b.ru"]);
-    expect(r.overflowCount).toBe(0);
+  it("returns empty visible + no overflow for an empty list", () => {
+    const res = previewDomains([], PREVIEW_VISIBLE_COUNT);
+    expect(res).toEqual({ visible: [], overflowCount: 0 });
   });
 
-  it("список ровно по лимиту — overflow 0", () => {
-    const r = previewDomains(["a.ru", "b.ru", "c.ru"], 3);
-    expect(r.visible).toEqual(["a.ru", "b.ru", "c.ru"]);
-    expect(r.overflowCount).toBe(0);
+  it("shows everything with no overflow when the list is exactly visibleCount", () => {
+    const groups = [g("a.ru"), g("b.ru"), g("c.ru")];
+    const res = previewDomains(groups, PREVIEW_VISIBLE_COUNT);
+    expect(res.visible).toEqual(groups);
+    expect(res.overflowCount).toBe(0);
   });
 
-  it("список длиннее лимита — режет и считает остаток", () => {
-    const r = previewDomains(["a.ru", "b.ru", "c.ru", "d.ru", "e.ru"], 3);
-    expect(r.visible).toEqual(["a.ru", "b.ru", "c.ru"]);
-    expect(r.overflowCount).toBe(2);
-  });
-
-  it("пустой список — пустое превью, overflow 0", () => {
-    const r = previewDomains([], 3);
-    expect(r.visible).toEqual([]);
-    expect(r.overflowCount).toBe(0);
+  it("shows everything with no overflow when the list is shorter than visibleCount", () => {
+    const groups = [g("a.ru"), g("b.ru")];
+    const res = previewDomains(groups, PREVIEW_VISIBLE_COUNT);
+    expect(res.visible).toEqual(groups);
+    expect(res.overflowCount).toBe(0);
   });
 });

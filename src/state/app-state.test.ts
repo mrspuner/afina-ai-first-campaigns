@@ -12,6 +12,7 @@ import {
   DEMO_ACCOUNT_SETTINGS,
   EMPTY_ACCOUNT_SETTINGS,
 } from "@/types/account-settings";
+import { initialStepData, type StepData } from "@/types/campaign";
 
 function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   return {
@@ -23,6 +24,16 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   };
 }
 
+function makeStepData(overrides: Partial<StepData> = {}): StepData {
+  return {
+    ...initialStepData,
+    scenario: "registration",
+    sourceType: "new",
+    channels: ["sms"],
+    ...overrides,
+  };
+}
+
 describe("appReducer — initial state", () => {
   it("has an empty campaigns array", () => {
     expect(initialState.campaigns).toEqual([]);
@@ -30,6 +41,42 @@ describe("appReducer — initial state", () => {
 
   it("starts on welcome view", () => {
     expect(initialState.view).toEqual({ kind: "welcome" });
+  });
+});
+
+describe("appReducer — triggerConfig persistence (domain edits, Task 5)", () => {
+  it("persists triggerConfig from wizard onto the campaign", () => {
+    const sd = makeStepData({
+      triggerConfig: { "credit-banks": { added: ["my.ru"], excluded: [] } },
+    });
+    const s = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: sd,
+      scenarioName: "Регистрация",
+    });
+    const c = s.campaigns.at(-1)!;
+    expect(c.triggerConfig?.["credit-banks"]).toEqual({
+      added: ["my.ru"],
+      excluded: [],
+    });
+  });
+
+  it("campaign_scoring_set persists triggerConfig onto the campaign", () => {
+    const draft = makeCampaign({ id: "c1" });
+    const next = appReducer(
+      { ...initialState, campaigns: [draft] },
+      {
+        type: "campaign_scoring_set",
+        id: "c1",
+        interests: ["Ипотека"],
+        triggers: ["Заявка на ипотеку"],
+        triggerConfig: { "mortgage-calculators": { added: ["a.ru"], excluded: ["b.ru"] } },
+      }
+    );
+    expect(next.campaigns[0].triggerConfig?.["mortgage-calculators"]).toEqual({
+      added: ["a.ru"],
+      excluded: ["b.ru"],
+    });
   });
 });
 
@@ -1231,6 +1278,135 @@ describe("appReducer — settings actions", () => {
     expect(EMPTY_ACCOUNT_SETTINGS.interests).toEqual([]);
     expect(EMPTY_ACCOUNT_SETTINGS.suggestedInterests).toEqual([]);
     expect(EMPTY_ACCOUNT_SETTINGS.domainBlocklist).toEqual([]);
+    expect(EMPTY_ACCOUNT_SETTINGS.ownDomains).toEqual([]);
+  });
+});
+
+describe("appReducer — domain_registered", () => {
+  it("registers an unknown domain as pending", () => {
+    const next = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "totally-unknown-domain-xyz.ru",
+    });
+    expect(next.accountSettings.ownDomains).toContainEqual({
+      domain: "totally-unknown-domain-xyz.ru",
+      status: "pending",
+      addedAt: expect.any(String),
+    });
+  });
+
+  it("registers a known trigger domain as approved immediately", () => {
+    const next = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(next.accountSettings.ownDomains).toContainEqual({
+      domain: "sberbank.ru",
+      status: "approved",
+      addedAt: expect.any(String),
+    });
+  });
+
+  it("is idempotent — does not duplicate an already-registered domain", () => {
+    const once = appReducer(initialState, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    const twice = appReducer(once, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(twice.accountSettings.ownDomains).toHaveLength(1);
+  });
+
+  it("preserves domainBlocklist untouched", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        domainBlocklist: ["excluded.ru"],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_registered",
+      domain: "sberbank.ru",
+    });
+    expect(next.accountSettings.domainBlocklist).toEqual(["excluded.ru"]);
+  });
+
+  it("does not touch survey or campaigns slices", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [makeCampaign()],
+    };
+    const next = appReducer(state, {
+      type: "domain_registered",
+      domain: "new-domain.ru",
+    });
+    expect(next.campaigns).toBe(state.campaigns);
+    expect(next.survey).toBe(state.survey);
+  });
+});
+
+describe("appReducer — domain_moderation_resolved", () => {
+  it("resolves named domains to approved/rejected, leaving others untouched", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [
+          { domain: "a.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+          { domain: "b.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+          { domain: "c.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+        ],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["a.ru"],
+      rejected: ["b.ru"],
+    });
+    expect(next.accountSettings.ownDomains).toEqual([
+      { domain: "a.ru", status: "approved", addedAt: "2026-07-01T00:00:00.000Z" },
+      { domain: "b.ru", status: "rejected", addedAt: "2026-07-01T00:00:00.000Z" },
+      { domain: "c.ru", status: "pending", addedAt: "2026-07-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("ignores domain names in the payload that are not in the registry", () => {
+    const state: AppState = {
+      ...initialState,
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [{ domain: "a.ru", status: "pending", addedAt: "x" }],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["unknown.ru"],
+      rejected: [],
+    });
+    expect(next.accountSettings.ownDomains).toEqual([
+      { domain: "a.ru", status: "pending", addedAt: "x" },
+    ]);
+  });
+
+  it("does not touch survey or campaigns slices", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [makeCampaign()],
+      accountSettings: {
+        ...initialState.accountSettings,
+        ownDomains: [{ domain: "a.ru", status: "pending", addedAt: "x" }],
+      },
+    };
+    const next = appReducer(state, {
+      type: "domain_moderation_resolved",
+      approved: ["a.ru"],
+      rejected: [],
+    });
+    expect(next.campaigns).toBe(state.campaigns);
+    expect(next.survey).toBe(state.survey);
   });
 });
 
