@@ -26,6 +26,14 @@ export type Screen = {
    * растёт вместе с вьюпортом (расширение уходит в разнос).
    */
   expand?: boolean;
+  /**
+   * Экран участвует в `npm run test:visual` (пиксельный снапшот). По умолчанию
+   * `true`. Поставь `false` для экранов, у которых ещё нет baseline PNG —
+   * они всё равно покрываются smoke-тестом (screens.smoke.spec.ts), просто без
+   * пиксельного сравнения. Baseline генерируются вне ворктри (см. AGENTS.md:
+   * не запускать `playwright ... --update-snapshots` из ворктри).
+   */
+  visual?: boolean;
 };
 
 // Shared, survey-passed, intro-skipped, funded base applied to every screen.
@@ -75,6 +83,20 @@ const noCommsCampaign: Campaign = {
   createdAt: "2026-06-20T09:00:00.000Z",
   sourceType: "new",
   channels: [],
+  phase: "communicating",
+  scenario: { id: "base-registration", name: "Регистрация" },
+};
+
+// A2.1 — own-source draft: exercises the campaign card's «Сигнал» node-block
+// (as opposed to the «Скоринг» block new/stream sources get).
+const ownCampaign: Campaign = {
+  id: "cmp_test04",
+  name: "Своя база",
+  status: "draft",
+  createdAt: "2026-06-20T09:00:00.000Z",
+  sourceType: "own",
+  channels: ["sms"],
+  files: [{ name: "crm-export.csv", rowCount: 3_400 }],
   phase: "communicating",
   scenario: { id: "base-registration", name: "Регистрация" },
 };
@@ -286,6 +308,40 @@ export const SCREENS: Screen[] = [
     expect: 'h1:has-text("Тестовая кампания")',
     // 500px контента ниже сгиба (внутренний скроллер)
     expand: true,
+  },
+  {
+    id: "campaign-card-draft",
+    name: "Карточка кампании — черновик (нодо-блок скоринга)",
+    // A2.1 — draft new-source campaign: exercises the INTERACTIVE «Скоринг»
+    // node-block («Добавить файл», «Интересы и триггеры» affordance).
+    seed: {
+      ...FIXED,
+      campaigns: [draftCampaign],
+      view: {
+        kind: "campaign",
+        campaign: { id: draftCampaign.id, name: draftCampaign.name },
+      },
+    },
+    expect: 'h1:has-text("Черновик кампании")',
+    // Нет baseline PNG ещё — покрыт smoke, но исключён из @visual.
+    visual: false,
+  },
+  {
+    id: "campaign-card-own",
+    name: "Карточка кампании — своя база (нодо-блок сигнала)",
+    // A2.1 — own-source campaign: exercises the «Сигнал» node-block (file
+    // list, no interests/triggers row).
+    seed: {
+      ...FIXED,
+      campaigns: [ownCampaign],
+      view: {
+        kind: "campaign",
+        campaign: { id: ownCampaign.id, name: ownCampaign.name },
+      },
+    },
+    expect: 'h1:has-text("Своя база")',
+    // Нет baseline PNG ещё — покрыт smoke, но исключён из @visual.
+    visual: false,
   },
   {
     id: "campaign-payment",

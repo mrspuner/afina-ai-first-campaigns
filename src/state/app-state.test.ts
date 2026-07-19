@@ -421,6 +421,45 @@ describe("appReducer — campaign_opened", () => {
     const next = appReducer(state, { type: "campaign_opened", id: "cmp_A" });
     expect(next.activeSection).toBeNull();
   });
+
+  // Task 4 — «Назад» in the workflow-view header dispatches this same action;
+  // lock in that it lands back on the campaign card from EITHER workflow
+  // sub-view (draft/edit or launched/read-only) — the inverse of open_workflow.
+  it("from a draft (edit-mode) workflow view, navigates back to the campaign card", () => {
+    const c = makeCampaign({ id: "cmp_A", name: "Draft A", status: "draft" });
+    const state: AppState = {
+      ...initialState,
+      campaigns: [c],
+      view: {
+        kind: "workflow",
+        campaign: { id: "cmp_A", name: "Draft A" },
+        launched: false,
+      },
+    };
+    const next = appReducer(state, { type: "campaign_opened", id: "cmp_A" });
+    expect(next.view).toEqual({
+      kind: "campaign",
+      campaign: { id: "cmp_A", name: "Draft A" },
+    });
+  });
+
+  it("from a launched (read-only) workflow view, navigates back to the campaign card", () => {
+    const c = makeCampaign({ id: "cmp_A", name: "Running", status: "active" });
+    const state: AppState = {
+      ...initialState,
+      campaigns: [c],
+      view: {
+        kind: "workflow",
+        campaign: { id: "cmp_A", name: "Running" },
+        launched: true,
+      },
+    };
+    const next = appReducer(state, { type: "campaign_opened", id: "cmp_A" });
+    expect(next.view).toEqual({
+      kind: "campaign",
+      campaign: { id: "cmp_A", name: "Running" },
+    });
+  });
 });
 
 describe("appReducer — launched campaign screen", () => {

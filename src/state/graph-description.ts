@@ -44,6 +44,70 @@ export interface DescribableGraph {
 
 // ── Обход графа ──────────────────────────────────────────────────────────────
 
+/** Обход графа, общий для текстового описания И нодо-блоков коммуникаций
+ *  (A2.1 — «Первое касание» карточки кампании): порядок нод, коммуникационные
+ *  ноды и множество «первого прохода» (до повтора) вычисляются один раз, чтобы
+ *  оба потребителя не могли разойтись в том, что считается первым касанием. */
+interface GraphTraversal {
+  ordered: WorkflowNode[];
+  commNodes: WorkflowNode[];
+  retryWaits: WorkflowNode[];
+  isFirstPass: (node: WorkflowNode) => boolean;
+}
+
+function traverseGraph(graph: DescribableGraph): GraphTraversal {
+  const adjacency = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = adjacency.get(edge.source);
+    if (list) list.push(edge.target);
+    else adjacency.set(edge.source, [edge.target]);
+  }
+
+  const ordered = orderNodes(graph, adjacency);
+  const commNodes = ordered.filter((n) => isCommunicationNode(n.data.nodeType));
+
+  // «Повтор» — это ноды за задержкой, которая сама стоит ПОСЛЕ коммуникации.
+  // Задержка перед первым касанием (её носят легаси-шаблоны) повтором не
+  // считается, иначе первое касание осталось бы без текстов.
+  const afterAnyComm = reachableFrom(commNodes.map((n) => n.id), adjacency);
+  const retryWaits = ordered.filter(
+    (n) => n.data.nodeType === "wait" && afterAnyComm.has(n.id),
+  );
+  const afterRetry = reachableFrom(retryWaits.map((n) => n.id), adjacency);
+  const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
+
+  return { ordered, commNodes, retryWaits, isFirstPass };
+}
+
+/**
+ * Коммуникационные ноды (sms/email/push/ivr) «первого прохода» — те же, что
+ * несут строки текста под «Первым касанием» (см. `describeWorkflow`), а НЕ
+ * ноды повторного блока за задержкой. Экспортирована для карточки кампании
+ * (A2.1): нодо-блоки каналов под «Первым касанием» рендерятся по этому же
+ * набору, поэтому текст и блоки не могут разойтись.
+ *
+ * Дедуп — по тому же ключу `канал|текст`, что и `describeWorkflow` (см.
+ * `communicationDedupKey`): сегментированный сценарий (Апсейл/Удержание — N
+ * одинаковых comm-юнитов) даёт РОВНО один блок на канал, а не N визуально
+ * идентичных блоков. Ноды, у которых ключ не резолвится (пустой текст),
+ * дедупу не подлежат — рендерятся все как есть.
+ */
+export function firstTouchCommunicationNodes(graph: DescribableGraph): WorkflowNode[] {
+  if (!graph.nodes.length) return [];
+  const { commNodes, isFirstPass } = traverseGraph(graph);
+  const seen = new Set<string>();
+  const result: WorkflowNode[] = [];
+  for (const node of commNodes.filter(isFirstPass)) {
+    const key = communicationDedupKey(node);
+    if (key) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    result.push(node);
+  }
+  return result;
+}
+
 /** Множество нод, достижимых из `seeds` по рёбрам (сами seeds включены). */
 function reachableFrom(seeds: string[], adjacency: Map<string, string[]>): Set<string> {
   const seen = new Set<string>(seeds);
@@ -106,6 +170,23 @@ function messageText(params: NodeParams): string {
     case "ivr": return params.scenario;
     default: return "";
   }
+}
+
+/**
+ * Ключ дедупа коммуникационной ноды — `канал|текст`, единственный источник
+ * истины и для схлопывания строк текста (`describeWorkflow`), и для
+ * схлопывания нодо-блоков (`firstTouchCommunicationNodes`): пока оба берут
+ * ключ отсюда, текст описания и блоки карточки не могут разойтись. `null` —
+ * канал не резолвится (не comm-нода) или текст пуст (дедупу не подлежит).
+ */
+function communicationDedupKey(node: WorkflowNode): string | null {
+  const params = node.data.params;
+  if (!params) return null;
+  const channel = channelForNodeKind(params.kind);
+  if (!channel) return null;
+  const text = messageText(params).trim();
+  if (!text) return null;
+  return `${CHANNEL_LABEL[channel]}|${text}`;
 }
 
 function describeMessage(
@@ -171,25 +252,7 @@ export function describeWorkflow(
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
-  const adjacency = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    const list = adjacency.get(edge.source);
-    if (list) list.push(edge.target);
-    else adjacency.set(edge.source, [edge.target]);
-  }
-
-  const ordered = orderNodes(graph, adjacency);
-  const commNodes = ordered.filter((n) => isCommunicationNode(n.data.nodeType));
-
-  // «Повтор» — это ноды за задержкой, которая сама стоит ПОСЛЕ коммуникации.
-  // Задержка перед первым касанием (её носят легаси-шаблоны) повтором не
-  // считается, иначе первое касание осталось бы без текстов.
-  const afterAnyComm = reachableFrom(commNodes.map((n) => n.id), adjacency);
-  const retryWaits = ordered.filter(
-    (n) => n.data.nodeType === "wait" && afterAnyComm.has(n.id),
-  );
-  const afterRetry = reachableFrom(retryWaits.map((n) => n.id), adjacency);
-  const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
+  const { ordered, commNodes, retryWaits, isFirstPass } = traverseGraph(graph);
 
   // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
   // канал (дедуп по каналу и тексту, а не по ноде).
@@ -198,7 +261,9 @@ export function describeWorkflow(
   for (const node of commNodes.filter(isFirstPass)) {
     const message = describeMessage(node, templates);
     if (!message) continue;
-    const key = `${message.channel}|${message.text}`;
+    // Не может быть null здесь: describeMessage вернул сообщение только если
+    // канал резолвится и текст непуст — ровно условия communicationDedupKey.
+    const key = communicationDedupKey(node)!;
     if (seenMessages.has(key)) continue;
     seenMessages.add(key);
     messages.push(message);

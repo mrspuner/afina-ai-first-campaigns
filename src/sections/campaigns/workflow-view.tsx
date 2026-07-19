@@ -20,11 +20,8 @@ import { computeNeedsAttention } from "@/state/workflow-validation";
 import { computeSublabels } from "@/state/node-sublabel";
 import { getFieldOptions } from "@/state/field-directory";
 import { matchActions } from "@/state/node-actions";
-import {
-  applyOps,
-  diffChangedNodeIds,
-  type StructuralOp,
-} from "@/state/structural-commands";
+import { type StructuralOp } from "@/state/structural-commands";
+import { applyStructuralOps, applyRebuild } from "./graph-applier";
 import { useChat } from "@/state/chat-context";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
@@ -314,8 +311,13 @@ export function WorkflowView({
     /** Если задан — переиспользуем существующий pending-пузырь (создал раннер),
      *  иначе создаём свой. Так на AI-правке графа пузырь ровно один. */
     replyId?: string;
+    /** Вызывается после того, как setGraph(...) осел (тот же non-render
+     *  момент, что и setCyclePhase("reveal") / chat.updatePending) — сюда
+     *  выносят dispatch'и, которые apply() не может делать сам, потому что
+     *  apply вызывается внутри React-апдейтера setGraph. */
+    onApplied?: () => void;
   }) {
-    const { durationMs, apply, finalReply } = opts;
+    const { durationMs, apply, finalReply, onApplied } = opts;
     thinkDurationMsRef.current = durationMs;
     cycleTimersRef.current.forEach(clearTimeout);
     cycleTimersRef.current = [];
@@ -351,6 +353,7 @@ export function WorkflowView({
       // актуального состояния графа в момент применения.
       chat.updatePending(replyId, finalReply ?? "Готово.");
       pendingReplyIdRef.current = null;
+      onApplied?.();
     }, durationMs);
 
     const t2 = setTimeout(() => {
@@ -462,32 +465,16 @@ export function WorkflowView({
   useEffect(() => {
     if (!structuralOps || structuralOps.length === 0) return;
 
-    // Предварительный вызов applyOps нужен только для ранней ветки «все ops
-    // пропущены» и расчёта duration. Реальное применение — внутри apply(prev),
-    // чтобы не затереть ручные правки, сделанные за время «Думаю...».
-    const earlyResult = applyOps(graph, structuralOps);
-    const opCount = earlyResult.applied.length;
-
-    function buildReplyFrom(r: typeof earlyResult): string {
-      const lines: string[] = [];
-      if (r.applied.length > 0) {
-        if (r.applied.length === 1) {
-          lines.push(r.applied[0].description);
-        } else {
-          lines.push("Готово:");
-          for (const a of r.applied) lines.push(`• ${a.description}`);
-        }
-      }
-      if (r.skipped.length > 0) {
-        lines.push("Не выполнено:");
-        for (const s of r.skipped) lines.push(`• ${s.reason}`);
-      }
-      return lines.join("\n");
-    }
+    // Предварительный вызов applyStructuralOps нужен только для ранней ветки
+    // «все ops пропущены» и расчёта duration. Реальное применение — внутри
+    // apply(prev), чтобы не затереть ручные правки, сделанные за время
+    // «Думаю...».
+    const early = applyStructuralOps(graph, structuralOps);
+    const opCount = early.appliedCount;
 
     if (opCount === 0) {
       // All skipped — no cycle, just the explanation (обычное сообщение в чат).
-      const reply = buildReplyFrom(earlyResult) || "Не получилось применить правку.";
+      const reply = early.reply || "Не получилось применить правку.";
       if (state.workflowReplyId) {
         // Переиспользуем pending-пузырь раннера, иначе он зависнет крутящимся.
         chat.updatePending(state.workflowReplyId, reply);
@@ -509,15 +496,16 @@ export function WorkflowView({
       // Пересчитываем ops от prev, чтобы не затереть эти правки.
       apply: (prev) => {
         aiSnapshotRef.current = prev;
-        dispatch({ type: "workflow_ai_undo_availability", available: true });
-        const live = applyOps(prev, structuralOps);
+        const live = applyStructuralOps(prev, structuralOps);
         return {
           graph: live.graph,
-          changedIds: diffChangedNodeIds(prev, live.graph),
-          finalReply: buildReplyFrom(live) || null,
+          changedIds: live.changedIds,
+          finalReply: live.reply,
         };
       },
-      finalReply: buildReplyFrom(earlyResult) || null,
+      finalReply: early.reply,
+      onApplied: () =>
+        dispatch({ type: "workflow_ai_undo_availability", available: true }),
     });
 
     if (state.workflowReplyId) dispatch({ type: "workflow_reply_id_clear" });
@@ -532,19 +520,22 @@ export function WorkflowView({
     const replyId = state.workflowReplyId ?? undefined;
     dispatch({ type: "workflow_rebuild_handled" });
 
+    const early = applyRebuild(rebuild);
+
     runCycle({
       durationMs: 5000,
       replyId,
       apply: (prev) => {
         aiSnapshotRef.current = prev;
-        dispatch({ type: "workflow_ai_undo_availability", available: true });
         return {
-          graph: { nodes: rebuild.nodes, edges: rebuild.edges },
-          changedIds: new Set(rebuild.nodes.map((n) => n.id)),
-          finalReply: `Собрал заново. ${rebuild.assumptions}`,
+          graph: early.graph,
+          changedIds: early.changedIds,
+          finalReply: early.reply,
         };
       },
-      finalReply: `Собрал заново. ${rebuild.assumptions}`,
+      finalReply: early.reply,
+      onApplied: () =>
+        dispatch({ type: "workflow_ai_undo_availability", available: true }),
     });
     if (replyId) dispatch({ type: "workflow_reply_id_clear" });
     // eslint-disable-next-line react-hooks/exhaustive-deps

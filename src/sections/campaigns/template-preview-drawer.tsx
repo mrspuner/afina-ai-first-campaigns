@@ -1,10 +1,11 @@
 "use client";
 
 import { X, Lock } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useChat } from "@/state/chat-context";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
+import { useReserveRightRail } from "@/state/right-rail";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import type { MessageTemplate } from "@/state/app-state";
 import type { EmailParams, NodeParams } from "@/types/workflow";
@@ -160,16 +161,9 @@ export function TemplatePreviewDrawer() {
     setDirty(false);
   }
 
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty(
-      "--email-preview-width",
-      open ? `${PREVIEW_WIDTH_PX}px` : "0px",
-    );
-    return () => {
-      root.style.removeProperty("--email-preview-width");
-    };
-  }, [open]);
+  // Резервирует место справа в общем реестре — через --right-rail-width
+  // (промпт-бар и ИИ-дровер читают её, чтобы не оказаться под панелью).
+  useReserveRightRail(open ? PREVIEW_WIDTH_PX : 0);
 
   const showSave = !readOnly && dirty;
 

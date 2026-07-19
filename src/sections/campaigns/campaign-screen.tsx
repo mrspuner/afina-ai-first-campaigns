@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import { nanoid } from "nanoid";
 import { BarChart3, Copy, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePromptChips } from "@/state/prompt-chips-context";
 import {
   EntityCardShell,
   CardTag,
@@ -13,9 +15,8 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
-import { describeWorkflow } from "@/state/graph-description";
+import { describeWorkflow, firstTouchCommunicationNodes } from "@/state/graph-description";
 import { resolveDomainStatus } from "@/lib/domain-add";
-import { useCampaignEditFlow } from "@/sections/shell/use-campaign-edit-flow";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
   CampaignProgress,
@@ -23,22 +24,40 @@ import {
   communicatingThresholdMs,
 } from "./campaign-progress";
 import { canLaunchWithGraph } from "./campaign-launch-gate";
-import { getCachedGraph } from "./workflow-graph-cache";
+import { getCachedGraph, useCachedGraphVersion } from "./workflow-graph-cache";
+import { useCampaignGraphApplier } from "./use-campaign-graph-applier";
 import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
+import { CampaignScenarioNodeBlock } from "./campaign-scenario-node-block";
+import { CampaignCommunicationNodeBlock } from "./campaign-communication-node-block";
 import { StatusBadge } from "./status-badge";
 import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
+// «Запуск» block (A2.3) reuses the SAME cost modules the payment screen uses,
+// imported from the exact same paths as campaign-payment-screen.tsx, so the
+// payments figure shown here is guaranteed to equal the payment screen's.
+import { estimateTouches, computeCampaignCost } from "./campaign-cost";
+import { splitCampaignPayments } from "./campaign-payments";
+import { BudgetBreakdown } from "./budget-breakdown";
+import { groupCommunicationLines } from "./communication-breakdown";
+import { campaignBaseRows } from "./campaign-metrics";
+import { formatRubPlain } from "@/lib/format-rub";
+import { scoringLineDisplay, FALLBACK_BASE } from "./campaign-payment-screen";
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ru-RU");
 }
 
+function formatNumber(n: number): string {
+  return n.toLocaleString("ru-RU");
+}
+
 export function CampaignScreen() {
   const { view, campaigns, artifacts, templates, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
+  const { pushChip } = usePromptChips();
 
   const campaign =
     view.kind === "campaign"
@@ -46,6 +65,17 @@ export function CampaignScreen() {
       : undefined;
 
   const campaignId = campaign?.id;
+
+  // Headless applier: consumes the workflow mailbox slot (structural ops /
+  // rebuild) submitted from the CARD — where the graph view is unmounted and
+  // would otherwise never apply the edit (chat bubble spinning forever). Mounted
+  // unconditionally (hooks rules) and self-guards to `view.kind === "campaign"`.
+  useCampaignGraphApplier(campaignId);
+  // Re-render when the applier writes the cache, so `launchGraph` /
+  // `describeWorkflow` below re-read the freshly edited graph. Threaded into the
+  // mini-preview so its memoized graph rebuilds too.
+  const graphVersion = useCachedGraphVersion();
+
   // Пост-лонч: на пороге коммуникации (после «Обработки базы») переводим фазу и
   // создаём артефакт. Старые кампании (elapsed > порога) — сразу без таймера.
   const launchedAtMs =
@@ -79,9 +109,8 @@ export function CampaignScreen() {
     : null;
   // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
   // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
-  // Считается ДО ранних выходов: его же читает хук правки (правила хуков).
-  // Судьба доменов (Task 11): статус приходит из реестра (`ownDomains`),
-  // домены — из `triggerConfig.added`; только "pending" всплывает в описании.
+  // Судьба доменов: статус приходит из реестра (`ownDomains`), домены — из
+  // `triggerConfig.added`; только "pending" всплывает в описании (Часть B).
   const pendingDomains = campaign
     ? [
         ...new Set(
@@ -97,11 +126,6 @@ export function CampaignScreen() {
   const descriptionStages = launchGraph
     ? describeWorkflow(launchGraph, templates, { pending: pendingDomains })
     : [];
-  // Модель получает то же описание, что видит пользователь, — не JSON графа.
-  const descriptionText = descriptionStages
-    .map((s) => `${s.heading} ${s.body}`)
-    .join("\n");
-  const editFlow = useCampaignEditFlow(campaignId ?? "", descriptionText);
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -166,6 +190,22 @@ export function CampaignScreen() {
     });
   }
 
+  // ИИ-иконка у «Сценарий кампании» (spec §2): кладёт тег «Логика кампании» в
+  // промпт-бар и запускает правку СТРУКТУРЫ графа через тот же ИИ-движок, что в
+  // графе. Фокус на бар следует автоматически — ChipEditableInput фокусируется
+  // при вставке нового чипа, а свёрнутый бар смонтирован на экране карточки.
+  // Только до запуска (draft) — правки логики допустимы лишь до старта.
+  function editLogic() {
+    if (!campaignId) return;
+    pushChip({
+      id: `campaign-logic_${campaignId}`,
+      kind: "campaign-logic",
+      label: "Логика кампании",
+      payload: { campaignId },
+      removable: true,
+    });
+  }
+
   const duplicateAction: EntityCardAction = {
     label: "Дублировать",
     onClick: () => {
@@ -197,6 +237,39 @@ export function CampaignScreen() {
     });
   }
 
+  // Нодо-блоки каналов под «Первым касанием» (A2.1) — по тем же нодам, что
+  // несут строки текста описания (общий обход в graph-description.ts), так
+  // текст и блоки не расходятся. Ретрай-повтор той же ноды в этот список не
+  // попадает — это отдельный проход графа, у него своих блоков нет.
+  const firstTouchNodes = launchGraph ? firstTouchCommunicationNodes(launchGraph) : [];
+
+  // Блок «Запуск» (A2.3, только draft): прогноз касаний → платежи → «К
+  // оплате». Считаем ТЕМИ ЖЕ модулями и по ТЕМ ЖЕ входам (launchGraph,
+  // audienceSize), что и экран оплаты (campaign-payment-screen.tsx) —
+  // поэтому число здесь и там совпадает; при смене базы/шаблонов launchGraph
+  // меняется на ре-рендере, и число пересчитывается вместе с ним.
+  const audienceSize =
+    campaignBaseRows(campaign) ?? campaignArtifact?.count ?? FALLBACK_BASE;
+  const draftCost =
+    status === "draft" && launchGraph
+      ? computeCampaignCost(launchGraph.nodes, launchGraph.edges, audienceSize)
+      : null;
+  const draftPaymentSplit =
+    status === "draft"
+      ? (() => {
+          const flat = splitCampaignPayments({
+            sourceType: campaign.sourceType ?? "new",
+            channels: campaign.channels ?? [],
+            baseSize: audienceSize,
+          });
+          const communication = draftCost ? draftCost.total : flat.communication;
+          return { ...flat, communication, total: flat.scoring + communication };
+        })()
+      : null;
+  const draftRecommended = draftPaymentSplit?.total ?? 0;
+  const draftTouches = estimateTouches(draftRecommended, audienceSize);
+  const draftCommGroups = draftCost ? groupCommunicationLines(draftCost.lines) : null;
+
   return (
     <EntityCardShell
       title={campaign.name}
@@ -215,20 +288,57 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Как работает кампания — описание и мини-граф про одно и то же, поэтому
-          живут в одном блоке: текст → «Изменить» (правка идёт через текст) →
-          кликабельная миниатюра, открывающая полный граф. */}
-      <CardSection label="Как работает кампания">
+      {/* Сценарий кампании — описание, нодо-блок «Старта» (артефакты: база /
+          интересы-триггеры или файл сигнала) и мини-граф про одно и то же,
+          поэтому живут в одном блоке: текст этапа «Старт» → нодо-блок (правка
+          артефактов, без ИИ, через per-stage слот WorkflowDescription) →
+          остальные этапы → кликабельная миниатюра, открывающая полный граф
+          (правка логики — там, инлайн-«Изменить» на карточке снят). */}
+      <CardSection
+        label="Сценарий кампании"
+        action={
+          status === "draft" ? (
+            <button
+              type="button"
+              aria-label="Изменить логику кампании с ИИ"
+              title="Изменить логику кампании с ИИ"
+              onClick={editLogic}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-muted transition-colors hover:bg-brand/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
+            </button>
+          ) : undefined
+        }
+      >
         <div className="flex flex-col gap-5">
-          {/* Правка — только до запуска (статус «Не запущена»), как read-only
-              режим скоринг-дровера у запущенной кампании. */}
           <WorkflowDescription
             stages={descriptionStages}
-            canEdit={status === "draft"}
-            phase={editFlow.phase}
-            error={editFlow.error}
-            onSubmitEdit={editFlow.submit}
-            onCancelEdit={editFlow.cancel}
+            // Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
+            // (own), стилизован под соответствующую ноду графа. Правка
+            // артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
+            // read-only после запуска. «Первое касание» несёт один нодо-блок
+            // на каждую sms/email/push/ivr ноду первого прохода — показывает
+            // текущий шаблон и открывает СУЩЕСТВУЮЩИЙ редактор шаблона (выбор
+            // другого шаблона — вне рамок этой задачи).
+            stageSlots={{
+              start: (
+                <CampaignScenarioNodeBlock
+                  campaign={campaign}
+                  readOnly={status !== "draft"}
+                />
+              ),
+              "first-touch": firstTouchNodes.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {firstTouchNodes.map((node) => (
+                    <CampaignCommunicationNodeBlock
+                      key={node.id}
+                      node={node}
+                      readOnly={status !== "draft"}
+                    />
+                  ))}
+                </div>
+              ) : undefined,
+            }}
           />
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -239,6 +349,7 @@ export function CampaignScreen() {
               signalType={signalType}
               sourceType={campaign.sourceType}
               channels={campaign.channels}
+              graphVersion={graphVersion}
               onClick={openWorkflow}
             />
           </div>
@@ -254,7 +365,8 @@ export function CampaignScreen() {
         </CardSection>
       )}
 
-      {/* Завершённая → статус; готовый черновик/пауза → CTA «Запустить». */}
+      {/* Завершённая → статус; пауза → «Возобновить» (без оплаты); черновик →
+          прогноз касаний → платежи → «К оплате» (A2.3). */}
       {isCompleted ? (
         <CardSection label="Статус">
           <p className="text-sm text-muted-foreground">
@@ -264,21 +376,64 @@ export function CampaignScreen() {
         </CardSection>
       ) : showLaunch ? (
         <CardSection label="Запуск">
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">
-              {status === "paused"
-                ? "Кампания остановлена. Возобновите её, чтобы снова подключить провайдеров."
-                : "Запустите кампанию — провайдеры начнут подключаться после оплаты."}
-            </p>
-            <Button
-              onClick={launch}
-              disabled={!canLaunch}
-              className="gap-2 self-start"
-            >
-              <Play className="h-4 w-4" />
-              Запустить
-            </Button>
-          </div>
+          {status === "paused" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Кампания остановлена. Возобновите её, чтобы снова подключить
+                провайдеров.
+              </p>
+              <Button
+                onClick={launch}
+                disabled={!canLaunch}
+                className="gap-2 self-start"
+              >
+                <Play className="h-4 w-4" />
+                Запустить
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Запустите кампанию — провайдеры начнут подключаться после
+                оплаты.
+              </p>
+              {/* Прогноз касаний — та же оценка (estimateTouches), что и на
+                  экране оплаты, на рекомендуемой сумме. */}
+              <p className="text-sm text-muted-foreground">
+                Прогноз касаний:{" "}
+                <span className="font-medium text-foreground">
+                  {draftTouches > 0 ? formatNumber(draftTouches) : "—"}
+                </span>
+              </p>
+              {/* Платежи — BudgetBreakdown на splitCampaignPayments +
+                  computeCampaignCost, рекомендуемая сумма. То же число, что на
+                  экране оплаты (общие модули, см. campaign-cost-parity.test.ts). */}
+              {draftPaymentSplit && draftPaymentSplit.total > 0 && (
+                <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+                  <BudgetBreakdown
+                    signalsDisplay={scoringLineDisplay({
+                      sourceType: campaign.sourceType ?? "new",
+                      scoring: draftPaymentSplit.scoring,
+                    })}
+                    communicationDisplay={formatRubPlain(
+                      draftPaymentSplit.communication,
+                    )}
+                    totalDisplay={formatRubPlain(draftPaymentSplit.total)}
+                    commGroups={draftCommGroups}
+                    formatCell={formatRubPlain}
+                  />
+                </div>
+              )}
+              <Button
+                onClick={launch}
+                disabled={!canLaunch}
+                className="gap-2 self-start"
+              >
+                <Play className="h-4 w-4" />
+                К оплате
+              </Button>
+            </div>
+          )}
         </CardSection>
       ) : null}
 

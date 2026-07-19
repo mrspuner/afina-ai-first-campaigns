@@ -31,6 +31,12 @@ import { stepsForIntent } from "@/sections/campaigns/wizard/wizard-steps";
 import { isAiParserEnabled, appendAiLogEntry } from "@/state/dev-config";
 import { getCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
 import { summarizeGraph } from "@/lib/ai/graph-summary";
+import { getScenario } from "@/data/scenarios";
+import { createTemplate } from "@/state/workflow-templates";
+import {
+  resolveCardLogicContext,
+  type ResolvableGraph,
+} from "./card-logic-context";
 import { useAssistRunner, buildAiLogEntry } from "./use-assist-runner";
 
 /** Текст + сегменты (тег + текст после него), отправляемые в чат. */
@@ -383,11 +389,38 @@ export function useChatSubmit(): {
         view.kind === "workflow" && !view.launched
           ? getCachedGraph(view.campaign.id)
           : undefined;
-      const graph = cached ? summarizeGraph(cached) : undefined;
+
+      // Task 9 — правка ЛОГИКИ с КАРТОЧКИ: при активном теге «Логика кампании»
+      // прикладываем граф активной кампании и форсируем screen="workflow", чтобы
+      // сервер зарегистрировал графовые tools (route.ts:59). Граф разрешаем ровно
+      // как campaign-screen.tsx's launchGraph: durable-кэш → шаблон по сценарию.
+      // Результат применяет headless-аппликатор карточки (use-campaign-graph-
+      // applier), он же закрывает pending-пузырь — иначе спиннер завис бы.
+      const resolveCardGraph = (campaignId: string): ResolvableGraph | null => {
+        const c = getCachedGraph(campaignId);
+        if (c) return c;
+        const campaign = campaigns.find((x) => x.id === campaignId);
+        if (!campaign) return null;
+        const signalType = campaign.scenario
+          ? getScenario(campaign.scenario.id)?.signalType
+          : undefined;
+        if (!signalType) return null;
+        return createTemplate(signalType, campaign.sourceType, campaign.channels ?? []);
+      };
+      const cardLogic = resolveCardLogicContext(view, segments, resolveCardGraph);
+
+      const graph = cardLogic
+        ? cardLogic.graph
+        : cached
+          ? summarizeGraph(cached)
+          : undefined;
+      const requestScreen = cardLogic ? cardLogic.screen : screen;
       const cachedSignalLabel =
+        cardLogic?.cachedSignalLabel ??
         cached?.nodes.find(
           (n) => n.data.nodeType === "source" || n.data.nodeType === "signal"
-        )?.data.label ?? "Сигнал";
+        )?.data.label ??
+        "Сигнал";
       const selectedNode =
         editableWorkflow && appState.selectedWorkflowNode
           ? {
@@ -420,7 +453,7 @@ export function useChatSubmit(): {
           text,
           history,
           context: {
-            screen,
+            screen: requestScreen,
             dataSummary,
             ...(graph ? { graph } : {}),
             ...(selectedNode ? { selectedNode } : {}),

@@ -22,8 +22,13 @@ export function SignalFiles({
   const dispatch = useAppDispatch();
 
   const files = params.files ?? [];
+  // Mounted either inside the workflow canvas (graph node card) OR inline in
+  // the campaign card's «Сценарий кампании» node-block (A2.1) — both view
+  // kinds carry the same `{ id, name }` campaign shape.
   const campaignId =
-    state.view.kind === "workflow" ? state.view.campaign.id : undefined;
+    state.view.kind === "workflow" || state.view.kind === "campaign"
+      ? state.view.campaign.id
+      : undefined;
   const signalsArtifact = campaignId
     ? state.artifacts.find(
         (a) => a.campaignId === campaignId && a.kind === "signals",

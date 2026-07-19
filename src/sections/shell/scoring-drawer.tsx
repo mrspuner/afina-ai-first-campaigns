@@ -1,9 +1,9 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useLayoutEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChat } from "@/state/chat-context";
+import { useReserveRightRail } from "@/state/right-rail";
 import { ScoringInterestsPanel } from "./scoring-interests-panel";
 
 const SCORING_DRAWER_WIDTH_PX = 480;
@@ -14,8 +14,9 @@ const SCORING_DRAWER_WIDTH_PX = 480;
  * шаблона: БЕЗ композера и чата внутри.
  *
  * Независим от ИИ-дровера (два независимых слоя): резервирует место справа
- * через --email-preview-width (тот же шов, что предпросмотр/email-редактор), а
- * ИИ-дровер, если открыт, встаёт СЛЕВА от него (он читает эту же переменную).
+ * через общий реестр `useReserveRightRail` (тот же шов, что предпросмотр/
+ * email-редактор), а ИИ-дровер, если открыт, встаёт СЛЕВА от него (он читает
+ * опубликованную реестром `--right-rail-width`).
  * AI-настройка триггеров («добавить домен») идёт через отдельный ИИ-бар/дровер,
  * не внутри этого слоя.
  */
@@ -23,17 +24,7 @@ export function ScoringDrawer() {
   const chat = useChat();
   const { open } = chat.scoringDrawer;
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    const root = document.documentElement;
-    root.style.setProperty(
-      "--email-preview-width",
-      `${SCORING_DRAWER_WIDTH_PX}px`,
-    );
-    return () => {
-      root.style.removeProperty("--email-preview-width");
-    };
-  }, [open]);
+  useReserveRightRail(open ? SCORING_DRAWER_WIDTH_PX : 0);
 
   return (
     <AnimatePresence>

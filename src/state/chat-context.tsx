@@ -131,30 +131,12 @@ export interface ScoringDrawerState {
   campaignId: string | null;
 }
 
-/**
- * Слой «правка кампании текстом» поверх ИИ-дровера. Независим от
- * `templateDrawer` намеренно: там выбор варианта сохраняет ШАБЛОН
- * (`template_added`), а здесь ответы ничего не мутируют — на этой итерации они
- * только собираются, чтобы ассистент честно ответил заглушкой.
- *
- * Очередь `questions` приходит от модели; `index` — сколько уже отвечено, то
- * есть текущий вопрос это `questions[index]` (undefined → пикер гаснет).
- */
-export interface CampaignEditDrawerState {
-  open: boolean;
-  campaignId: string | null;
-  questions: TemplateQuestion[];
-  index: number;
-  answers: string[];
-}
-
 export interface ChatState {
   messages: ChatMessage[];
   mode: ChatPanelMode;
   emailEditor: EmailEditorState;
   templateDrawer: TemplateDrawerState;
   scoringDrawer: ScoringDrawerState;
-  campaignEditDrawer: CampaignEditDrawerState;
 }
 
 export type ChatAction =
@@ -196,14 +178,7 @@ export type ChatAction =
       campaignId: string;
       editable: boolean;
     }
-  | { type: "close_scoring_drawer" }
-  | {
-      type: "open_campaign_edit";
-      campaignId: string;
-      questions: TemplateQuestion[];
-    }
-  | { type: "answer_campaign_edit"; answer: string }
-  | { type: "close_campaign_edit" };
+  | { type: "close_scoring_drawer" };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -266,34 +241,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         scoringDrawer: INITIAL_SCORING_DRAWER,
       };
-    }
-    case "open_campaign_edit": {
-      return {
-        ...state,
-        campaignEditDrawer: {
-          open: true,
-          campaignId: action.campaignId,
-          questions: action.questions,
-          index: 0,
-          answers: [],
-        },
-      };
-    }
-    case "answer_campaign_edit": {
-      const d = state.campaignEditDrawer;
-      // Очередь исчерпана — лишний ответ игнорируем, а не пишем в никуда.
-      if (d.index >= d.questions.length) return state;
-      return {
-        ...state,
-        campaignEditDrawer: {
-          ...d,
-          index: d.index + 1,
-          answers: [...d.answers, action.answer],
-        },
-      };
-    }
-    case "close_campaign_edit": {
-      return { ...state, campaignEditDrawer: INITIAL_CAMPAIGN_EDIT_DRAWER };
     }
     case "open_email_editor": {
       return {
@@ -420,21 +367,12 @@ const INITIAL_SCORING_DRAWER: ScoringDrawerState = {
   campaignId: null,
 };
 
-const INITIAL_CAMPAIGN_EDIT_DRAWER: CampaignEditDrawerState = {
-  open: false,
-  campaignId: null,
-  questions: [],
-  index: 0,
-  answers: [],
-};
-
 export const INITIAL_CHAT_STATE: ChatState = {
   messages: [],
   mode: "collapsed",
   emailEditor: INITIAL_EMAIL_EDITOR,
   templateDrawer: INITIAL_TEMPLATE_DRAWER,
   scoringDrawer: INITIAL_SCORING_DRAWER,
-  campaignEditDrawer: INITIAL_CAMPAIGN_EDIT_DRAWER,
 };
 
 let messageCounter = 0;
@@ -512,11 +450,6 @@ interface ChatContextValue {
     editable: boolean;
   }) => void;
   closeScoringDrawer: () => void;
-  /** Слой правки кампании текстом: очередь вопросов модели + ответы. */
-  campaignEditDrawer: CampaignEditDrawerState;
-  openCampaignEdit: (campaignId: string, questions: TemplateQuestion[]) => void;
-  answerCampaignEdit: (answer: string) => void;
-  closeCampaignEdit: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -537,7 +470,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "close_sidebar" });
     dispatch({ type: "close_email_editor" });
     dispatch({ type: "close_template_drawer" });
-    dispatch({ type: "close_campaign_edit" });
   }, []);
   useScopeReset(resetChat);
 
@@ -661,20 +593,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const openCampaignEdit = useCallback(
-    (campaignId: string, questions: TemplateQuestion[]) =>
-      dispatch({ type: "open_campaign_edit", campaignId, questions }),
-    []
-  );
-  const answerCampaignEdit = useCallback(
-    (answer: string) => dispatch({ type: "answer_campaign_edit", answer }),
-    []
-  );
-  const closeCampaignEdit = useCallback(
-    () => dispatch({ type: "close_campaign_edit" }),
-    []
-  );
-
   const value = useMemo<ChatContextValue>(
     () => ({
       messages: state.messages,
@@ -703,10 +621,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       scoringDrawer: state.scoringDrawer,
       openScoringDrawer,
       closeScoringDrawer,
-      campaignEditDrawer: state.campaignEditDrawer,
-      openCampaignEdit,
-      answerCampaignEdit,
-      closeCampaignEdit,
     }),
     [
       state.messages,
@@ -735,10 +649,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       state.scoringDrawer,
       openScoringDrawer,
       closeScoringDrawer,
-      state.campaignEditDrawer,
-      openCampaignEdit,
-      answerCampaignEdit,
-      closeCampaignEdit,
     ]
   );
 

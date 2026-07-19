@@ -9,6 +9,16 @@ function nodeChip(nodeType: string, paramLabel?: string): PromptChip {
   return { id: "chip1", kind: "node", label: paramLabel ?? "Node", payload, removable: true };
 }
 
+function campaignLogicChip(campaignId = "c1"): PromptChip {
+  return {
+    id: `campaign-logic_${campaignId}`,
+    kind: "campaign-logic",
+    label: "Логика кампании",
+    payload: { campaignId },
+    removable: true,
+  };
+}
+
 function ctx(over: Partial<PromptBarContext> = {}): PromptBarContext {
   return { activeTag: null, hasTypedText: false, queueLength: 0, welcomeChips: [], ...over };
 }
@@ -259,6 +269,39 @@ describe("selectPromptSuggestions — ai-undo suggestion", () => {
     // launched=true → campaign-feed, не workflow-scenario → нет ai-undo
     if (r.kind !== "items") throw new Error("expected items");
     expect(r.items.some((i) => i.id === "ai-undo")).toBe(false);
+  });
+});
+
+describe("selectPromptSuggestions — тег «Логика кампании» (карточка)", () => {
+  const campaignView: AppState["view"] = {
+    kind: "campaign",
+    campaign: { id: "c1", name: "X" },
+  };
+
+  it("активный тег campaign-logic на карточке → scope campaign-logic с 5 подсказками структуры", () => {
+    const r = selectPromptSuggestions(
+      withView(campaignView),
+      ctx({ activeTag: campaignLogicChip("c1") })
+    );
+    if (r.kind !== "items") throw new Error("expected items");
+    expect(r.scope.kind).toBe("campaign-logic");
+    expect(r.items.map((i) => i.label)).toEqual([
+      "Добавить шаг",
+      "Изменить ветвление / условие",
+      "Поменять задержку",
+      "Добавить или убрать канал",
+      "Изменить порядок касаний",
+    ]);
+    // AI-иконка — единственный жёлтый сигнал; сами подсказки не brand.
+    expect(r.items.every((i) => i.variant !== "brand")).toBe(true);
+  });
+
+  it("печать после тега campaign-logic → hidden (правило 1)", () => {
+    const r = selectPromptSuggestions(
+      withView(campaignView),
+      ctx({ activeTag: campaignLogicChip("c1"), hasTypedText: true })
+    );
+    expect(r.kind).toBe("hidden");
   });
 });
 

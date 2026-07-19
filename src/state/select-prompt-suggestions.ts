@@ -108,6 +108,12 @@ export function selectPromptSuggestions(
     if (ctx.activeTag.kind === "trigger") {
       return resolved({ kind: "trigger-context" });
     }
+    // Активный тег «Логика кампании» на карточке → подсказки правок структуры
+    // графа (шаг/ветвление/задержка/канал/порядок). Печать после тега уже
+    // отсеяна правилом 1 выше.
+    if (ctx.activeTag.kind === "campaign-logic") {
+      return resolved({ kind: "campaign-logic" });
+    }
     // Прочие теги (section) — прячем подсказки.
     return { kind: "hidden" };
   }

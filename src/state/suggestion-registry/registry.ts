@@ -19,6 +19,7 @@ import {
 import type { CampaignStatus } from "@/state/app-state";
 import { resolveDraftQueue } from "./commands";
 import { resolveWelcomeWave } from "./welcome-waves";
+import { resolveCampaignLogic } from "./campaign-logic";
 
 export function resolveSuggestions(scope: Scope): SuggestionItem[] {
   switch (scope.kind) {
@@ -38,6 +39,8 @@ export function resolveSuggestions(scope: Scope): SuggestionItem[] {
       return resolveCampaignSelect();
     case "workflow-scenario":
       return resolveWorkflowScenario(scope.aiUndoAvailable);
+    case "campaign-logic":
+      return resolveCampaignLogic();
     case "campaign-feed":
       return resolveCampaignFeed(scope.status as CampaignStatus);
   }

@@ -1,11 +1,11 @@
 "use client";
 
 import { ImageIcon, MousePointerClick, X } from "lucide-react";
-import { useLayoutEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChat } from "@/state/chat-context";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { addEmail } from "@/state/email-directory";
+import { useReserveRightRail } from "@/state/right-rail";
 import type { NodeParams } from "@/types/workflow";
 import { cn } from "@/lib/utils";
 import { EmailRenderer } from "./email-renderer";
@@ -30,18 +30,9 @@ export function EmailEditorPanel() {
   const readOnly =
     preview || (appState.view.kind === "workflow" && appState.view.launched);
 
-  // Канвас резервирует справа ширину предпросмотра — через --email-preview-width
-  // (дровер дополнительно читает её, чтобы встать на левую границу превью).
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty(
-      "--email-preview-width",
-      open ? `${PREVIEW_WIDTH_PX}px` : "0px"
-    );
-    return () => {
-      root.style.removeProperty("--email-preview-width");
-    };
-  }, [open]);
+  // Резервирует место справа в общем реестре — через --right-rail-width
+  // (промпт-бар и ИИ-дровер читают её, чтобы не оказаться под панелью).
+  useReserveRightRail(open ? PREVIEW_WIDTH_PX : 0);
 
   // #7 — «Сохранить» убрана: изменения письма применяются к ноде автоматически
   // при закрытии редактора (и записываются в справочник писем). Read-only —

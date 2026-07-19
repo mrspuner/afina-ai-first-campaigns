@@ -16,6 +16,7 @@ import {
   templateOptionsForKind,
 } from "@/state/node-template-options";
 import { cn } from "@/lib/utils";
+import { pluralRu } from "@/lib/plural-ru";
 import { getNodeColor } from "./node-visuals";
 import { UNIT_COST } from "./campaign-cost";
 import { useWorkflowReadOnly } from "./workflow-readonly-context";
@@ -138,6 +139,20 @@ function scoringFileRowCount(f: File): number {
   return seededInt(rngFor("rowcount", f.name, f.size), 1000, 100_000);
 }
 
+/** Свёрнутая сводка «Интересы и триггеры»: счётчик вместо полного содержимого —
+ *  раскрытие идёт в боковую панель, здесь только превью объёма выбора. */
+function interestsTriggersSummary(
+  params: Extract<NodeParams, { kind: "scoring" }>,
+): string {
+  const i = params.interests.length;
+  const t = params.triggers.length;
+  if (!i && !t) return "Не заданы";
+  const parts: string[] = [];
+  if (i) parts.push(`${i} ${pluralRu(i, ["интерес", "интереса", "интересов"])}`);
+  if (t) parts.push(`${t} ${pluralRu(t, ["триггер", "триггера", "триггеров"])}`);
+  return parts.join(", ");
+}
+
 /**
  * Scoring node body: a «Файлы» row (the uploaded bases, folded onto the scoring
  * node when the standalone «Файл» graph node was removed) and an «Интересы и
@@ -166,8 +181,13 @@ export function ScoringRow({
   const { removeChip } = usePromptChips();
 
   const editable = !readOnly;
+  // Mounted either inside the workflow canvas (graph node card) OR inline in
+  // the campaign card's «Сценарий кампании» node-block (A2.1) — both view
+  // kinds carry the same `{ id, name }` campaign shape.
   const campaignId =
-    state.view.kind === "workflow" ? state.view.campaign.id : undefined;
+    state.view.kind === "workflow" || state.view.kind === "campaign"
+      ? state.view.campaign.id
+      : undefined;
   const canEdit = editable && campaignId !== undefined;
 
   const files = params.files ?? [];
@@ -278,7 +298,9 @@ export function ScoringRow({
       {/* Интересы и триггеры — pencil (draft) / eye (launched) opens the drawer. */}
       <div className="grid grid-cols-[minmax(72px,max-content)_1fr_auto] items-center gap-x-2.5 px-1 py-0.5 text-[11px]">
         <span className="text-muted-foreground">Интересы и триггеры</span>
-        <span aria-hidden />
+        <span className="truncate text-foreground">
+          {interestsTriggersSummary(params)}
+        </span>
         <button
           type="button"
           aria-label={
