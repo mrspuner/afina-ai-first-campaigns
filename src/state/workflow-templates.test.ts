@@ -10,7 +10,7 @@ import { validateWorkflow } from "./workflow-validation";
 import { computeCampaignCost } from "@/sections/campaigns/campaign-cost";
 import type { SignalType } from "./app-state";
 import type { Channel, SourceType } from "@/types/campaign";
-import type { SignalParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
+import type { SignalParams, ScoringParams, WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
 const SIGNAL_TYPES: SignalType[] = [
   "Регистрация",
@@ -865,5 +865,75 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
       .map((ed) => ed.label)
       .sort();
     expect(segLabels).toEqual(["Выс", "Низ", "Макс", "Ср"].sort());
+  });
+});
+
+// Fix round 4 (Important finding) — the "no comm/condition nodes anywhere"
+// branch (round 3) rebuilds the whole graph via createTemplate, which is
+// correct for the COMMUNICATION area but wrong for «Скоринг»/«Сигнал»: those
+// carry real campaign data (uploaded base, interests, triggers) that
+// createTemplate always builds empty. No existing test composed
+// "apply real context onto an empty-channel graph" with "merge to a
+// non-empty channel set" — the only combination that exercises this.
+describe("mergeChannelNodes сохраняет данные кампании при пересборке из пустого графа (Fix round 4)", () => {
+  it("new-источник (данные на «Скоринг»): база, интересы и триггеры переживают опустошение → заполнение каналов", () => {
+    const empty = createTemplate("Реактивация", "new", []);
+    const withContext = applyCampaignContext(empty, {
+      files: [{ name: "клиенты.csv", rowCount: 54321 }],
+      interests: ["ипотека", "новостройки"],
+      triggers: ["визит на сайт застройщика"],
+    });
+
+    // Предпосылка: контекст действительно осел на «Скоринг» ДО мержа.
+    const scoringBefore = withContext.nodes.find((n) => n.data.nodeType === "scoring")!;
+    expect((scoringBefore.data.params as ScoringParams).files).toEqual([
+      { name: "клиенты.csv", rowCount: 54321 },
+    ]);
+
+    const merged = mergeChannelNodes(withContext, ["sms"], {
+      signalType: "Реактивация",
+      sourceType: "new",
+    });
+
+    const scoring = merged.nodes.find((n) => n.data.nodeType === "scoring")!;
+    const scoringParams = scoring.data.params as ScoringParams;
+    expect(scoringParams.files).toEqual([{ name: "клиенты.csv", rowCount: 54321 }]);
+    expect(scoringParams.interests).toEqual(["ипотека", "новостройки"]);
+    expect(scoringParams.triggers).toEqual(["визит на сайт застройщика"]);
+
+    const signal = merged.nodes.find((n) => n.data.nodeType === "signal")!;
+    const signalParams = signal.data.params as SignalParams;
+    expect(signalParams.count).toBe(54321);
+  });
+
+  it("own-источник (данные на «Сигнал»): имя файла и число строк переживают опустошение → заполнение каналов", () => {
+    const empty = createTemplate("Реактивация", "own", []);
+    const withContext = applyCampaignContext(empty, {
+      files: [{ name: "своя_база.csv", rowCount: 12000 }],
+    });
+
+    const merged = mergeChannelNodes(withContext, ["push"], {
+      signalType: "Реактивация",
+      sourceType: "own",
+    });
+
+    const signal = merged.nodes.find((n) => n.data.nodeType === "signal")!;
+    const signalParams = signal.data.params as SignalParams;
+    expect(signalParams.count).toBe(12000);
+    expect(signalParams.fileName).toBe("своя_база.csv");
+    expect(signalParams.files).toEqual(["своя_база.csv"]);
+  });
+
+  it("если на входящем графе нет ни «Скоринг», ни «Сигнал» — голый шаблон уже корректен (нести нечего)", () => {
+    // Синтетический граф без корневых нод кампании вовсе — не должен падать.
+    const nodes: WorkflowNode[] = [
+      { id: "success", type: "workflowNode", position: { x: 0, y: 0 }, data: { label: "Успех", nodeType: "success", isSuccess: true, params: { kind: "success", goal: "g" } } },
+    ];
+    const merged = mergeChannelNodes({ nodes, edges: [] }, ["sms"], {
+      signalType: "Реактивация",
+      sourceType: "new",
+    });
+    // Просто чистая пересборка — не бросает исключение и не теряет структуру.
+    expect(merged.nodes.some((n) => n.data.nodeType === "scoring")).toBe(true);
   });
 });

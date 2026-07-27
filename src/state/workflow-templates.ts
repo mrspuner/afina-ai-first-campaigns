@@ -664,6 +664,46 @@ export function applyCampaignContext(
   return { nodes, edges: t.edges };
 }
 
+/**
+ * Обратная операция к `applyCampaignContext`: читает files/interests/triggers
+ * с корневых нод графа («Скоринг» — new/stream, «Сигнал» — own), чтобы
+ * перенести их на свежепересобранный шаблон. Нужна `mergeChannelNodes`, когда
+ * тот пересобирает граф целиком (см. ниже) — без этого пересборка тихо
+ * обнуляла бы реальные данные кампании (загруженную базу, интересы, триггеры).
+ *
+ * Для own-источника (данные только на «Сигнал»-ноде) построчная разбивка по
+ * файлам нигде не хранится — восстанавливаем один аккумулированный `count`,
+ * приписывая его первому имени файла (для типичного одного файла это точное
+ * восстановление; для нескольких — как минимум сумма верна, что и читает
+ * дальше applyCampaignContext).
+ *
+ * Возвращает `undefined`, если ни «Скоринг», ни «Сигнал» в графе нет —
+ * тогда нести действительно нечего, и голый шаблон уже корректен.
+ */
+function extractCampaignContext(
+  nodes: WorkflowNode[]
+): { files: CampaignFile[]; interests: string[]; triggers: string[] } | undefined {
+  const scoringNode = nodes.find((nd) => nd.data.nodeType === "scoring");
+  if (scoringNode?.data.params?.kind === "scoring") {
+    const { files, interests, triggers } = scoringNode.data.params;
+    return { files, interests, triggers };
+  }
+
+  const signalNode = nodes.find((nd) => nd.data.nodeType === "signal");
+  if (signalNode?.data.params?.kind === "signal") {
+    const params = signalNode.data.params;
+    if (!params.files?.length && !params.count) return undefined; // действительно нечего нести
+    const names = params.files?.length ? params.files : [params.fileName || "база"];
+    const files: CampaignFile[] = names.map((name, i) => ({
+      name,
+      rowCount: i === 0 ? params.count : 0,
+    }));
+    return { files, interests: [], triggers: [] };
+  }
+
+  return undefined;
+}
+
 // ── mergeChannelNodes ─────────────────────────────────────────────────────────
 
 /** Убирает повторы рёбер по паре source|target — реконнект может воспроизвести уже существующее ребро. */
@@ -700,10 +740,9 @@ function isEqualChannelSplit(node: WorkflowNode | undefined): boolean {
 function collapseDegenerateEqualSplits(
   nodesIn: WorkflowNode[],
   edgesIn: WorkflowEdge[]
-): { nodes: WorkflowNode[]; edges: WorkflowEdge[]; newBridges: WorkflowEdge[] } {
+): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
   let nodes = nodesIn;
   let edges = edgesIn;
-  const newBridges: WorkflowEdge[] = [];
 
   let changed = true;
   while (changed) {
@@ -722,13 +761,12 @@ function collapseDegenerateEqualSplits(
         ...bridges,
       ]);
       nodes = nodes.filter((n) => n.id !== splitNode.id);
-      newBridges.push(...bridges);
       changed = true;
       break; // состав nodes/edges изменился — начинаем проход заново
     }
   }
 
-  return { nodes, edges, newBridges };
+  return { nodes, edges };
 }
 
 /**
@@ -785,11 +823,6 @@ export function mergeChannelNodes(
 
   let nodes = [...graph.nodes];
   let edges = [...graph.edges];
-  // Рёбра, "перекинутые" на месте снятых нод в этом вызове (только там, где
-  // предком НЕ был channel-сплиттер с уцелевшими соседями — там мостик не
-  // нужен вовсе). Если после удаления коммуникаций не осталось совсем нигде,
-  // они подсказывают, куда подключать новые каналы (см. ветку добавления).
-  const bridgesCreated: WorkflowEdge[] = [];
 
   // ── Снятые каналы ───────────────────────────────────────────────────────
   for (const node of graph.nodes) {
@@ -824,9 +857,6 @@ export function mergeChannelNodes(
         ...edges.filter((ed) => ed.source !== node.id && ed.target !== node.id),
         ...bridges,
       ]);
-      // Мостик от самого сплиттера (predecessorIsEqualSplit) — промежуточный:
-      // сплиттер схлопнётся ниже, и итоговый мостик даст collapse-проход.
-      if (!predecessorIsEqualSplit) bridgesCreated.push(...bridges);
     }
     nodes = nodes.filter((nd) => nd.id !== node.id);
   }
@@ -834,7 +864,6 @@ export function mergeChannelNodes(
   const collapsed = collapseDegenerateEqualSplits(nodes, edges);
   nodes = collapsed.nodes;
   edges = collapsed.edges;
-  bridgesCreated.push(...collapsed.newBridges);
 
   // ── Новые каналы ────────────────────────────────────────────────────────
   const remainingComm = nodes.filter((nd) => isCommunicationNode(nd.data.nodeType));
@@ -966,17 +995,28 @@ export function mergeChannelNodes(
     const conditionNodes = nodes.filter((nd) => nd.data.nodeType === "condition");
 
     if (conditionNodes.length === 0) {
-      // Ни коммуникаций, ни condition-нод — сохранять хирургически нечего:
-      // коммуникации не было никогда («без коммуникации», bug 2a/2b), либо
-      // предыдущий merge её уже полностью стёр. mergeChannelNodes не может
-      // сам знать, что "Апсейл"/"Удержание" — сегментированные сценарии
-      // (нет signalType без context), поэтому ручная реконструкция здесь
-      // раньше ВСЕГДА строила линейный юнит — и ломала сегментацию (Fix
-      // round 3, Important finding). Чистая пересборка через createTemplate
-      // (тот же билдер, что диспетчерит linear/segmented и знает про
-      // «Конец» с правильным `reason`) даёт паритет с фактической
-      // пересборкой по построению, а не по ручной мимикрии.
-      return createTemplate(signalType, sourceType, nextChannels);
+      // Ни коммуникаций, ни condition-нод — в коммуникационной области
+      // сохранять хирургически нечего: коммуникации не было никогда («без
+      // коммуникации», bug 2a/2b), либо предыдущий merge её уже полностью
+      // стёр. mergeChannelNodes не может сам знать, что "Апсейл"/"Удержание"
+      // — сегментированные сценарии (нет signalType без context), поэтому
+      // ручная реконструкция здесь раньше ВСЕГДА строила линейный юнит — и
+      // ломала сегментацию (Fix round 3, Important finding). Чистая
+      // пересборка через createTemplate (тот же билдер, что диспетчерит
+      // linear/segmented и знает про «Конец» с правильным `reason`) даёт
+      // паритет с фактической пересборкой по построению, а не по ручной
+      // мимикрии.
+      //
+      // Но «Скоринг»/«Сигнал» — это НЕ коммуникационная область: там живут
+      // реальные данные кампании (загруженная база, интересы, триггеры), и
+      // createTemplate строит их пустыми с нуля. Переносим то, что было на
+      // входящем графе, через applyCampaignContext — тот же инструмент,
+      // которым эти данные накладываются везде — а не копируем поля вручную
+      // (Fix round 4, Important finding: без этого пересборка тихо роняла
+      // базу/интересы/триггеры).
+      const fresh = createTemplate(signalType, sourceType, nextChannels);
+      const campaignContext = extractCampaignContext(graph.nodes);
+      return campaignContext ? applyCampaignContext(fresh, campaignContext) : fresh;
     }
 
     type Position = { sources: string[]; targets: string[]; label?: string };
