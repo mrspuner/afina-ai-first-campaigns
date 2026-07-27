@@ -13,7 +13,11 @@ import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
-import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
+import {
+  computeStepTransition,
+  invalidatedBy,
+  resetFieldsFor,
+} from "@/sections/campaigns/wizard/wizard-navigation";
 import { stepsForIntent, type WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
@@ -113,22 +117,33 @@ function WorkspaceInner({
         intentChanged,
       });
 
-      // Changing scenario invalidates everything downstream (interests,
-      // triggers, segments, file, budget) — reset those fields and rewind
-      // progress to the step right after the scenario picker. `next` is
-      // anchored to the scenario step (not `currentStep`), so picking a new
-      // scenario after scrolling back to the rendered step-1 panel lands on
-      // step 2 instead of overshooting. `setMaxStep(next)` collapses any
-      // phantom steps that were reached under the old scenario.
+      // Changing scenario still rewinds progress to the step right after the
+      // scenario picker (`next` is anchored to the scenario step, not
+      // `currentStep`, so re-picking after scrolling back to the rendered
+      // step-1 panel lands on step 2 instead of overshooting), but it no
+      // longer wipes everything downstream: interests/triggers/base/channels
+      // don't depend on the scenario (the interests catalogue is keyed off
+      // the account's business direction), only the budget does. See
+      // `STEP_INVALIDATES` in wizard-navigation.ts for the full dependency
+      // table.
       //
-      // Changing the intent likewise reshapes the tail of the step list
-      // (interests / analysis / file / channels differ per intent). When only
-      // the intent changed (scenario takes priority), reset downstream data but
-      // keep scenario + the new intent, then rewind to the step right after
-      // the intent picker.
+      // Changing the intent still reshapes the tail of the step list itself
+      // (interests / analysis / file / channels differ per intent), so its
+      // full downstream reset is unchanged. When only the intent changed
+      // (scenario takes priority), reset downstream data but keep scenario +
+      // the new intent, then rewind to the step right after the intent
+      // picker.
       if (resetData) {
         if (scenarioChanged) {
-          setStepData({ ...initialStepData, ...partial });
+          // Сценарий больше НЕ стирает интересы, триггеры, базу и каналы: они
+          // от него не зависят (каталог интересов определяется направлением
+          // бизнеса аккаунта). Обнуляется только то, что перечислено в
+          // STEP_INVALIDATES — бюджет.
+          setStepData((prev) => ({
+            ...prev,
+            ...partial,
+            ...resetFieldsFor(invalidatedBy("scenario")),
+          }));
         } else {
           // intentChanged: preserve scenario, apply the new intent, clear the
           // rest (interests/file/fileRowCount/apiKey/channels/budget/…).
