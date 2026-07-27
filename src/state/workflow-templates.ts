@@ -764,11 +764,23 @@ function collapseDegenerateEqualSplits(
  *
  * Задержки, условия, сплиты вне комм-блоков и отредактированные тексты
  * остальных нод не трогаются вовсе.
+ *
+ * Если в графе не осталось ни коммуникационных, ни condition-нод — сохранять
+ * хирургически нечего (пользователю/ИИ негде было оставить правку в
+ * коммуникационной области), и функция возвращает чистую пересборку
+ * `createTemplate(context.signalType, context.sourceType, nextChannels)`
+ * целиком. Это единственный способ корректно восстановить сегментацию
+ * (Апсейл/Удержание — сколько сегментов, какие сплиты) и «Конец» с верным
+ * `reason`: ни то ни другое `mergeChannelNodes` не может воспроизвести
+ * вручную без знания сценария (Fix round 3, Important finding) — отсюда
+ * обязательный (не опциональный) `context`.
  */
 export function mergeChannelNodes(
   graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
-  nextChannels: Channel[]
+  nextChannels: Channel[],
+  context: { signalType: SignalType; sourceType: SourceType }
 ): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
+  const { signalType, sourceType } = context;
   const nextSet = new Set(nextChannels);
 
   let nodes = [...graph.nodes];
@@ -948,104 +960,65 @@ export function mergeChannelNodes(
     // condition-ноды («Взаимодействие») где-то ещё остались — юнит
     // retry-цепочки (условие/задержка/повтор) уже существует (например, после
     // раздельных «опустошили → заполнили» вызовов) и трогать его нельзя;
-    // просто находим места входа. Если condition-нод нет вовсе — коммуникации
-    // не было никогда («без коммуникации», bug 2a/2b) — и нужно построить
-    // ПОЛНОЦЕННЫЙ юнит через buildCommUnit (тот же билдер, что и
-    // createTemplate), а не голый блок каналов: иначе не будет retry-доли по
-    // DYNAMIC_RATE, и стоимость разойдётся с чистой пересборкой (Fix round 2,
-    // Important finding — "рёбра в успех" перестают быть однозначным
-    // ориентиром, как только в графе есть condition-ноды: у cond1 и cond2 ОБЕ
-    // YES-ветки ведут в success).
+    // просто находим места входа по рёбрам, ведущим В условия (а не «в
+    // успех» — у cond1 и cond2 ОБЕ YES-ветки ведут в success, так что это не
+    // однозначный ориентир, Fix round 2).
     const conditionNodes = nodes.filter((nd) => nd.data.nodeType === "condition");
 
-    if (conditionNodes.length > 0) {
-      type Position = { sources: string[]; targets: string[]; label?: string };
-      const seen = new Set<string>();
-      const positions: Position[] = [];
-      for (const cond of conditionNodes) {
-        for (const inEdge of edges.filter((ed) => ed.target === cond.id)) {
-          const key = `${inEdge.source}|${inEdge.target}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          positions.push({ sources: [inEdge.source], targets: [cond.id], label: inEdge.label as string | undefined });
-        }
-      }
+    if (conditionNodes.length === 0) {
+      // Ни коммуникаций, ни condition-нод — сохранять хирургически нечего:
+      // коммуникации не было никогда («без коммуникации», bug 2a/2b), либо
+      // предыдущий merge её уже полностью стёр. mergeChannelNodes не может
+      // сам знать, что "Апсейл"/"Удержание" — сегментированные сценарии
+      // (нет signalType без context), поэтому ручная реконструкция здесь
+      // раньше ВСЕГДА строила линейный юнит — и ломала сегментацию (Fix
+      // round 3, Important finding). Чистая пересборка через createTemplate
+      // (тот же билдер, что диспетчерит linear/segmented и знает про
+      // «Конец» с правильным `reason`) даёт паритет с фактической
+      // пересборкой по построению, а не по ручной мимикрии.
+      return createTemplate(signalType, sourceType, nextChannels);
+    }
 
-      positions.forEach((pos) => {
-        const block = buildChannelBlock(nextChannels, `merged_${freshIndex++}`, true);
-
-        // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
-        // сообщение получит окольный путь мимо новых каналов.
-        edges = edges.filter(
-          (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
-        );
-
-        const baseX = (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
-        const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
-        const baseY = columnNodes.length
-          ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
-          : 0;
-
-        const placedNodes = block.nodes.map((nd) => ({
-          ...nd,
-          position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
-        }));
-
-        nodes = [...nodes, ...placedNodes];
-        edges = dedupeEdges([
-          ...edges,
-          ...pos.sources.map((src) => e(src, block.entryId, pos.label)),
-          ...block.edges,
-          ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
-        ]);
-      });
-    } else {
-      const successNode = nodes.find((nd) => nd.data.isSuccess);
-      if (successNode) {
-        const predecessorEdges = edges.filter((ed) => ed.target === successNode.id);
-        predecessorEdges.forEach((predEdge) => {
-          const predecessorNode = nodes.find((nd) => nd.id === predEdge.source);
-          if (!predecessorNode) return;
-
-          const idx = freshIndex++;
-          const baseX = predecessorNode.position.x + STEP;
-          const endId = `merged_end_${idx}`;
-          const unit = buildCommUnit(nextChannels, {
-            prefix: `merged_${idx}`,
-            onEngaged: successNode.id,
-            onExhausted: endId,
-            xOffset: baseX,
-            yOffset: predecessorNode.position.y,
-            useTemplateParams: true,
-          });
-          // «Без коммуникации» никогда не строил свой «Конец» — его нет, и
-          // retry-цепочке нужен реальный узел для НЕТ-ветки второго условия.
-          const endNode = n(
-            endId,
-            "Конец",
-            "end",
-            baseX + estimateUnitWidth(nextChannels),
-            predecessorNode.position.y + 80,
-            undefined,
-            undefined,
-            { kind: "end" }
-          );
-
-          // Убираем прямой обход «Сигнал → Успех» — сообщение должно пройти
-          // через новый юнит, а не мимо него.
-          edges = edges.filter(
-            (ed) => !(ed.source === predEdge.source && ed.target === predEdge.target)
-          );
-
-          nodes = [...nodes, ...unit.nodes, endNode];
-          edges = dedupeEdges([
-            ...edges,
-            e(predecessorNode.id, unit.entryId, predEdge.label as string | undefined),
-            ...unit.edges,
-          ]);
-        });
+    type Position = { sources: string[]; targets: string[]; label?: string };
+    const seen = new Set<string>();
+    const positions: Position[] = [];
+    for (const cond of conditionNodes) {
+      for (const inEdge of edges.filter((ed) => ed.target === cond.id)) {
+        const key = `${inEdge.source}|${inEdge.target}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        positions.push({ sources: [inEdge.source], targets: [cond.id], label: inEdge.label as string | undefined });
       }
     }
+
+    positions.forEach((pos) => {
+      const block = buildChannelBlock(nextChannels, `merged_${freshIndex++}`, true);
+
+      // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
+      // сообщение получит окольный путь мимо новых каналов.
+      edges = edges.filter(
+        (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
+      );
+
+      const baseX = (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
+      const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
+      const baseY = columnNodes.length
+        ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
+        : 0;
+
+      const placedNodes = block.nodes.map((nd) => ({
+        ...nd,
+        position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
+      }));
+
+      nodes = [...nodes, ...placedNodes];
+      edges = dedupeEdges([
+        ...edges,
+        ...pos.sources.map((src) => e(src, block.entryId, pos.label)),
+        ...block.edges,
+        ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
+      ]);
+    });
   }
 
   // ── Нормализация числа веток ────────────────────────────────────────────

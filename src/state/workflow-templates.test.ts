@@ -470,9 +470,11 @@ function assertFullyReachableFromSingleRoot(graph: {
 // от типа сигнала, так что тест "задержки и условия остаются нетронутыми"
 // действительно что-то проверяет.
 describe("mergeChannelNodes", () => {
+  const REACT_CTX = { signalType: "Реактивация" as SignalType, sourceType: "new" as SourceType };
+
   it("снятый канал уходит вместе со своими рёбрами", () => {
     const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
-    const merged = mergeChannelNodes(graph, ["sms"]);
+    const merged = mergeChannelNodes(graph, ["sms"], REACT_CTX);
     expect(merged.nodes.some((n) => n.data.nodeType === "email")).toBe(false);
     const ids = new Set(merged.nodes.map((n) => n.id));
     for (const e of merged.edges) {
@@ -483,7 +485,7 @@ describe("mergeChannelNodes", () => {
 
   it("цепочка не рвётся: путь от корня до конца сохраняется", () => {
     const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
-    const merged = mergeChannelNodes(graph, ["sms"]);
+    const merged = mergeChannelNodes(graph, ["sms"], REACT_CTX);
     assertFullyReachableFromSingleRoot(merged);
   });
 
@@ -491,14 +493,14 @@ describe("mergeChannelNodes", () => {
     const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
     const sms = graph.nodes.find((n) => n.data.nodeType === "sms")!;
     sms.data.params = { ...sms.data.params, text: "Правка руками" } as typeof sms.data.params;
-    const merged = mergeChannelNodes(graph, ["sms"]);
+    const merged = mergeChannelNodes(graph, ["sms"], REACT_CTX);
     const keptSms = merged.nodes.find((n) => n.data.nodeType === "sms")!;
     expect((keptSms.data.params as { text: string }).text).toBe("Правка руками");
   });
 
   it("новый канал добавляется нодой по умолчанию", () => {
     const graph = createTemplate("Реактивация", "new", ["sms"]);
-    const merged = mergeChannelNodes(graph, ["sms", "push"]);
+    const merged = mergeChannelNodes(graph, ["sms", "push"], REACT_CTX);
     expect(merged.nodes.some((n) => n.data.nodeType === "push")).toBe(true);
   });
 
@@ -512,7 +514,7 @@ describe("mergeChannelNodes", () => {
     const before = graph.nodes.filter((n) =>
       ["wait", "condition"].includes(n.data.nodeType),
     ).length;
-    const merged = mergeChannelNodes(graph, ["sms"]);
+    const merged = mergeChannelNodes(graph, ["sms"], REACT_CTX);
     const after = merged.nodes.filter((n) =>
       ["wait", "condition"].includes(n.data.nodeType),
     ).length;
@@ -533,7 +535,7 @@ describe("mergeChannelNodes", () => {
 
   it("тот же набор каналов граф не меняет", () => {
     const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
-    const merged = mergeChannelNodes(graph, ["sms", "email"]);
+    const merged = mergeChannelNodes(graph, ["sms", "email"], REACT_CTX);
     expect(merged.nodes.map((n) => n.id)).toEqual(graph.nodes.map((n) => n.id));
   });
 
@@ -542,13 +544,15 @@ describe("mergeChannelNodes", () => {
   // а каждый comm-юнит сам дублирует каналы (первый проход + повтор). Значит
   // "email" при channels=["sms","email"] встречается тут 6 раз (3 сегмента × 2
   // прохода) — ровно тот случай, где мерж "по одной ноде на канал" бы сломался.
+  const UPSELL_CTX = { signalType: "Апсейл" as SignalType, sourceType: "new" as SourceType };
+
   describe("сегментированный сценарий (несколько параллельных юнитов на канал)", () => {
     it("снятый канал уходит из ВСЕХ сегментов без висячих рёбер", () => {
       const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
       const emailCountBefore = graph.nodes.filter((n) => n.data.nodeType === "email").length;
       expect(emailCountBefore).toBeGreaterThan(1); // предпосылка теста — каналов правда несколько
 
-      const merged = mergeChannelNodes(graph, ["sms"]);
+      const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
       expect(merged.nodes.some((n) => n.data.nodeType === "email")).toBe(false);
 
       const ids = new Set(merged.nodes.map((n) => n.id));
@@ -560,7 +564,7 @@ describe("mergeChannelNodes", () => {
 
     it("после удаления канала из всех сегментов граф остаётся полностью связным", () => {
       const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
-      const merged = mergeChannelNodes(graph, ["sms"]);
+      const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
       assertFullyReachableFromSingleRoot(merged);
     });
 
@@ -579,7 +583,7 @@ describe("mergeChannelNodes", () => {
       );
       expect(equalSplitsBefore.length).toBeGreaterThan(0); // предпосылка — они правда есть (2-канальные юниты)
 
-      const merged = mergeChannelNodes(graph, ["sms"]);
+      const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
 
       const segmentSplitAfter = merged.nodes.filter(
         (n) => n.data.nodeType === "split" && n.data.params?.kind === "split" && n.data.params.by === "segment",
@@ -608,7 +612,7 @@ describe("mergeChannelNodes", () => {
         expect.objectContaining({ source: signal.id, target: success.id }),
       );
 
-      const merged = mergeChannelNodes(graph, ["push"]);
+      const merged = mergeChannelNodes(graph, ["push"], { signalType: "Реактивация", sourceType: "own" });
       expect(merged.nodes.some((n) => n.data.nodeType === "push")).toBe(true);
       assertFullyReachableFromSingleRoot(merged);
 
@@ -638,7 +642,7 @@ describe("mergeChannelNodes", () => {
 
     it("замена канала другим за один вызов: старый уходит из обоих проходов, новый встаёт на оба освободившихся места", () => {
       const graph = createTemplate("Реактивация", "own", ["sms"]);
-      const merged = mergeChannelNodes(graph, ["push"]);
+      const merged = mergeChannelNodes(graph, ["push"], { signalType: "Реактивация", sourceType: "own" });
 
       expect(merged.nodes.some((n) => n.data.nodeType === "sms")).toBe(false);
       expect(merged.nodes.filter((n) => n.data.nodeType === "push")).toHaveLength(2);
@@ -674,7 +678,9 @@ describe("mergeChannelNodes", () => {
       { id: "a-c", source: "a", target: "c", type: "default" },
     ];
 
-    const merged = mergeChannelNodes({ nodes, edges }, []);
+    // nextChannels=[] здесь ничего не добавляет — context не используется этой
+    // веткой, но обязателен по сигнатуре; значение произвольное.
+    const merged = mergeChannelNodes({ nodes, edges }, [], { signalType: "Реактивация", sourceType: "new" });
 
     expect(merged.nodes.some((n) => n.data.nodeType === "sms")).toBe(false);
     const pairs = new Set(merged.edges.map((e) => `${e.source}|${e.target}`));
@@ -708,7 +714,7 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     to: Channel[],
   ) {
     const graph = createTemplate(signalType, sourceType, from);
-    const merged = mergeChannelNodes(graph, to);
+    const merged = mergeChannelNodes(graph, to, { signalType, sourceType });
     const fresh = createTemplate(signalType, sourceType, to);
 
     // computeReach молча пропускает рёбра на несуществующие ноды (не падает и
@@ -775,10 +781,52 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     assertCostParity("Реактивация", "new", [], ["sms"]);
   });
 
+  // Fix round 3 (Important finding) — та же "без коммуникации с самого
+  // начала" точка входа, но для СЕГМЕНТИРОВАННОГО сценария: у mergeChannelNodes
+  // нет signalType, так что ручная реконструкция (round 2) всегда строила
+  // линейный юнит вместо сплита "по сегменту" — паритет по стоимости
+  // проходил только там, где condition-ноды выживали от непустого состояния
+  // (двухшаговый сценарий ниже), но не для by-scratch-пустого графа. Ровно
+  // два случая, которые ревьюер измерил напрямую.
+  it.each<[SignalType, Channel]>([
+    ["Апсейл", "sms"],
+    ["Удержание", "ivr"],
+  ])("«без коммуникации» с самого начала, сегментированный сценарий: [] → [\"%s\"→%s]", (signalType, channel) => {
+    assertCostParity(signalType, "new", [], [channel]);
+  });
+
+  it("«без коммуникации» с самого начала, сегментированный сценарий: структура сравнима с чистой пересборкой", () => {
+    const graph = createTemplate("Апсейл", "new", []);
+    const merged = mergeChannelNodes(graph, ["sms"], { signalType: "Апсейл", sourceType: "new" });
+    const fresh = createTemplate("Апсейл", "new", ["sms"]);
+
+    // Не только совпадающая стоимость — тот же НАБОР типов нод (в частности,
+    // сплиттер "по сегменту", которого ручная реконструкция построить не могла).
+    const kindsOf = (g: { nodes: { data: { nodeType: string } }[] }) =>
+      [...new Set(g.nodes.map((n) => n.data.nodeType))].sort();
+    expect(kindsOf(merged)).toEqual(kindsOf(fresh));
+    expect(merged.nodes.some((n) => n.data.nodeType === "split")).toBe(true);
+    expect(merged.nodes.filter((n) => n.data.nodeType === "sms")).toHaveLength(
+      fresh.nodes.filter((n) => n.data.nodeType === "sms").length,
+    );
+
+    // Узел "Конец" несёт тот же reason, что и в чистой пересборке (не «—» —
+    // из-за отсутствия context ручная реконструкция не могла его знать).
+    const mergedEnd = merged.nodes.find((n) => n.data.nodeType === "end")!;
+    const freshEnd = fresh.nodes.find((n) => n.data.nodeType === "end")!;
+    expect(mergedEnd.data.params?.kind === "end" ? mergedEnd.data.params.reason : undefined).toBe(
+      freshEnd.data.params?.kind === "end" ? freshEnd.data.params.reason : undefined,
+    );
+    expect(mergedEnd.data.params?.kind === "end" ? mergedEnd.data.params.reason : undefined).toBe(
+      "Без апсейла",
+    );
+  });
+
   it("двухшаговый сценарий «опустошили → заполнили» (ровно то, что делает пользователь свапом каналов за 2 клика)", () => {
+    const reactCtx = { signalType: "Реактивация" as SignalType, sourceType: "new" as SourceType };
     const original = createTemplate("Реактивация", "new", ["sms", "email"]);
-    const emptied = mergeChannelNodes(original, []); // шаг 1: канал очищен — этот вызов НЕ добавляет ничего
-    const refilled = mergeChannelNodes(emptied, ["sms"]); // шаг 2: отдельный вызов, bridgesCreated этого вызова пуст
+    const emptied = mergeChannelNodes(original, [], reactCtx); // шаг 1: канал очищен — этот вызов НЕ добавляет ничего
+    const refilled = mergeChannelNodes(emptied, ["sms"], reactCtx); // шаг 2: отдельный вызов, bridgesCreated этого вызова пуст
     const fresh = createTemplate("Реактивация", "new", ["sms"]);
 
     const ids = new Set(refilled.nodes.map((n) => n.id));
@@ -796,9 +844,10 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
   });
 
   it("двухшаговый сценарий, сегментированный сценарий («Апсейл»)", () => {
+    const upsellCtx = { signalType: "Апсейл" as SignalType, sourceType: "new" as SourceType };
     const original = createTemplate("Апсейл", "new", ["sms"]);
-    const emptied = mergeChannelNodes(original, []);
-    const refilled = mergeChannelNodes(emptied, ["sms", "push"]);
+    const emptied = mergeChannelNodes(original, [], upsellCtx);
+    const refilled = mergeChannelNodes(emptied, ["sms", "push"], upsellCtx);
     const fresh = createTemplate("Апсейл", "new", ["sms", "push"]);
 
     assertFullyReachableFromSingleRoot(refilled);
