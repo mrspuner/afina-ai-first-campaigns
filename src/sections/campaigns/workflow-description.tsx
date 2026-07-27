@@ -38,6 +38,15 @@ function nodeTypeForTag(
 const GLUED_PUNCTUATION = /^[.,:;!?]/;
 
 /**
+ * Единственное место, где живёт величина отступа — используется и для знака
+ * препинания после тега в `stage.body` (`punctuationPullBack` ниже), и для
+ * двоеточия после `message.templateTag` в списке сообщений (тот же паддинг
+ * пилюли, тот же эффект, но другая разметка — литерал `: «…»`, а не сегмент
+ * `stage.body`, поэтому через `punctuationPullBack` не идёт).
+ */
+const PILL_PUNCTUATION_PULL_BACK = "-ml-[5px]";
+
+/**
  * Пилюля — inline-flex бокс со своим правым паддингом+бордером (~7px,
  * `PILL_BASE` в description-tag.tsx). Когда следом без пробела в самом
  * тексте идёт знак препинания, этот паддинг визуально читается как пробел
@@ -52,7 +61,9 @@ function punctuationPullBack(
   prev: DescriptionSegment | undefined,
   text: string,
 ): string | undefined {
-  return prev?.kind === "tag" && GLUED_PUNCTUATION.test(text) ? "-ml-[5px]" : undefined;
+  return prev?.kind === "tag" && GLUED_PUNCTUATION.test(text)
+    ? PILL_PUNCTUATION_PULL_BACK
+    : undefined;
 }
 
 /**
@@ -145,11 +156,24 @@ export function WorkflowDescription({
                           onActivate={onTagActivate}
                           nodeType={nodeTypeForTag(message.templateTag, nodeTypes)}
                         />
+                        {/* Двоеточие идёт вплотную к пилюле в исходном тексте
+                            (без пробела) ровно как «тег.»/«тег,» в
+                            stage.body — тот же паддинг+бордер пилюли создаёт
+                            ту же иллюзию пробела перед ним. Обёрнуто в свой
+                            <span>, а не оставлено голым JSX-текстом, ТОЛЬКО в
+                            этой ветке — именно тут перед двоеточием реально
+                            пилюля; фолбэк-ветка (qualifierText/ничего) ниже
+                            остаётся плоским текстом, как раньше. */}
+                        <span className={PILL_PUNCTUATION_PULL_BACK}>
+                          : «{message.text}»
+                        </span>
                       </>
                     ) : (
-                      qualifierText(message)
+                      <>
+                        {qualifierText(message)}
+                        : «{message.text}»
+                      </>
                     )}
-                    : «{message.text}»
                   </li>
                 ))}
               </ul>

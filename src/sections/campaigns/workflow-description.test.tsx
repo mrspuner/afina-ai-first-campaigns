@@ -257,18 +257,59 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     expect(screen.getByText("по триггеру Ипотека", { exact: false }).className).toBe("");
   });
 
-  it("текстовый сегмент, начинающийся с пунктуации, но НЕ следующий за тегом — класс не получает", () => {
+  it("текстовый сегмент, начинающийся с пунктуации, но идущий за обычным текстом (не за тегом), класс не получает", () => {
+    // Тот же ведущий символ «.», что и в кейсе «после тега» выше, — но
+    // предыдущий сегмент здесь тоже `text`, а не `tag`, поэтому иллюзии
+    // пробела от паддинга пилюли тут вообще нет и пул-бэк не нужен.
     const stages: DescriptionStage[] = [
       {
         id: "start",
         heading: "Старт.",
         body: [
-          { kind: "text", text: "Текст." },
-          { kind: "text", text: " Ещё." },
+          { kind: "text", text: "Слово" },
+          { kind: "text", text: ". Ещё." },
         ],
       },
     ];
     render(<WorkflowDescription stages={stages} />);
-    expect(screen.getByText("Текст.").className).toBe("");
+    expect(screen.getByText(". Ещё.", { exact: false }).className).toBe("");
+  });
+
+  it("двоеточие в списке сообщений: пул-бэк только когда перед ним пилюля (templateTag)", () => {
+    // fix round 3: тот же дефект, что Finding 1, но в другой разметке — «:
+    // «текст»» в списке сообщений литерал, а не сегмент stage.body, поэтому
+    // punctuationPullBack его не видит. Двоеточие после РЕЗОЛВНУТОГО шаблона
+    // (templateTag → пилюля) должно получить тот же класс; фолбэк на
+    // qualifierText (обычный текст, «шаблон «Имя»») — натуральный интервал.
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "SMS",
+            text: "Привет!",
+            templateTag: {
+              id: "msg-n1-template",
+              label: "SMS — напоминание",
+              target: { kind: "none" },
+            },
+          },
+          {
+            channel: "Email",
+            text: "Другое письмо.",
+            templateName: "Письмо — акция",
+          },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} />);
+
+    const withTag = screen.getByText(/Привет!/);
+    expect(withTag.className).toContain("-ml-[5px]");
+
+    const withoutTag = screen.getByText(/Другое письмо/);
+    expect(withoutTag.className).toBe("");
   });
 });
