@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { StepFile, fileCopy } from "./step-file";
+import { StepFile, fileCopy, sameFileSet } from "./step-file";
 import { initialStepData, type StepData } from "@/types/campaign";
 import { AppStateProvider } from "@/state/app-state-context";
 
@@ -81,7 +81,7 @@ describe("StepFile — multiple bases (group B #4)", () => {
   afterEach(cleanup);
 
   it("«Загрузить ещё одну базу» reveals an extra empty upload slot", () => {
-    const file = new File(["a"], "base-1.csv", { type: "text/csv" });
+    const file = { name: "base-1.csv", rowCount: 1000 };
     renderWithState(
       <StepFile
         data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
@@ -101,7 +101,7 @@ describe("StepFile — multiple bases (group B #4)", () => {
   });
 
   it("each uploaded base carries a remove control", () => {
-    const file = new File(["a"], "base-1.csv", { type: "text/csv" });
+    const file = { name: "base-1.csv", rowCount: 1000 };
     renderWithState(
       <StepFile
         data={{ ...initialStepData, sourceType: "new", files: [file], fileRowCount: 100 }}
@@ -110,6 +110,33 @@ describe("StepFile — multiple bases (group B #4)", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Удалить базу" })).toBeTruthy();
+  });
+});
+
+describe("sameFileSet", () => {
+  it("равные по имени и числу строк наборы считаются неизменными", () => {
+    const a = [{ name: "base.csv", rowCount: 1000 }];
+    const b = [{ name: "base.csv", rowCount: 1000 }];
+    expect(sameFileSet(a, b)).toBe(true);
+  });
+
+  it("разное число строк — набор изменился", () => {
+    expect(
+      sameFileSet(
+        [{ name: "base.csv", rowCount: 1000 }],
+        [{ name: "base.csv", rowCount: 2000 }],
+      ),
+    ).toBe(false);
+  });
+
+  it("разная длина — набор изменился", () => {
+    expect(sameFileSet([{ name: "a.csv", rowCount: 1 }], [])).toBe(false);
+  });
+
+  it("порядок значим — перестановка считается изменением", () => {
+    const a = [{ name: "a.csv", rowCount: 1 }, { name: "b.csv", rowCount: 2 }];
+    const b = [{ name: "b.csv", rowCount: 2 }, { name: "a.csv", rowCount: 1 }];
+    expect(sameFileSet(a, b)).toBe(false);
   });
 });
 

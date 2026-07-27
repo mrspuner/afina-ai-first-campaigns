@@ -525,21 +525,9 @@ export function appReducer(state: AppState, action: Action): AppState {
       const scenarioId = sd.scenario ?? "";
       const n =
         state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
-      // StepData.files are raw browser `File[]`; Campaign.files is the
-      // lightweight `{ name; rowCount }[]` snapshot. The upload step computes
-      // only the SUMMARY row count (sd.fileRowCount), so distribute it across
-      // the files evenly, with the remainder landing on the first file.
-      const totalRows = sd.fileRowCount ?? 0;
-      const files = sd.files.length
-        ? sd.files.map((f, i) => ({
-            name: f.name,
-            rowCount:
-              i === 0
-                ? totalRows -
-                  Math.floor(totalRows / sd.files.length) * (sd.files.length - 1)
-                : Math.floor(totalRows / sd.files.length),
-          }))
-        : undefined;
+      // `StepData.files` уже несёт число строк по каждому файлу — распределять
+      // суммарный `fileRowCount` по файлам больше не нужно.
+      const files = sd.files.length ? sd.files.map((f) => ({ ...f })) : undefined;
       const newCampaign: Campaign = {
         id: `cmp_${nanoid(6)}`,
         name: defaultCampaignName(action.scenarioName, n),

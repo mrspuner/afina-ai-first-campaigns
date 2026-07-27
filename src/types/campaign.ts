@@ -24,6 +24,16 @@ export type Channel = "sms" | "push" | "email" | "ivr";
 
 export const CHANNELS = ["sms", "push", "email", "ivr"] as const satisfies readonly Channel[];
 
+/**
+ * Лёгкая, сериализуемая модель загруженной базы. Тот же тип, что несёт
+ * `Campaign.files`, — поэтому между визардом и кампанией конверсии нет, а
+ * `StepData` целиком укладывается в снапшот (объекты `File` невосстановимы).
+ */
+export interface BaseFile {
+  name: string;
+  rowCount: number;
+}
+
 export interface StepData {
   scenario: string | null;
   interests: string[];
@@ -46,8 +56,8 @@ export interface StepData {
   /** Selected communication channels. Empty array = degenerate campaign (no comms). */
   channels: Channel[];
   budget: number | null;
-  /** Uploaded base files (one or more). Empty array = no base uploaded yet. */
-  files: File[];
+  /** Загруженные базы (одна или несколько). Пустой массив — база не загружена. */
+  files: BaseFile[];
   /**
    * Approximate total number of rows across ALL uploaded base files.
    * Populated on the upload step (база); downstream steps (budget) read it to

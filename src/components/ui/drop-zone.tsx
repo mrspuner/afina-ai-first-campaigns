@@ -6,7 +6,12 @@ import { cn } from "@/lib/utils";
 
 interface DropZoneProps {
   accept: string;
-  file: File | null;
+  /**
+   * Displayed file. Widened past `File` to `{ name; size? }` because the
+   * «Файл» step now seeds this with `BaseFile` snapshots (no `size`) on
+   * revisit/hydration — a real `File` only ever arrives inside `onFile`.
+   */
+  file: { name: string; size?: number } | null;
   onFile: (file: File) => void;
   disabled?: boolean;
   className?: string;
@@ -63,7 +68,9 @@ export function DropZone({ accept, file, onFile, disabled, className }: DropZone
             <Upload className="h-5 w-5 text-primary" />
           </div>
           <p className="text-sm font-medium text-foreground">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+          {typeof file.size === "number" && (
+            <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
             Нажмите чтобы заменить
           </p>
