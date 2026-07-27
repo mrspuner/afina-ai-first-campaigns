@@ -412,34 +412,38 @@ export function describeWorkflow(
     ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
     : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
 
-  // Строка о загруженной базе — тег со строками, если их число известно.
-  const baseSegments: DescriptionSegment[] = facts?.baseRows !== undefined
+  // Сценарий (личность кампании) читается первым из фактов — прежде чем
+  // читатель встретит детали, которые он иначе не может контекстуализировать
+  // (review round 1, Finding 2).
+  const scenarioSegments: DescriptionSegment[] = facts?.scenarioName !== undefined
     ? [
-        t(" В работу идёт "),
-        stepTag(
-          "start-base",
-          `база на ${facts.baseRows.toLocaleString("ru-RU")} строк`,
-          "file",
-          editableSteps,
-        ),
+        t(" Сценарий — "),
+        stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps),
         t("."),
       ]
     : [];
 
-  // Перечисление триггеров: два названных тега, остаток — схлопка с формой
-  // числительного и hoverList на остаток. Ноль или один триггер — без схлопки.
-  const triggerSegments: DescriptionSegment[] = [];
-  if (facts?.triggers?.length) {
-    const [first, second, ...rest] = facts.triggers;
-    triggerSegments.push(t(" Работает по триггерам "), stepTag("start-trigger-0", first, "interests", editableSteps));
+  // База и триггеры — ОДНО предложение, а не два: «В работу идёт база на N
+  // строк по триггерам X, Y и ещё Z» (review round 1, Finding 2). Единственное
+  // / множественное число «по триггеру»/«по триггерам» зависит от того, один
+  // триггер или несколько — раньше было захардкожено в множественном числе
+  // (Finding 1: «Работает по триггерам Ипотека» на одном триггере — баг).
+  const triggersList = facts?.triggers ?? [];
+  const hasBase = facts?.baseRows !== undefined;
+  const hasTriggers = triggersList.length > 0;
+
+  /** Перечисление тегов триггеров: первые два именем, остаток — схлопка. */
+  const triggerTagList = (): DescriptionSegment[] => {
+    const [first, second, ...rest] = triggersList;
+    const segs: DescriptionSegment[] = [stepTag("start-trigger-0", first, "interests", editableSteps)];
     if (second) {
-      triggerSegments.push(
+      segs.push(
         t(rest.length ? ", " : " и "),
         stepTag("start-trigger-1", second, "interests", editableSteps),
       );
     }
     if (rest.length) {
-      triggerSegments.push(
+      segs.push(
         t(" и "),
         stepTag(
           "start-triggers-more",
@@ -450,14 +454,36 @@ export function describeWorkflow(
         ),
       );
     }
-    triggerSegments.push(t("."));
+    return segs;
+  };
+
+  const baseTriggerSegments: DescriptionSegment[] = [];
+  if (hasBase || hasTriggers) {
+    const triggerWord = triggersList.length === 1 ? " по триггеру " : " по триггерам ";
+    if (hasBase) {
+      baseTriggerSegments.push(
+        t(" В работу идёт база на "),
+        stepTag(
+          "start-base",
+          `${facts!.baseRows!.toLocaleString("ru-RU")} строк`,
+          "file",
+          editableSteps,
+        ),
+      );
+      if (hasTriggers) baseTriggerSegments.push(t(triggerWord), ...triggerTagList());
+      baseTriggerSegments.push(t("."));
+    } else {
+      // Триггеры без известного числа строк — своя формулировка (нет «базы,
+      // на которую» ссылаться).
+      baseTriggerSegments.push(t(` Отбор идёт${triggerWord}`), ...triggerTagList(), t("."));
+    }
   }
 
   // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
   // не приходит вовсе, и тег не появляется.
   const modeSegments: DescriptionSegment[] = facts?.analysisMode !== undefined
     ? [
-        t(" Анализ — "),
+        t(" Режим анализа — "),
         stepTag(
           "start-mode",
           facts.analysisMode === "once" ? "разовый" : "потоковый",
@@ -468,17 +494,22 @@ export function describeWorkflow(
       ]
     : [];
 
-  const scenarioSegments: DescriptionSegment[] = facts?.scenarioName !== undefined
+  // Бюджет переехал сюда из «Итога» (review round 1, Finding 2) — там он был
+  // спайкой на конце предложения о конверсии, к которой отношения не имеет;
+  // здесь он читается как факт запуска, наравне с базой и режимом. Id
+  // `outcome-budget` СТАРШЕ переезда и оставлен как есть — Task 5/6 может
+  // ссылаться на него по имени.
+  const budgetSegments: DescriptionSegment[] = facts?.budget !== undefined
     ? [
-        t(" Сценарий — "),
-        stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps),
+        t(" На кампанию заложено "),
+        stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps),
         t("."),
       ]
     : [];
 
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
   // есть pending-домены — граф + статусы решают, LLM тут ни при чём. Домены —
-  // тег с целью на поповер модерации, а не сырой текст.
+  // тег с целью на поповер модерации, а не сырой текст. Остаётся последней.
   const pendingDomains = facts?.pending ?? [];
   const domainSegments: DescriptionSegment[] = pendingDomains.length
     ? [
@@ -500,39 +531,41 @@ export function describeWorkflow(
     heading: "Старт.",
     body: mergeTextSegments([
       t(startBody),
-      ...baseSegments,
-      ...triggerSegments,
-      ...modeSegments,
       ...scenarioSegments,
+      ...baseTriggerSegments,
+      ...modeSegments,
+      ...budgetSegments,
       ...domainSegments,
     ]),
   });
 
   if (messages.length) {
-    // Каналы первого касания — один тег с перечислением, а не по тегу на канал.
-    const channelsSegments: DescriptionSegment[] = facts?.channels?.length
-      ? [
-          t("Сообщения идут по каналам "),
-          stepTag(
-            "first-touch-channels",
-            facts.channels.map((c) => CHANNEL_LABEL[c]).join(", "),
-            "channels",
-            editableSteps,
+    // Каналы первого касания вплетены в существующее предложение (не отдельной
+    // фразой) — иначе список сообщений строкой ниже повторяет то же самое
+    // (review round 1, Finding 2).
+    const channelsTag: DescriptionSegment | null = facts?.channels?.length
+      ? stepTag(
+          "first-touch-channels",
+          facts.channels.map((c) => CHANNEL_LABEL[c]).join(", "),
+          "channels",
+          editableSteps,
+        )
+      : null;
+    const touchBody: DescriptionSegment[] = channelsTag
+      ? hasSplit
+        ? [t("Аудитория делится на потоки, и каждому уходит своё сообщение по каналам "), channelsTag, t(":")]
+        : [t("Каждому контакту уходит первое сообщение по каналам "), channelsTag, t(":")]
+      : [
+          t(
+            hasSplit
+              ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
+              : "Каждому контакту уходит первое сообщение:",
           ),
-          t(". "),
-        ]
-      : [];
+        ];
     stages.push({
       id: "first-touch",
       heading: "Первое касание.",
-      body: mergeTextSegments([
-        ...channelsSegments,
-        t(
-          hasSplit
-            ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
-            : "Каждому контакту уходит первое сообщение:",
-        ),
-      ]),
+      body: mergeTextSegments(touchBody),
       messages,
     });
   }
@@ -578,18 +611,12 @@ export function describeWorkflow(
     });
   }
 
-  const budgetSegments: DescriptionSegment[] = facts?.budget !== undefined
-    ? [
-        t(" Бюджет — "),
-        stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps),
-        t("."),
-      ]
-    : [];
-
+  // «Итог» — снова только про исход конверсии (review round 1, Finding 2:
+  // бюджет переехал в «Старт», сюда его больше не сплавляем).
   stages.push({
     id: "outcome",
     heading: "Итог.",
-    body: mergeTextSegments([
+    body: [
       t(
         !messages.length
           ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
@@ -597,8 +624,7 @@ export function describeWorkflow(
             ? "После повтора — финальная проверка: отреагировавшие засчитываются в успех, остальные завершают путь без конверсии."
             : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
       ),
-      ...budgetSegments,
-    ]),
+    ],
   });
 
   return stages;

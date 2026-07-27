@@ -4,6 +4,7 @@ import {
   firstTouchCommunicationNodes,
   segmentsText,
   type CampaignFacts,
+  type DescriptionSegment,
 } from "./graph-description";
 import { createTemplate } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
@@ -253,6 +254,14 @@ describe("describeWorkflow — теги", () => {
       ...(s.messages ?? []).flatMap((m) => (m.templateTag ? [m.templateTag] : [])),
     ]);
 
+  /**
+   * Сырая склейка сегментов БЕЗ схлопывания пробелов (в отличие от
+   * `segmentsText`, которая делает `.replace(/\s+/g, " ")` и поэтому не может
+   * поймать сдвоенный пробел на шве — review round 1, Finding 3).
+   */
+  const rawConcat = (body: DescriptionSegment[]) =>
+    body.map((s) => (s.kind === "text" ? s.text : s.tag.label)).join("");
+
   const facts: CampaignFacts = {
     pending: [],
     baseRows: 12_000,
@@ -332,7 +341,21 @@ describe("describeWorkflow — теги", () => {
       false,
     );
     expect(segmentsText(stages[0].body)).not.toContain("undefined");
-    expect(segmentsText(stages[0].body)).not.toMatch(/\s{2}/);
+    // Проверка на сырой склейке, а не через segmentsText: та коллапсит
+    // \s+ в один пробел ДО сравнения, поэтому сдвоенный пробел на шве никогда
+    // бы её не завалил (review round 1, Finding 3 — тест не мог упасть).
+    expect(rawConcat(stages[0].body)).not.toMatch(/ {2}/);
+  });
+
+  it("один триггер даёт единственное число «по триггеру», а не «триггерам»", () => {
+    // Finding 1: раньше связка триггеров была захардкожена в множественном
+    // числе — «Работает по триггерам Ипотека» на одном-единственном триггере.
+    const stages = describeWorkflow(graph, templates, { ...facts, triggers: ["Ипотека"] });
+    const text = segmentsText(stages[0].body);
+    expect(text).toContain("по триггеру Ипотека");
+    expect(text).not.toContain("триггерам");
+    // И схлопки, разумеется, тоже нет — схлопывать не из чего.
+    expect(allTags(stages).some((t) => t.label.startsWith("ещё "))).toBe(false);
   });
 
   it("домены на модерации несут тег со всеми доменами и статусами", () => {
