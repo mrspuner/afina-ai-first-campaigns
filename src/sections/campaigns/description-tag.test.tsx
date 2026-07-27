@@ -1,9 +1,61 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { beforeAll, describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { DescriptionTagPill } from "./description-tag";
 import type { DescriptionTag } from "@/state/graph-description";
+import { AppStateProvider } from "@/state/app-state-context";
+import { ChatProvider } from "@/state/chat-context";
+import type { WorkflowNodeType } from "@/types/workflow";
 
 afterEach(cleanup);
+
+// next/image → plain <img>, как в node-template-select.test.tsx — cmdk-пункт
+// «Создать новый шаблон» несёт маскот-иконку через next/image, jsdom не тянет
+// её оптимизацию.
+vi.mock("next/image", () => ({
+  default: (props: Record<string, unknown>) => {
+    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+    return <img {...(props as Record<string, string>)} />;
+  },
+}));
+
+// cmdk (Command primitives внутри NodeTemplateList) требует ResizeObserver +
+// scrollIntoView — jsdom не несёт ни то, ни другое (тот же шим, что в
+// node-template-select.test.tsx).
+beforeAll(() => {
+  if (!("ResizeObserver" in globalThis)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).scrollIntoView ??= () => {};
+});
+
+/**
+ * Поповер шаблона (target.kind === "template") тянет `app-state.templates`
+ * (useAppState) и `openTemplatePreview`/`openTemplateCreate` (useChat) —
+ * оборачиваем в те же провайдеры, что `use-campaign-graph-applier.test.tsx`
+ * использует для headless-хуков. nodeType по умолчанию "sms" — ровно то, что
+ * `nodeTypes`-лукап в `CampaignScreen` передал бы для sms-ноды графа.
+ */
+function renderPillWithProviders({
+  tag,
+  nodeType = "sms",
+}: {
+  tag: DescriptionTag;
+  nodeType?: WorkflowNodeType;
+}) {
+  return render(
+    <AppStateProvider>
+      <ChatProvider>
+        <DescriptionTagPill tag={tag} nodeType={nodeType} />
+      </ChatProvider>
+    </AppStateProvider>,
+  );
+}
 
 const stepTag: DescriptionTag = {
   id: "start-base",
@@ -38,6 +90,14 @@ describe("DescriptionTagPill", () => {
       />,
     );
     expect(screen.getByRole("button")).toHaveAttribute("title", "Вторичка, Аренда");
+  });
+
+  it("тег шаблона раскрывает список шаблонов канала прямо у пилюли", async () => {
+    renderPillWithProviders({
+      tag: { id: "msg-n1-template", label: "Приветствие", target: { kind: "template", nodeId: "n1" } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Приветствие/ }));
+    expect(await screen.findByText("Создать новый шаблон")).toBeInTheDocument();
   });
 });
 

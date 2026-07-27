@@ -2,7 +2,11 @@ import { isCommunicationNode, type NodeParams, type WorkflowEdge, type WorkflowN
 import { pluralRu } from "@/lib/plural-ru";
 import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
-import { channelForNodeKind, templateOptionsForKind } from "./node-template-options";
+import {
+  channelForNodeKind,
+  templateOptionsForKind,
+  templateParamKeyForKind,
+} from "./node-template-options";
 import type { MessageTemplate } from "./app-state";
 import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import type { DomainStatus } from "@/types/account-settings";
@@ -171,17 +175,6 @@ function orderNodes(graph: DescribableGraph, adjacency: Map<string, string[]>): 
 
 // ── Коммуникации → строка описания ───────────────────────────────────────────
 
-/**
- * Поле params, по которому нода привязывается к шаблону библиотеки — тот же
- * ключ, что использует селект «Шаблон» в карточке ноды
- * (`NODE_FIELD_EDITABILITY`), поэтому имя шаблона в тексте и выбор в UI сходятся.
- */
-const TEMPLATE_MATCH_KEY: Partial<Record<NodeParams["kind"], string>> = {
-  sms: "text",
-  email: "body",
-  push: "body",
-};
-
 /** Цитируемый текст коммуникационной ноды. */
 function messageText(params: NodeParams): string {
   switch (params.kind) {
@@ -224,7 +217,7 @@ function describeMessage(
   const text = messageText(params).trim();
   if (!text) return null;
 
-  const matchKey = TEMPLATE_MATCH_KEY[params.kind];
+  const matchKey = templateParamKeyForKind(params.kind);
   const bound = matchKey ? (params as unknown as Record<string, unknown>)[matchKey] : undefined;
   const templateName = matchKey
     ? templateOptionsForKind(templates, params.kind).find(

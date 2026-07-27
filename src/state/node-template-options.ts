@@ -1,16 +1,26 @@
 import type { Channel } from "@/types/campaign";
-import type { IvrParams, NodeParams } from "@/types/workflow";
+import type { IvrParams, NodeParams, WorkflowNodeType } from "@/types/workflow";
 import type { MessageTemplate } from "./app-state";
 
+/**
+ * Строковый kind коммуникационной ноды — вызывающие приходят и с
+ * `NodeParams["kind"]` (params самой ноды), и с `WorkflowNodeType` (тип ноды
+ * графа, который несёт тег описания — у него params нет, только тип). Для
+ * sms/email/push/ivr оба типа используют РОВНО одни и те же строковые
+ * литералы, поэтому один справочник обслуживает оба контекста без приведения
+ * типов на стороне вызывающего.
+ */
+type CommKind = NodeParams["kind"] | WorkflowNodeType;
+
 /** Коммуникационные kind нод → канал шаблонов (правка 9: единый источник). */
-const KIND_TO_CHANNEL: Partial<Record<NodeParams["kind"], Channel>> = {
+const KIND_TO_CHANNEL: Partial<Record<CommKind, Channel>> = {
   sms: "sms",
   email: "email",
   push: "push",
   ivr: "ivr",
 };
 
-export function channelForNodeKind(kind: NodeParams["kind"]): Channel | undefined {
+export function channelForNodeKind(kind: CommKind): Channel | undefined {
   return KIND_TO_CHANNEL[kind];
 }
 
@@ -20,11 +30,30 @@ export function channelForNodeKind(kind: NodeParams["kind"]): Channel | undefine
  */
 export function templateOptionsForKind(
   templates: MessageTemplate[],
-  kind: NodeParams["kind"]
+  kind: CommKind
 ): MessageTemplate[] {
   const channel = channelForNodeKind(kind);
   if (!channel) return [];
   return templates.filter((t) => t.channel === channel);
+}
+
+/**
+ * Поле params, по которому нода коммуникации привязывается к шаблону
+ * библиотеки — единый источник и для текста описания (`graph-description.ts`
+ * читает имя шаблона), и для поповера выбора шаблона у тега названия
+ * (`description-tag.tsx` пишет через него). Раньше жил приватной картой прямо
+ * в `graph-description.ts`; вынесен сюда, когда тот же ключ понадобился и
+ * пилюле — чтобы не заводить третью копию (карточка узла графа берёт его
+ * иначе, через `NODE_FIELD_EDITABILITY.paramKey`, но значения те же самые).
+ */
+const TEMPLATE_PARAM_KEY: Partial<Record<CommKind, string>> = {
+  sms: "text",
+  email: "body",
+  push: "body",
+};
+
+export function templateParamKeyForKind(kind: CommKind): string | undefined {
+  return TEMPLATE_PARAM_KEY[kind];
 }
 
 /**

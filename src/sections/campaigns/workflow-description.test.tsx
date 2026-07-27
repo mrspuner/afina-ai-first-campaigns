@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
+import type { ReactElement } from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowDescription } from "./workflow-description";
 import { segmentsText, type DescriptionStage } from "@/state/graph-description";
+import { AppStateProvider } from "@/state/app-state-context";
+import { ChatProvider } from "@/state/chat-context";
 
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
@@ -141,6 +144,21 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
   // node-fields падают на нейтральный серый (пробел, который эти тесты
   // закрывают). Фикстура — тег шаблона внутри сообщения «Первого касания»,
   // тот же путь, что реально использует CampaignScreen.
+  //
+  // Task 7 — тег с target.kind:"template" и резолвнутым nodeType открывает
+  // свой собственный поповер (список шаблонов канала), который тянет
+  // app-state.templates и useChat() изнутри DescriptionTagPill; без этих
+  // провайдеров рендер падает. WorkflowDescription сама остаётся presentational
+  // (провайдеры нужны листовому попап-компоненту, не ей), но тест оборачивает
+  // рендер, раз реальное дерево (CampaignScreen) их уже даёт.
+  function renderWithProviders(node: ReactElement) {
+    return render(
+      <AppStateProvider>
+        <ChatProvider>{node}</ChatProvider>
+      </AppStateProvider>,
+    );
+  }
+
   const stagesWithTemplateTag: DescriptionStage[] = [
     {
       id: "first-touch",
@@ -161,7 +179,7 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
   ];
 
   it("красит пилюлю шаблона под её nodeType, когда передан лукап nodeId→nodeType", () => {
-    render(
+    renderWithProviders(
       <WorkflowDescription
         stages={stagesWithTemplateTag}
         nodeTypes={new Map([["n1", "sms"]])}

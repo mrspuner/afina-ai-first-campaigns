@@ -1,13 +1,22 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Globe, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { DescriptionTag } from "@/state/graph-description";
-import type { WorkflowNodeType } from "@/types/workflow";
+import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
+import { useAppState, useAppDispatch } from "@/state/app-state-context";
+import { useChat } from "@/state/chat-context";
+import {
+  channelForNodeKind,
+  templateOptionsForKind,
+  templateParamKeyForKind,
+} from "@/state/node-template-options";
 import { STEP_ICON } from "./wizard/campaign-stepper";
 import { NODE_ICON, NODE_STYLES } from "./node-visuals";
+import { NodeTemplateList } from "./node-template-select";
 
 /**
  * Общая геометрия пилюли. `items-baseline`+`align-baseline` — пилюля сидит НА
@@ -98,6 +107,25 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
     );
   }
 
+  // Шаблон (Task 7): поповер раскрывается прямо у пилюли, клик наверх
+  // (onActivate) не поднимается — спека §2.12 велит `template` оставаться на
+  // карточке. Без известного nodeType (лукап не нашёл ноду) деградируем к
+  // обычной кнопке-тултипу ниже — она хотя бы не выглядит сломанной.
+  if (tag.target.kind === "template" && nodeType) {
+    return (
+      <TemplateTagPopover
+        nodeId={tag.target.nodeId}
+        nodeType={nodeType}
+        selectedName={tag.label}
+        className={cn(PILL_BASE, className)}
+        style={style}
+        title={title}
+      >
+        {content}
+      </TemplateTagPopover>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -115,5 +143,80 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
       </TooltipTrigger>
       <TooltipContent>Нажмите для изменения</TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * Поповер выбора шаблона у тега названия (Task 7). Список — тот же
+ * `NodeTemplateList`, что карточка узла графа использует внутри
+ * `NodeTemplateSelect`: одна и та же «сходимость» списка, что и раньше была у
+ * значения (правка 9).
+ *
+ * Выбор шаблона пишет в тот же params-ключ, что резолвит имя шаблона в тексте
+ * описания (`templateParamKeyForKind` — единый источник с `graph-description.ts`,
+ * никакой третьей копии карты). Дальше всё как и с любой другой правкой поля
+ * ноды: `workflow_node_field_set` уходит в mailbox-слот AppState, который
+ * headless-апплаер карточки (`useCampaignGraphApplier`, уже смонтирован в
+ * `CampaignScreen`) применяет к durable-кэшу графа и бампает его версию —
+ * `useCachedGraphVersion` в `CampaignScreen` перерисовывает описание.
+ *
+ * Превью НЕ закрывает поповер (глазик в списке); «Создать новый шаблон»
+ * закрывает — оба поведения зеркалят `NodeTemplateSelect`.
+ */
+function TemplateTagPopover({
+  nodeId,
+  nodeType,
+  selectedName,
+  className,
+  style,
+  title,
+  children,
+}: {
+  nodeId: string;
+  nodeType: WorkflowNodeType;
+  selectedName: string;
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const { templates } = useAppState();
+  const dispatch = useAppDispatch();
+  const { openTemplatePreview, openTemplateCreate } = useChat();
+
+  const channel = channelForNodeKind(nodeType);
+  const paramKey = templateParamKeyForKind(nodeType);
+  const options = templateOptionsForKind(templates, nodeType);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger className={className} style={style} title={title}>
+        {children}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <NodeTemplateList
+          templates={options}
+          selectedName={selectedName}
+          onSelect={(t) => {
+            if (!paramKey) return;
+            const next = (t.content as Record<string, unknown>)[paramKey];
+            dispatch({
+              type: "workflow_node_field_set",
+              nodeId,
+              patch: {
+                [paramKey]: typeof next === "string" ? next : t.name,
+              } as Partial<NodeParams>,
+            });
+            setOpen(false);
+          }}
+          onPreview={(templateId) => openTemplatePreview(templateId)}
+          onCreate={() => {
+            if (channel) openTemplateCreate(channel);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -12,7 +12,7 @@ import { getScenario } from "@/data/scenarios";
 import { createTemplate } from "@/state/workflow-templates";
 import type { Preset, Campaign } from "@/state/app-state";
 import type { StructuralOp } from "@/state/structural-commands";
-import type { WorkflowNode } from "@/types/workflow";
+import type { NodeParams, WorkflowNode } from "@/types/workflow";
 import { useCampaignGraphApplier } from "./use-campaign-graph-applier";
 import { CampaignScreen } from "./campaign-screen";
 import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
@@ -201,6 +201,73 @@ describe("useCampaignGraphApplier — headless mailbox-slot consumer", () => {
     expect(getCachedGraph(id)!.nodes.length).toBe(before);
     const bubble = result.current.chat.messages.find((m) => m.id === replyId);
     expect(bubble?.pending).toBe(true);
+  });
+
+  // Task 7 — the template popover on the description tag's pill dispatches the
+  // SAME `workflow_node_field_set` action the graph node card's per-field
+  // controls use. Before this hook picked up the slot, that dispatch from the
+  // CARD view (canvas unmounted) sat unread — the exact bug the structural-ops
+  // consumer above was built to avoid, just for a different mailbox slot.
+  it("applies a single-field patch from the CARD view — writes params, marks dirty, clears the slot", () => {
+    const id = "cmp_field_patch";
+    const { result } = renderHook(() => useHarness(id), { wrapper });
+
+    seedCampaign(result, baseCampaign(id));
+    act(() => result.current.dispatch({ type: "campaign_opened", id }));
+
+    setCachedGraph(id, templateGraph());
+    const nodeId = getCachedGraph(id)!.nodes.find(
+      (n) => n.data.params?.kind === "sms",
+    )!.id;
+
+    act(() =>
+      result.current.dispatch({
+        type: "workflow_node_field_set",
+        nodeId,
+        patch: { text: "Новый текст акции" } as Partial<NodeParams>,
+      }),
+    );
+
+    const node = getCachedGraph(id)!.nodes.find((n) => n.id === nodeId)!;
+    expect((node.data.params as { text: string }).text).toBe("Новый текст акции");
+    // Жёлтая точка «параметр изменён» — та же бухгалтерия, что и правка через
+    // граф-канвас (workflow-view.tsx), не отдельное поведение для карточки.
+    expect(node.data.dirtyParams).toContain("text");
+    expect(result.current.state.workflowNodeFieldPatch).toBeNull();
+  });
+
+  it("does NOT apply a field patch when the WORKFLOW view is mounted — the view stays the sole consumer", () => {
+    const id = "cmp_field_patch_guard";
+    const { result } = renderHook(() => useHarness(id), { wrapper });
+
+    seedCampaign(result, baseCampaign(id));
+    act(() =>
+      result.current.dispatch({
+        type: "open_workflow",
+        campaign: { id, name: "Тестовая кампания" },
+        launched: false,
+      }),
+    );
+    expect(result.current.state.view.kind).toBe("workflow");
+
+    setCachedGraph(id, templateGraph());
+    const nodeId = getCachedGraph(id)!.nodes.find(
+      (n) => n.data.params?.kind === "sms",
+    )!.id;
+    const before = getCachedGraph(id)!.nodes.find((n) => n.id === nodeId)!;
+
+    act(() =>
+      result.current.dispatch({
+        type: "workflow_node_field_set",
+        nodeId,
+        patch: { text: "Не должно примениться" } as Partial<NodeParams>,
+      }),
+    );
+
+    // Applier must be inert: slot untouched, cache unchanged (the real
+    // WorkflowView — not mounted here — would be the one to apply it).
+    expect(result.current.state.workflowNodeFieldPatch).not.toBeNull();
+    expect(getCachedGraph(id)!.nodes.find((n) => n.id === nodeId)).toEqual(before);
   });
 });
 

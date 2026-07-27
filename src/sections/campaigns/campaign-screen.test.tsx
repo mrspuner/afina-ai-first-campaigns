@@ -8,11 +8,14 @@ import {
 } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
-import type { Campaign, Preset } from "@/state/app-state";
+import type { Campaign, MessageTemplate, Preset } from "@/state/app-state";
 import { initialStepData } from "@/types/campaign";
+import { getCachedGraph } from "./workflow-graph-cache";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
 // mount — absent in jsdom. Provide a minimal no-op shim so the screen renders.
+// Тот же шим кормит cmdk (Command внутри поповера тега шаблона, Task 7) —
+// jsdom не несёт ни ResizeObserver, ни scrollIntoView.
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === "undefined") {
     globalThis.ResizeObserver = class {
@@ -20,6 +23,21 @@ beforeAll(() => {
       unobserve() {}
       disconnect() {}
     } as unknown as typeof ResizeObserver;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).scrollIntoView ??= () => {};
+  // @xyflow/system's updateNodeInternals reads `new DOMMatrixReadOnly(transform).m22`
+  // (zoom) off a scheduled requestAnimationFrame callback — jsdom has neither.
+  // Surfaces only when a test awaits past that rAF tick (Task 7's popover test
+  // does, via findBy*) while WorkflowMiniPreview is mounted with a graph that
+  // just got a cache write; a bare stub is enough since no test here asserts on
+  // the mini-preview's computed zoom/transform.
+  if (typeof globalThis.DOMMatrixReadOnly === "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).DOMMatrixReadOnly = class {
+      m22 = 1;
+      constructor() {}
+    };
   }
 });
 
@@ -37,10 +55,20 @@ function baseCampaign(partial: Partial<Campaign>): Campaign {
   };
 }
 
-/** Seeds the given campaign into real app state and opens its card view. */
-function Harness({ campaign }: { campaign: Campaign }) {
+/** Seeds the given campaign (+ optional extra library templates) into real
+ *  app state and opens its card view. */
+function Harness({
+  campaign,
+  extraTemplates,
+}: {
+  campaign: Campaign;
+  extraTemplates?: MessageTemplate[];
+}) {
   const dispatch = useAppDispatch();
   useEffect(() => {
+    for (const template of extraTemplates ?? []) {
+      dispatch({ type: "template_added", template });
+    }
     const preset: Preset = {
       key: "full",
       label: "test",
@@ -49,11 +77,12 @@ function Harness({ campaign }: { campaign: Campaign }) {
     };
     dispatch({ type: "preset_applied", preset });
     dispatch({ type: "campaign_opened", id: campaign.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign, dispatch]);
   return <CampaignScreen />;
 }
 
-function renderCampaign(campaign: Campaign) {
+function renderCampaign(campaign: Campaign, extraTemplates?: MessageTemplate[]) {
   return render(
     <AppStateProvider>
       {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
@@ -62,7 +91,7 @@ function renderCampaign(campaign: Campaign) {
           canvas) reads useChat() too; mirrors the real app tree. */}
       <PromptChipsProvider>
         <ChatProvider>
-          <Harness campaign={campaign} />
+          <Harness campaign={campaign} extraTemplates={extraTemplates} />
         </ChatProvider>
       </PromptChipsProvider>
     </AppStateProvider>,
@@ -238,6 +267,52 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     // падала на нейтральный серый — Task 6 красит её под NODE_STYLES.sms.
     const pill = screen.getByRole("button", { name: "SMS — напоминание" });
     expect(pill.className).not.toContain("border-border");
+  });
+});
+
+describe("CampaignScreen — поповер выбора шаблона у тега названия (Task 7)", () => {
+  const smsExtra: MessageTemplate = {
+    id: "tpl_sms_extra",
+    channel: "sms",
+    name: "SMS — акция",
+    content: {
+      kind: "sms",
+      text: "Специальное предложение только сегодня!",
+      alphaName: "AFINA",
+      scheduledAt: "immediate",
+    },
+    usedInCampaigns: 0,
+  };
+
+  it("выбор другого шаблона в поповере переписывает текст ноды — описание перерисовывается", async () => {
+    // Доказательство того, что редрей реально происходит (а не только
+    // предполагается): дефолтная sms-нода Апсейла резолвит «SMS —
+    // напоминание» (единственный преcет-шаблон канала); дописываем ВТОРОЙ
+    // sms-шаблон в библиотеку, выбираем его в поповере пилюли и проверяем,
+    // что ИМЕННО ЭТА пилюля сама сменила имя — точный признак того, что
+    // workflow_node_field_set дошёл до durable-кэша графа (через headless
+    // useCampaignGraphApplier — mailbox-слот иначе некому обработать, раз
+    // граф-канвас на карточке не смонтирован) и CampaignScreen перерисовал
+    // описание с новой версией кэша.
+    const id = "cmp_template_popover";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }), [smsExtra]);
+
+    fireEvent.click(screen.getByRole("button", { name: "SMS — напоминание" }));
+    fireEvent.click(await screen.findByText("SMS — акция"));
+
+    expect(await screen.findByRole("button", { name: "SMS — акция" })).toBeInTheDocument();
+    // Кэш реально переписан (не только видимость): хотя бы один sms-узел
+    // теперь несёт текст нового шаблона. Апсейл сегментирует коммуникацию на
+    // несколько физически идентичных sms-узлов (max/high/mid × повтор) —
+    // правка бьёт только по ОДНОМУ из них, поэтому «SMS — напоминание»
+    // законно остаётся на месте у остальных дублей (дедуп описания корректно
+    // показывает две разные группы, а не баг).
+    const newText = (smsExtra.content as { text: string }).text;
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "sms" && (n.data.params as { text: string }).text === newText,
+      ),
+    ).toBe(true);
   });
 });
 

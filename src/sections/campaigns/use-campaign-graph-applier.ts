@@ -7,12 +7,26 @@ import { getScenario } from "@/data/scenarios";
 import { createTemplate } from "@/state/workflow-templates";
 import type { StructuralOp } from "@/state/structural-commands";
 import type { AppState } from "@/state/app-state";
+import { patchNodeParams, type WorkflowNode } from "@/types/workflow";
+import { computeNeedsAttention } from "@/state/workflow-validation";
+import { computeSublabels } from "@/state/node-sublabel";
 import {
   applyStructuralOps,
   applyRebuild,
   type GraphState,
 } from "./graph-applier";
 import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
+
+/** Точечная правка одного поля ноды (см. `patchNode` ниже) — минимальный
+ *  локальный аналог того, что `workflow-view.tsx` делает через свой приватный
+ *  `patchNode`, не завязываясь на импорт из view-модуля. */
+function patchNode(
+  nodes: WorkflowNode[],
+  id: string,
+  patch: Partial<WorkflowNode["data"]>,
+): WorkflowNode[] {
+  return nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n));
+}
 
 /**
  * Headless applier for AI logic-edits submitted FROM THE CAMPAIGN CARD.
@@ -32,6 +46,15 @@ import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
  * cache write bumps the cache version (see workflow-graph-cache.ts), which
  * re-renders `CampaignScreen` so its `describeWorkflow` text and the
  * mini-preview rebuild from the freshly edited graph.
+ *
+ * Task 7 adds a fourth slot: `workflowNodeFieldPatch` (`workflow_node_field_set`)
+ * — the same mailbox action the graph node card's per-field controls dispatch
+ * (email/wait/split fields, and now the template popover on the description
+ * tag's pill). Until this hook picked it up, a field edit submitted from the
+ * card sat in the slot unread — `workflow-view.tsx`'s effect is the only OTHER
+ * consumer, and it is unmounted on the card. Mirrors that effect's dirtyParams
+ * bookkeeping and needs-attention/sublabel recompute, but against the durable
+ * cache rather than view-local state.
  *
  * Single active consumer: this runs ONLY when `view.kind === "campaign"`. When
  * the graph view is mounted, `WorkflowView` remains the sole consumer, so ops
@@ -55,12 +78,14 @@ export function useCampaignGraphApplier(campaignId: string | undefined): void {
   // reference (stable per submit, fresh on each new submit) makes it idempotent.
   const handledOpsRef = useRef<StructuralOp[] | null>(null);
   const handledRebuildRef = useRef<AppState["workflowRebuild"]>(null);
+  const handledFieldPatchRef = useRef<AppState["workflowNodeFieldPatch"]>(null);
 
   // Guard: applier is the sole slot consumer only from the card view.
   const isCardView = state.view.kind === "campaign";
   const structuralOps = state.workflowStructuralCommands?.ops ?? null;
   const rebuild = state.workflowRebuild;
   const replyId = state.workflowReplyId;
+  const fieldPatch = state.workflowNodeFieldPatch;
 
   const campaign = campaignId
     ? state.campaigns.find((c) => c.id === campaignId)
@@ -131,4 +156,36 @@ export function useCampaignGraphApplier(campaignId: string | undefined): void {
     dispatch({ type: "workflow_rebuild_handled" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rebuild, isCardView, campaignId]);
+
+  // --- single-field patch (Task 7: template popover on the description pill;
+  // also feeds any future card-mounted per-field control) ---
+  useEffect(() => {
+    if (!isCardView || !campaignId) return;
+    if (!fieldPatch) return;
+    if (handledFieldPatchRef.current === fieldPatch) return; // dedupe re-runs
+    handledFieldPatchRef.current = fieldPatch;
+
+    const base = resolveBaseGraph();
+    if (base) {
+      // Зеркалит workflow-view.tsx: жёлтая точка на изменённых ключах params,
+      // снятие «требует внимания», применение патча, пересчёт needs-attention
+      // (правка в пустоту снова поднимает флаг, заполнение — снимает) и
+      // подзаголовков — чтобы гейт запуска и мини-превью не разошлись с view.
+      const existingDirty =
+        base.nodes.find((n) => n.id === fieldPatch.nodeId)?.data.dirtyParams ?? [];
+      const dirtyParams = Array.from(
+        new Set([...existingDirty, ...Object.keys(fieldPatch.patch)]),
+      );
+      let nodes = patchNode(base.nodes, fieldPatch.nodeId, {
+        attentionReason: undefined,
+        dirtyParams,
+      });
+      nodes = patchNodeParams(nodes, fieldPatch.nodeId, fieldPatch.patch);
+      nodes = computeNeedsAttention(nodes);
+      nodes = computeSublabels(nodes);
+      setCachedGraph(campaignId, { nodes, edges: base.edges });
+    }
+    dispatch({ type: "workflow_node_field_set_handled" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldPatch, isCardView, campaignId]);
 }
