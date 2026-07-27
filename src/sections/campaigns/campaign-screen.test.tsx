@@ -175,6 +175,39 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     });
     expect(screen.getByText(/строк/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /строк/ })).toBeNull();
+    // Поповерные цели (шаблон, пауза) тоже теряют клик после запуска (§2.12,
+    // Critical fix round 1) — значение остаётся текстом пилюли, но она
+    // больше не button. Раньше пилюля их не гейтила вовсе.
+    expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SMS — напоминание" }),
+    ).toBeNull();
+    expect(screen.getByText("2 дня")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2 дня" })).toBeNull();
+  });
+
+  it("сидовый черновик без снапшота: шаблон и пауза остаются кликабельными — graphEditable не зависит от editableSteps", () => {
+    // Регресс, который ловит этот тест: гейтить template/node-fields на
+    // editableSteps (наивный фикс) сделало бы их read-only и для СИДОВЫХ
+    // черновиков без wizardData — а граф там правится, ровно как разрешал
+    // снятый нодо-блок через readOnly={status !== "draft"}.
+    renderCampaign({ ...draftCampaign, id: "cmp_facts_seed_draft", wizardData: undefined });
+    expect(
+      screen.getByRole("button", { name: "SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
+    // При этом шаговые теги (нет снапшота — некуда вести) кнопкой не станут:
+    // это разные сигналы, а не один и тот же гейт.
+    expect(screen.queryByRole("button", { name: /строк/ })).toBeNull();
+  });
+
+  it("черновик со снапшотом: база, шаблон и пауза — всё кликабельно", () => {
+    renderCampaign(draftCampaign);
+    expect(screen.getByRole("button", { name: /строк/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
   });
 
   // Брифовская заготовка утверждала queryByText("Скоринг") === null — неверно:

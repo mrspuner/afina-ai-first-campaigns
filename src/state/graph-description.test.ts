@@ -232,6 +232,7 @@ describe("describeWorkflow — теги", () => {
     analysisMode: "once",
     scenarioName: "Ипотечный интерес",
     editableSteps: ["scenario", "intent", "interests", "analysis", "file", "channels", "budget"],
+    graphEditable: true,
   };
 
   it("без фактов тегов нет — описание остаётся чистым текстом", () => {
@@ -344,6 +345,33 @@ describe("describeWorkflow — теги", () => {
     const wait = tags.find((t) => t.target.kind === "node-fields");
     expect(wait).toBeDefined();
     expect(wait!.label).toMatch(/дн|час/);
+  });
+
+  it("graphEditable=false демотирует шаблон и паузу в носители значений (§2.12) — текст остаётся", () => {
+    const stages = describeWorkflow(graph, templates, { ...facts, graphEditable: false });
+    const tags = allTags(stages);
+    expect(tags.some((t) => t.target.kind === "template")).toBe(false);
+    expect(tags.some((t) => t.target.kind === "node-fields")).toBe(false);
+    // Значения остаются — это носители данных, а не только аффорданс клика.
+    const message = stages.find((s) => s.id === "first-touch")?.messages?.[0];
+    expect(message?.templateTag?.label).toBeTruthy();
+    expect(tags.some((t) => /дн|час/.test(t.label))).toBe(true);
+  });
+
+  it("editableSteps пуст не подменяет graphEditable — разные сигналы (регресс наивного фикса)", () => {
+    // Сидовый черновик без снапшота визарда: editableSteps пуст (некуда вести
+    // шаговые теги), но граф всё ещё правится. Гейтить template/node-fields на
+    // editableSteps (наивный фикс) увело бы их в read-only и для этого случая
+    // тоже — ровно регрессия, которую эта пара сигналов не даёт совершить.
+    const stages = describeWorkflow(graph, templates, {
+      ...facts,
+      editableSteps: [],
+      graphEditable: true,
+    });
+    const tags = allTags(stages);
+    expect(tags.some((t) => t.target.kind === "wizard-step")).toBe(false);
+    expect(tags.some((t) => t.target.kind === "template")).toBe(true);
+    expect(tags.some((t) => t.target.kind === "node-fields")).toBe(true);
   });
 
   it("идентификаторы тегов уникальны — годятся как React-ключи", () => {

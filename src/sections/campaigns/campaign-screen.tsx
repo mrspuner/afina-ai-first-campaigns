@@ -144,6 +144,14 @@ export function CampaignScreen() {
       ? stepsForIntent(campaign.wizardData.intent)
       : [];
 
+  // Отдельный от editableSteps сигнал: «можно ли править граф» требует только
+  // статуса draft — снапшот визарда тут ни при чём. Сидовые черновики без
+  // wizardData тоже правятся (так разрешал снятый нодо-блок через
+  // readOnly={status !== "draft"}), поэтому гейтить шаблон/паузу на
+  // editableSteps было бы неверно — увело бы их в read-only для сидовых
+  // черновиков наравне с запущенными кампаниями.
+  const graphEditable = campaign?.status === "draft";
+
   const facts: CampaignFacts = {
     pending: campaignDomains.filter((d) => d.status === "pending").map((d) => d.domain),
     domains: campaignDomains,
@@ -154,6 +162,7 @@ export function CampaignScreen() {
     analysisMode,
     scenarioName: campaign?.scenario?.name,
     editableSteps,
+    graphEditable,
   };
 
   const descriptionStages = launchGraph

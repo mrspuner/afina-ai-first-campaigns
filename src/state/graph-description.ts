@@ -210,6 +210,7 @@ function describeMessage(
   node: WorkflowNode,
   templates: MessageTemplate[],
   withTags: boolean,
+  graphEditable: boolean,
 ): DescriptionMessage | null {
   const params = node.data.params;
   if (!params) return null;
@@ -236,13 +237,17 @@ function describeMessage(
       : {}),
     text,
     // Тег появляется только в режиме тегов (вызвавший передал факты) — без
-    // фактов описание остаётся чистым текстом (Task 4).
+    // фактов описание остаётся чистым текстом (Task 4). Цель — только пока
+    // граф ещё правится (§2.12): после запуска шаблон остаётся пилюлей со
+    // значением, но клика не даёт — `none`, не отдельная read-only ветка.
     ...(withTags && templateName
       ? {
           templateTag: {
             id: `msg-${node.id}-template`,
             label: templateName,
-            target: { kind: "template", nodeId: node.id },
+            target: graphEditable
+              ? { kind: "template", nodeId: node.id }
+              : { kind: "none" },
           },
         }
       : {}),
@@ -289,6 +294,13 @@ export interface CampaignFacts {
    * механизм read-only, отдельной ветки рендера не требуется.
    */
   editableSteps?: WizardStepId[];
+  /**
+   * Кампания ещё правится: граф можно менять. Отдельный сигнал от
+   * `editableSteps` — тот требует снапшота визарда, а правка графа нужна и
+   * сидовым черновикам без снапшота (так же, как её разрешал снятый
+   * нодо-блок через readOnly={status !== "draft"}).
+   */
+  graphEditable?: boolean;
 }
 
 /**
@@ -352,13 +364,18 @@ export function describeWorkflow(
   // включаются этим единственным флагом.
   const hasFacts = facts !== undefined;
   const editableSteps = facts?.editableSteps;
+  // Отдельный от editableSteps сигнал (§2.12): шаблон/пауза — цели на граф,
+  // не на визард, и остаются кликабельными весь черновик, даже без снапшота
+  // (сидовые кампании). Отсутствие поля трактуем как «нет» — небезопасный
+  // дефолт был бы молча кликабельным.
+  const graphEditable = facts?.graphEditable ?? false;
 
   // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
   // канал (дедуп по каналу и тексту, а не по ноде).
   const messages: DescriptionMessage[] = [];
   const seenMessages = new Set<string>();
   for (const node of commNodes.filter(isFirstPass)) {
-    const message = describeMessage(node, templates, hasFacts);
+    const message = describeMessage(node, templates, hasFacts, graphEditable);
     if (!message) continue;
     // Не может быть null здесь: describeMessage вернул сообщение только если
     // канал резолвится и текст непуст — ровно условия communicationDedupKey.
@@ -561,8 +578,10 @@ export function describeWorkflow(
     stages.push({
       id: "retry",
       heading: "Пауза и повтор.",
-      // Пауза — тег с целью node-fields на саму ноду ожидания. Без фактов
-      // (hasFacts=false) остаётся прежним единым текстом Task 3.
+      // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
+      // правится (§2.12: после запуска — та же демоция в `none`, что и у
+      // шаблона). Без фактов (hasFacts=false) остаётся прежним единым текстом
+      // Task 3.
       body: hasFacts
         ? mergeTextSegments([
             t(retryPrefix),
@@ -571,7 +590,9 @@ export function describeWorkflow(
               tag: {
                 id: "retry-wait",
                 label: waitPhrase(retryParams),
-                target: { kind: "node-fields", nodeId: retryWaits[0].id },
+                target: graphEditable
+                  ? { kind: "node-fields", nodeId: retryWaits[0].id }
+                  : { kind: "none" },
               },
             },
             t(retrySuffix),
