@@ -43,7 +43,15 @@ export function WorkflowDescription({ stages, stageSlots }: WorkflowDescriptionP
         <div key={stage.id} className="flex flex-col gap-1.5">
           <p>
             <strong className="font-semibold text-foreground">{stage.heading}</strong>{" "}
-            {stage.body}
+            {stage.body.map((segment, i) =>
+              segment.kind === "text" ? (
+                <span key={i}>{segment.text}</span>
+              ) : (
+                // Тегов пока никто не производит; ветка живая — Task 5 заменит
+                // её на пилюлю, когда Task 4 начнёт производить теги.
+                <span key={i}>{segment.tag.label}</span>
+              ),
+            )}
           </p>
           {stage.messages && (
             <ul className="flex flex-col gap-1 pl-1">

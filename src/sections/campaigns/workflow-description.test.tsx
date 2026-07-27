@@ -2,18 +2,21 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowDescription } from "./workflow-description";
-import type { DescriptionStage } from "@/state/graph-description";
+import { segmentsText, type DescriptionStage } from "@/state/graph-description";
+
+/** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
+const t = (text: string) => [{ kind: "text" as const, text }];
 
 const STAGES: DescriptionStage[] = [
   {
     id: "start",
     heading: "Старт.",
-    body: "Загруженная база попадает в кампанию и проходит скоринг.",
+    body: t("Загруженная база попадает в кампанию и проходит скоринг."),
   },
   {
     id: "first-touch",
     heading: "Первое касание.",
-    body: "Аудитория делится на потоки, и каждому уходит своё сообщение:",
+    body: t("Аудитория делится на потоки, и каждому уходит своё сообщение:"),
     messages: [
       {
         channel: "SMS",
@@ -27,7 +30,7 @@ const STAGES: DescriptionStage[] = [
       },
     ],
   },
-  { id: "outcome", heading: "Итог.", body: "Остальные завершают путь без конверсии." },
+  { id: "outcome", heading: "Итог.", body: t("Остальные завершают путь без конверсии.") },
 ];
 
 describe("WorkflowDescription", () => {
@@ -41,7 +44,7 @@ describe("WorkflowDescription", () => {
       render(<WorkflowDescription stages={STAGES} />);
       for (const stage of STAGES) {
         expect(screen.getByText(stage.heading)).toBeTruthy();
-        expect(screen.getByText(stage.body)).toBeTruthy();
+        expect(screen.getByText(segmentsText(stage.body))).toBeTruthy();
       }
     });
 

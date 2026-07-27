@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeWorkflow, firstTouchCommunicationNodes } from "./graph-description";
+import { describeWorkflow, firstTouchCommunicationNodes, segmentsText } from "./graph-description";
 import { createTemplate } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
 
@@ -11,15 +11,15 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const start = stages.find((s) => s.id === "start")!;
       expect(start.heading).toBe("Старт.");
-      expect(start.body).toContain("скоринг");
-      expect(start.body).toContain("проявляет намерение");
+      expect(segmentsText(start.body)).toContain("скоринг");
+      expect(segmentsText(start.body)).toContain("проявляет намерение");
     });
 
     it("не упоминает скоринг для своей базы (ноды скоринга нет)", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "own", ["sms"]), T);
       const start = stages.find((s) => s.id === "start")!;
-      expect(start.body).not.toContain("скоринг");
-      expect(start.body).toContain("сверяются с сигналами");
+      expect(segmentsText(start.body)).not.toContain("скоринг");
+      expect(segmentsText(start.body)).toContain("сверяются с сигналами");
     });
   });
 
@@ -29,25 +29,25 @@ describe("describeWorkflow", () => {
     it("appends the domain-fate line when there are pending domains", () => {
       const stages = describeWorkflow(graphWithScoring, [], { pending: ["my.ru"] });
       const start = stages.find((s) => s.id === "start")!;
-      expect(start.body).toContain("отправлены на модерацию");
+      expect(segmentsText(start.body)).toContain("отправлены на модерацию");
     });
 
     it("не добавляет строку судьбы доменов, когда pending пуст", () => {
       const stages = describeWorkflow(graphWithScoring, T, { pending: [] });
       const start = stages.find((s) => s.id === "start")!;
-      expect(start.body).not.toContain("отправлены на модерацию");
+      expect(segmentsText(start.body)).not.toContain("отправлены на модерацию");
     });
 
     it("не добавляет строку судьбы доменов, когда domainStatuses не передан", () => {
       const stages = describeWorkflow(graphWithScoring, T);
       const start = stages.find((s) => s.id === "start")!;
-      expect(start.body).not.toContain("отправлены на модерацию");
+      expect(segmentsText(start.body)).not.toContain("отправлены на модерацию");
     });
 
     it("перечисляет все pending-домены через запятую в точной формулировке", () => {
       const stages = describeWorkflow(graphWithScoring, T, { pending: ["a.ru", "b.ru"] });
       const start = stages.find((s) => s.id === "start")!;
-      expect(start.body).toContain(
+      expect(segmentsText(start.body)).toContain(
         "Домены a.ru, b.ru отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании",
       );
     });
@@ -80,12 +80,14 @@ describe("describeWorkflow", () => {
         createTemplate("Возврат", "new", ["sms", "email"]),
         T,
       );
-      expect(stages.find((s) => s.id === "first-touch")!.body).toContain("потоки");
+      expect(segmentsText(stages.find((s) => s.id === "first-touch")!.body)).toContain("потоки");
     });
 
     it("для одного канала не выдумывает деление на потоки", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      expect(stages.find((s) => s.id === "first-touch")!.body).not.toContain("потоки");
+      expect(
+        segmentsText(stages.find((s) => s.id === "first-touch")!.body),
+      ).not.toContain("потоки");
     });
 
     it("схлопывает одинаковые касания параллельных сегментов в одну строку на канал", () => {
@@ -102,14 +104,14 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const check = stages.find((s) => s.id === "check")!;
       expect(check.heading).toBe("Проверка реакции.");
-      expect(check.body).toContain("успех");
+      expect(segmentsText(check.body)).toContain("успех");
     });
 
     it("берёт длительность паузы из WaitParams и не цитирует тексты повторно", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const retry = stages.find((s) => s.id === "retry")!;
       expect(retry.heading).toBe("Пауза и повтор.");
-      expect(retry.body).toContain("2 дня"); // durationHours: 48
+      expect(segmentsText(retry.body)).toContain("2 дня"); // durationHours: 48
       expect(retry.messages).toBeUndefined();
     });
 
@@ -125,7 +127,7 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const outcome = stages.find((s) => s.id === "outcome")!;
       expect(outcome.heading).toBe("Итог.");
-      expect(outcome.body).toContain("без конверсии");
+      expect(segmentsText(outcome.body)).toContain("без конверсии");
     });
   });
 
@@ -133,7 +135,7 @@ describe("describeWorkflow", () => {
     it("даёт только Старт и Итог, без выдуманных касаний", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
       expect(stages.map((s) => s.id)).toEqual(["start", "outcome"]);
-      expect(stages[1].body).toContain("готовый сегмент");
+      expect(segmentsText(stages[1].body)).toContain("готовый сегмент");
       expect(stages.some((s) => s.messages?.length)).toBe(false);
     });
   });
