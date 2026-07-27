@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { CampaignWorkspace } from "./campaign-workspace";
 import { AppStateProvider } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
@@ -227,5 +227,90 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
     expect(
       screen.queryByRole("button", { name: "Применить и вернуться" }),
     ).toBeNull();
+  });
+});
+
+// Fix round 2 (coordinator review): the ORDINARY (non-isolated) wizard's own
+// launch handoff dropped the Budget step's submitted partial —
+// `onNext={() => handleLaunchFromBudget()}` discarded whatever `StepBudget`
+// passed, so `LaunchRequest.cost`/`stepData` were built from stale
+// pre-submission state. Every campaign created through the normal wizard
+// therefore snapshot a `budget`/`wizardData.budget` that never carried the
+// user's actual choice — which starves `graph-description.ts`'s
+// `facts?.budget !== undefined` gate, so the budget tag never renders at all.
+// Jump straight to the last (Бюджет) step via `initialStepDataOverride` +
+// `initialStep` (the same mechanism the dev-seed harness and "Открыть и
+// редактировать" already use) — intent "comms-own" keeps the step list short
+// (scenario, intent, file, channels, budget — budget is step 5) so the test
+// doesn't have to walk scenario/interests/analysis/file UI it isn't testing.
+describe("CampaignWorkspace — обычный визард: явный бюджет доходит до LaunchRequest", () => {
+  afterEach(cleanup);
+
+  function renderAtBudgetStep(onLaunchRequested: (req: unknown) => void) {
+    return render(
+      <AppStateProvider>
+        <PromptChipsProvider>
+          <ChatProvider>
+            <CampaignWorkspace
+              onLaunchRequested={onLaunchRequested}
+              initialStepDataOverride={{
+                ...initialStepData,
+                intent: "comms-own",
+                sourceType: "own",
+                scenario: "base-registration",
+                channels: ["sms"],
+                fileRowCount: 5000,
+              }}
+              initialStep={5}
+            />
+          </ChatProvider>
+        </PromptChipsProvider>
+      </AppStateProvider>,
+    );
+  }
+
+  // WorkspaceInner mounts every reached step (1..maxStep) at once, and every
+  // step's footer reuses the same "Далее" label — scope every query to the
+  // Бюджет step's own StepContent root (same pattern wizard-buttons.spec.ts
+  // uses) so a click never lands on some other mounted step's button.
+  function budgetStepScope() {
+    return within(screen.getByText("Прогноз бюджета").closest("div")!);
+  }
+
+  it("своя сумма, введённая на «Бюджете», доходит и до cost, и до stepData.budget в LaunchRequest", () => {
+    const onLaunchRequested = vi.fn();
+    renderAtBudgetStep(onLaunchRequested);
+    const budget = budgetStepScope();
+
+    fireEvent.click(budget.getByRole("button", { name: /Своя сумма/i }));
+    fireEvent.change(budget.getByRole("textbox", { name: "Своя сумма" }), {
+      target: { value: "88888" },
+    });
+    fireEvent.click(budget.getByRole("button", { name: "Далее" }));
+
+    expect(onLaunchRequested).toHaveBeenCalledTimes(1);
+    const req = onLaunchRequested.mock.calls[0][0] as {
+      cost: number;
+      stepData: StepData;
+    };
+    expect(req.cost).toBe(88888);
+    expect(req.stepData.budget).toBe(88888);
+  });
+
+  it("рекомендованная сумма (без ручного ввода) тоже доходит до LaunchRequest — не 0/null от устаревшего stepData", () => {
+    const onLaunchRequested = vi.fn();
+    renderAtBudgetStep(onLaunchRequested);
+    const budget = budgetStepScope();
+
+    // Режим «Рекомендуемая» — активен по умолчанию, ничего вводить не нужно.
+    fireEvent.click(budget.getByRole("button", { name: "Далее" }));
+
+    expect(onLaunchRequested).toHaveBeenCalledTimes(1);
+    const req = onLaunchRequested.mock.calls[0][0] as {
+      cost: number;
+      stepData: StepData;
+    };
+    expect(req.cost).toBeGreaterThan(0);
+    expect(req.stepData.budget).toBe(req.cost);
   });
 });

@@ -192,19 +192,35 @@ function WorkspaceInner({
   // fallback (stream). `proceed` is a no-op: open-campaign progress now lives
   // in the campaign card (sub-track D), so there is no step-7 to advance to —
   // the reducer routes the view after the signal/campaign is created.
-  const handleLaunchFromBudget = useCallback(() => {
-    if (!onLaunchRequested) {
-      handleNext({});
-      return;
-    }
-    onLaunchRequested({
-      scenarioId: stepData.scenario ?? "",
-      cost: stepData.budget ?? 0,
-      count: stepData.fileRowCount ?? FALLBACK_BASE,
-      stepData,
-      proceed: () => {},
-    });
-  }, [handleNext, onLaunchRequested, stepData]);
+  //
+  // Fix round 2 (Task 12): StepBudget's own footer calls `onNext(partial)`
+  // exactly like every other step — the wrapper below used to be
+  // `() => handleLaunchFromBudget()`, silently DROPPING that partial. `cost`/
+  // `stepData` were then built from the OUTER `stepData` state, which still
+  // held whatever the user had BEFORE submitting Budget (`null` on a fresh
+  // wizard run), so `campaign_created_from_wizard` snapshot a campaign whose
+  // `budget`/`wizardData.budget` never carried the amount the user actually
+  // picked. `stepData` also won't have re-rendered with `partial` yet at this
+  // point in the same tick (unlike `handleNext`, which is never the very last
+  // call before a snapshot is taken) — so `merged` below, not bare `stepData`,
+  // is what `cost`/`stepData` in the LaunchRequest must read.
+  const handleLaunchFromBudget = useCallback(
+    (partial: Partial<StepData>) => {
+      const merged = { ...stepData, ...partial };
+      if (!onLaunchRequested) {
+        handleNext(partial);
+        return;
+      }
+      onLaunchRequested({
+        scenarioId: merged.scenario ?? "",
+        cost: merged.budget ?? 0,
+        count: merged.fileRowCount ?? FALLBACK_BASE,
+        stepData: merged,
+        proceed: () => {},
+      });
+    },
+    [handleNext, onLaunchRequested, stepData]
+  );
 
   // The intent-gated step sequence. The numeric currentStep/maxStep are
   // 1-based INDICES into this list; the id at step N is steps[N-1].
@@ -234,7 +250,7 @@ function WorkspaceInner({
           <StepBudget
             {...props}
             onBack={onBack}
-            onNext={() => handleLaunchFromBudget()}
+            onNext={handleLaunchFromBudget}
           />
         );
       default: return null;
