@@ -331,9 +331,10 @@ function stepValueDiffers(
  * которые правка обнулила (`invalidatedBy`/`resetFieldsFor` из Task 10) — та
  * же таблица зависимостей, что обслуживает обычный проход визарда, здесь
  * читается ещё раз, а не задублирована. «Далее» перемещает пользователя
- * ВНУТРИ сессии (правит только ЛОКАЛЬНЫЙ `stepData`) и не пишет наружу
- * ничего; «Применить и вернуться» коммитит ОДИН раз, на основной кнопке
- * последнего шага сессии. «Отмена» возвращает на карточку без коммита.
+ * ВНУТРИ сессии (правит только ЛОКАЛЬНЫЕ накопленные правки — `edits`, см.
+ * `deriveStepData` ниже) и не пишет наружу ничего; «Применить и вернуться»
+ * коммитит ОДИН раз, на основной кнопке последнего шага сессии. «Отмена»
+ * возвращает на карточку без коммита.
  *
  * Почему это важно конкретно: если бы каждое «Далее» писало наружу, то
  * пользователь, сменивший каналы и бросивший сессию на середине, оставил бы
@@ -355,24 +356,45 @@ function IsolatedEditSession({
   // `onBack` truthy) — коллбек опционален для вызывающего кода/тестов, но
   // сама кнопка не должна пропадать только потому, что его не передали.
   const handleCancel = onCancel ?? (() => {});
-  const [stepData, setStepData] = useState<StepData>(snapshot);
+  // Явные правки пользователя — ТОЛЬКО то, что реально пришло через onNext
+  // конкретного шага (клик по его собственной кнопке). Снапшот НИКОГДА не
+  // мутируется напрямую, и обнулённые каскадом поля НЕ запоминаются как
+  // «сброшено навсегда» — маска (resetFieldsFor) выводится заново на каждый
+  // рендер из ЖИВОГО pendingResets (см. `deriveStepData` ниже), а не
+  // применяется один раз и не переживает свою причину.
+  //
+  // Fix round 1 (Task 12): раньше маска накатывалась ДЕСТРУКТИВНО на клике
+  // «Далее» и оставалась в состоянии сессии навсегда — стоило пользователю
+  // вернуться на «Каналы» и восстановить исходный набор (тот же, что в
+  // снапшоте), «Далее» уже необратимо занулило бюджет, и коммит уходил с
+  // `budget: undefined` при НЕИЗМЕНИВШИХСЯ каналах — карточка показывала
+  // ₽14 580 (фолбэк-оценку) вместо настоящих ₽526 973, вторая цифра «правды»
+  // (граф/ЗАПУСК) при этом расходилась. Теперь маска — производная величина:
+  // как только живой выбор снова совпал со снапшотом, `pendingResets`
+  // пустеет, и обнулять уже нечего — снапшотное значение просвечивает само.
+  const [edits, setEdits] = useState<Partial<StepData>>({});
   const [activeStepId, setActiveStepId] = useState<WizardStepId>(editing.step);
   const [animatingStep, setAnimatingStep] = useState<WizardStepId | null>(editing.step);
   // Живое, реактивное «что обнулилось» — обновляется по каждому onValueChange
-  // активного шага (см. handleValueChange). НЕ сбрасывается при переходе на
-  // следующий шаг: «Бюджет» сам onValueChange никогда не шлёт, так что если
-  // сбрасывать pendingResets на переходе, «Бюджет» тут же выпал бы из
-  // видимой колонки в момент, когда он и должен на ней остаться (см. отчёт
-  // Task 10 — этот же вопрос про пересчёт бюджета в изолированной колонке).
+  // активного шага (см. handleValueChange). НЕ хранит историю: как только
+  // очередной live-выбор снова совпадает со снапшотом, обнулять нечего, и
+  // предыдущая инвалидация не «залипает».
   const [pendingResets, setPendingResets] = useState<WizardStepId[]>([]);
-  // Бампается на каждое применение resetFieldsFor — форсирует remount только
-  // что обнулённого шага (см. `key` ниже), чтобы его локальный React-стейт
-  // (например, StepBudget's `mode`/`customValue`) не тянул устаревшее
-  // значение, захваченное ДО сброса, когда шаг впервые смонтировался
-  // реактивно (колонка растёт по live pendingResets, до нажатия «Далее»).
-  const [resetGeneration, setResetGeneration] = useState(0);
 
-  const orderedSteps = stepsForIntent(stepData.intent);
+  // Единственное место, где снапшот, накопленные явные правки и ТЕКУЩАЯ маска
+  // сходятся в одно значение — что для рендера, что (плюс свежий partial
+  // поверх) для коммита. Порядок спреда решает: `resetFieldsFor` идёт ПОСЛЕ
+  // `withEdits` — протухшая правка обнулённого поля не переживает маску;
+  // при коммите свежий `partial` активного шага спредится ПОСЛЕ маски (в
+  // handleIsolatedNext) — явная правка ВСЕГДА побеждает маску, даже если шаг
+  // формально всё ещё числится обнулённым.
+  function deriveStepData(withEdits: Partial<StepData>): StepData {
+    return { ...snapshot, ...withEdits, ...resetFieldsFor(pendingResets) };
+  }
+
+  const effectiveStepData = deriveStepData(edits);
+
+  const orderedSteps = stepsForIntent(effectiveStepData.intent);
   const columnSet = new Set<WizardStepId>([editing.step, ...pendingResets]);
   const visibleStepIds = orderedSteps.filter((id) => columnSet.has(id));
   const activeIndex = visibleStepIds.indexOf(activeStepId);
@@ -400,20 +422,23 @@ function IsolatedEditSession({
   }
 
   function handleIsolatedNext(partial: Partial<StepData>) {
-    const merged = { ...stepData, ...partial };
+    const nextEdits = { ...edits, ...partial };
     // Ветка выбирается по УЖЕ показанной подписи кнопки — та и есть источник
     // истины: пользователь жмёт то, что видит.
     if (continueLabel === "Далее") {
-      const patched = { ...merged, ...resetFieldsFor(pendingResets) };
-      setStepData(patched);
-      setResetGeneration((g) => g + 1);
+      setEdits(nextEdits);
       const next = visibleStepIds[activeIndex + 1] ?? activeStepId;
       setAnimatingStep(next);
       setActiveStepId(next);
       pendingScroll.current = { step: next, behavior: "smooth" };
       return;
     }
-    onCommit?.(merged);
+    setEdits(nextEdits);
+    // `partial` спредится ПОСЛЕДНИМ: если активный шаг сам входит в
+    // pendingResets (штатно — «Бюджет» коммитит именно так, будучи обнулённым
+    // до этого клика), его СВЕЖЕЕ значение обязано победить маску, которую
+    // deriveStepData иначе наложила бы поверх.
+    onCommit?.({ ...deriveStepData(nextEdits), ...partial });
   }
 
   function handleStepperClick(step: number) {
@@ -437,7 +462,7 @@ function IsolatedEditSession({
         // диалог смены сценария в изолированной сессии строит Task 13.
         return (
           <Step1Scenario
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onValueChange={(p) => handleValueChange("scenario", p)}
@@ -446,7 +471,7 @@ function IsolatedEditSession({
       case "interests":
         return (
           <Step2Interests
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onBack={handleCancel}
@@ -456,7 +481,7 @@ function IsolatedEditSession({
       case "analysis":
         return (
           <StepAnalysis
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onBack={handleCancel}
@@ -467,7 +492,7 @@ function IsolatedEditSession({
       case "file":
         return (
           <StepFile
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onBack={handleCancel}
@@ -478,7 +503,7 @@ function IsolatedEditSession({
       case "channels":
         return (
           <StepChannels
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onBack={handleCancel}
@@ -489,7 +514,7 @@ function IsolatedEditSession({
       case "budget":
         return (
           <StepBudget
-            data={stepData}
+            data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onBack={handleCancel}
@@ -529,7 +554,7 @@ function IsolatedEditSession({
       <div className="flex flex-1 flex-col overflow-y-auto">
         {visibleStepIds.map((id) => (
           <motion.div
-            key={`${id}-${resetGeneration}`}
+            key={id}
             ref={(el) => { stepRefs.current[id] = el; }}
             initial={id === animatingStep ? { y: 60, opacity: 0 } : false}
             animate={{ y: 0, opacity: 1 }}

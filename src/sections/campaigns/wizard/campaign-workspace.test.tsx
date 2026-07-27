@@ -37,11 +37,16 @@ beforeAll(() => {
 
 // Реальный сценарий (a не выдуманный id) — чтобы StepBudget прошёл по
 // нормальному пути graphCostFor, а не по фолбэку "сценарий не выбран".
+// `budget` — настоящее ненулевое значение (не null из initialStepData): тест
+// на отмену инвалидирующей правки должен различать «зафабрикованный null» от
+// «честно восстановленного снапшотного значения», а два null неотличимы.
 const snapshot: StepData = {
   ...initialStepData,
   scenario: "base-registration",
   channels: ["sms", "email"],
   fileRowCount: 5000,
+  budget: 42000,
+  budgetMode: "recommended",
 };
 
 function renderWorkspace({
@@ -136,5 +141,91 @@ describe("CampaignWorkspace — изолированный режим правк
     const committed = onCommit.mock.calls[0][0] as StepData;
     expect(committed.channels).toEqual(["sms"]);
     expect(committed.budget).not.toBeNull();
+  });
+});
+
+// Fix round 1 (coordinator review): undoing an invalidating edit must
+// un-mask the snapshot's real value, not leave a destructively-applied reset
+// behind. See campaign-workspace.tsx's `deriveStepData` doc comment.
+describe("CampaignWorkspace — отмена инвалидирующей правки не фабрикует бюджет", () => {
+  afterEach(cleanup);
+
+  it("смена каналов, «Далее», возврат на «Каналы» через степпер и восстановление исходного набора — коммит несёт снапшотный бюджет, а не null/undefined", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "channels" },
+      snapshot,
+      onCommit,
+    });
+    // Добавить Push — отличается от снапшота, инвалидирует бюджет.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
+    expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+
+    // Вернуться на «Каналы» через степпер — доступен, он в колонке правки.
+    fireEvent.click(screen.getByRole("button", { name: "Каналы" }));
+    // Снять Push обратно — набор снова совпадает со снапшотом.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
+
+    // Живой выбор снова совпал со снапшотом — обнулять уже нечего, «Бюджет»
+    // выпадает из колонки, кнопка возвращается к «Применить и вернуться».
+    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    );
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0] as StepData;
+    expect(committed.channels).toEqual(snapshot.channels);
+    expect(committed.budget).toBe(snapshot.budget); // не null, не undefined — снапшотное значение
+  });
+
+  it("явная правка бюджета после смены каналов побеждает маску — коммитится новое значение, а не снапшотное", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "channels" },
+      snapshot,
+      onCommit,
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+
+    // На «Бюджете»: переключиться на «Своя сумма» и ввести своё значение.
+    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
+      target: { value: "99999" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    );
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0] as StepData;
+    expect(committed.budget).toBe(99999);
+    expect(committed.budget).not.toBe(snapshot.budget);
+  });
+
+  it("восстановление каналов, затем повторное изменение — бюджет снова маскируется, а не застревает восстановленным", () => {
+    renderWorkspace({ editing: { campaignId: "cmp_1", step: "channels" }, snapshot });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Каналы" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Push/ })); // восстановили снапшот
+    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    ).toBeInTheDocument();
+
+    // Меняем каналы снова (по-другому) — маска обязана вернуться.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Звонок/ }));
+    expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
+    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Применить и вернуться" }),
+    ).toBeNull();
   });
 });
