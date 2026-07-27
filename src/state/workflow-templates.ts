@@ -679,28 +679,91 @@ function dedupeEdges(edges: WorkflowEdge[]): WorkflowEdge[] {
   return result;
 }
 
+/** Сплиттер-развилка каналов (`buildChannelBlock`) — а не сплит по сегменту/random, который трогать нельзя. */
+function isEqualChannelSplit(node: WorkflowNode | undefined): boolean {
+  return (
+    node?.data.nodeType === "split" &&
+    node.data.params?.kind === "split" &&
+    node.data.params.by === "equal"
+  );
+}
+
+/**
+ * Схлопывает channel-сплиттеры (`by:"equal"`), у которых после удаления
+ * каналов осталась ровно одна исходящая ветка — иначе сплиттер продолжает
+ * "делить" аудиторию 50/50 (или иначе) между уцелевшим каналом и мостиком в
+ * обход коммуникации (Finding 1). Схлопывание переподключает предков
+ * сплиттера напрямую на его единственную оставшуюся цель и удаляет сам
+ * сплиттер; лейбл входящего ребра (например, метка сегмента "Макс")
+ * переносится на новое ребро. Цикл на случай вложенных сплиттеров.
+ */
+function collapseDegenerateEqualSplits(
+  nodesIn: WorkflowNode[],
+  edgesIn: WorkflowEdge[]
+): { nodes: WorkflowNode[]; edges: WorkflowEdge[]; newBridges: WorkflowEdge[] } {
+  let nodes = nodesIn;
+  let edges = edgesIn;
+  const newBridges: WorkflowEdge[] = [];
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const splitNode of nodes) {
+      if (!isEqualChannelSplit(splitNode)) continue;
+      const outs = edges.filter((ed) => ed.source === splitNode.id);
+      if (outs.length !== 1) continue; // валидный (2+) или ещё не тронутый — не трогаем
+
+      const ins = edges.filter((ed) => ed.target === splitNode.id);
+      const sole = outs[0].target;
+      const bridges = ins.map((inEdge) => e(inEdge.source, sole, inEdge.label as string | undefined));
+
+      edges = dedupeEdges([
+        ...edges.filter((ed) => ed.source !== splitNode.id && ed.target !== splitNode.id),
+        ...bridges,
+      ]);
+      nodes = nodes.filter((n) => n.id !== splitNode.id);
+      newBridges.push(...bridges);
+      changed = true;
+      break; // состав nodes/edges изменился — начинаем проход заново
+    }
+  }
+
+  return { nodes, edges, newBridges };
+}
+
 /**
  * Мерж графа под новый набор каналов — смена каналов не должна стоить
- * пользователю ручных и ИИ-правок остального графа.
+ * пользователю ручных и ИИ-правок остального графа, и не должна тайком
+ * менять стоимость кампании: результат обязан давать тот же
+ * `computeCampaignCost`, что и чистая пересборка `createTemplate(...,
+ * nextChannels)` (см. тесты-инварианты в workflow-templates.test.ts).
  *
- * Снятые каналы: коммуникационные ноды удаляются, а их входящие рёбра
- * переподключаются на цели исходящих — иначе цепочка порвалась бы и часть
- * графа осталась недостижимой. Один и тот же канал может встречаться в графе
- * несколько раз (первый проход/повтор в `buildCommUnit`, несколько
- * сегментов в `buildSegmentedChannelTemplate`) — удаление обрабатывает КАЖДУЮ
- * такую ноду по отдельности, а не по одной на канал.
+ * Снятые каналы: коммуникационная нода удаляется. Если она была одной из
+ * НЕСКОЛЬКИХ веток channel-сплиттера (`by:"equal"`) — соседние ветки не
+ * трогаем, мостик не нужен: сплиттер просто лишается одной ветки. Если она
+ * была последней веткой сплиттера (или вообще не под сплиттером) —
+ * переподключаем входящие рёбра на цели исходящих. Отдельный проход затем
+ * схлопывает сплиттеры, оставшиеся с одной веткой (`collapseDegenerateEqualSplits`)
+ * — иначе сплиттер продолжил бы "делить" аудиторию между уцелевшим каналом и
+ * мостиком в обход коммуникации. Канал может встречаться в графе несколько
+ * раз (первый проход/повтор в `buildCommUnit`, несколько сегментов в
+ * `buildSegmentedChannelTemplate`) — и удаление, и добавление обрабатывают
+ * КАЖДОЕ такое место по отдельности, а не одно на канал.
  *
- * Новые каналы: добавляются ноды по умолчанию, параллельно уже существующей
- * коммуникации первого прохода (те же входящие источники и те же исходящие
- * цели — как дополнительная ветка, без слияния). Если коммуникационных нод не
- * осталось вовсе, подключение идёт в места, освободившиеся при удалении в
- * этом же вызове (по одному на каждый проход, иначе первый и повторный проход
- * схлопнутся в одну ноду), либо — если коммуникаций не было никогда
- * («без коммуникации», bug 2a/2b) — в единственный путь «Сигнал → Успех»
- * минимального шаблона.
+ * Новые каналы: каждое место, где сейчас есть коммуникация (сгруппированное
+ * по общему предку — общий channel-сплиттер объединяет соседей, любой другой
+ * предок держит место отдельно, иначе разные сегменты/проходы схлопнутся в
+ * одно), получает недостающие каналы. Если предок — уже channel-сплиттер,
+ * новый канал становится ещё одной его веткой. Если нет (одиночная нода, или
+ * предок — защищённый сплит по сегменту) — между предком и каналами
+ * вставляется новый channel-сплиттер, а защищённый сплит не трогаем вовсе.
+ * Если коммуникаций не осталось вовсе, подключение идёт в места,
+ * освободившиеся при удалении в этом же вызове, либо — если коммуникаций не
+ * было никогда («без коммуникации», bug 2a/2b) — в единственный путь
+ * «Сигнал → Успех» минимального шаблона.
  *
- * Задержки, условия, разветвления и отредактированные тексты остальных нод не
- * трогаются вовсе.
+ * Задержки, условия, сплиты вне комм-блоков и отредактированные тексты
+ * остальных нод не трогаются вовсе.
  */
 export function mergeChannelNodes(
   graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
@@ -710,9 +773,10 @@ export function mergeChannelNodes(
 
   let nodes = [...graph.nodes];
   let edges = [...graph.edges];
-  // Рёбра, "перекинутые" на месте снятых нод в этом вызове — если после
-  // удаления коммуникаций не осталось вовсе, они подсказывают, куда
-  // подключать новые каналы (см. ветку добавления ниже).
+  // Рёбра, "перекинутые" на месте снятых нод в этом вызове (только там, где
+  // предком НЕ был channel-сплиттер с уцелевшими соседями — там мостик не
+  // нужен вовсе). Если после удаления коммуникаций не осталось совсем нигде,
+  // они подсказывают, куда подключать новые каналы (см. ветку добавления).
   const bridgesCreated: WorkflowEdge[] = [];
 
   // ── Снятые каналы ───────────────────────────────────────────────────────
@@ -720,91 +784,232 @@ export function mergeChannelNodes(
     const nodeType = node.data.nodeType;
     if (!isCommunicationNode(nodeType) || nextSet.has(nodeType as Channel)) continue;
 
-    // Живой список edges (а не исходный graph.edges) — если удаляемые ноды
+    // Живой список nodes/edges (а не исходный graph.*) — если удаляемые ноды
     // образуют цепочку, переподключение первой должно быть видно при
     // обработке следующей.
     const incoming = edges.filter((ed) => ed.target === node.id);
     const outgoing = edges.filter((ed) => ed.source === node.id);
-    const bridges = incoming.flatMap((inEdge) =>
-      outgoing.map((outEdge) => e(inEdge.source, outEdge.target))
-    );
 
-    edges = dedupeEdges([
-      ...edges.filter((ed) => ed.source !== node.id && ed.target !== node.id),
-      ...bridges,
-    ]);
-    bridgesCreated.push(...bridges);
+    const soleIncoming = incoming.length === 1 ? incoming[0] : undefined;
+    const predecessor = soleIncoming ? nodes.find((n) => n.id === soleIncoming.source) : undefined;
+    const predecessorIsEqualSplit = isEqualChannelSplit(predecessor);
+    const siblingEdgesRemaining = predecessorIsEqualSplit
+      ? edges.filter((ed) => ed.source === predecessor!.id && ed.target !== node.id).length
+      : 0;
+
+    if (predecessorIsEqualSplit && siblingEdgesRemaining > 0) {
+      // Одна из НЕСКОЛЬКИХ веток сплиттера — соседние ветки уже несут
+      // остальную аудиторию, мостик создал бы лишнюю прямую ветку в обход
+      // коммуникации (Finding 1). Просто убираем эту ветку.
+      edges = edges.filter((ed) => ed.source !== node.id && ed.target !== node.id);
+    } else {
+      // Одиночный слот (без сплиттера) ИЛИ последняя ветка сплиттера —
+      // переподключаем входящие на цели исходящих (сохраняя лейбл, если был).
+      const bridges = incoming.flatMap((inEdge) =>
+        outgoing.map((outEdge) => e(inEdge.source, outEdge.target, inEdge.label as string | undefined))
+      );
+      edges = dedupeEdges([
+        ...edges.filter((ed) => ed.source !== node.id && ed.target !== node.id),
+        ...bridges,
+      ]);
+      // Мостик от самого сплиттера (predecessorIsEqualSplit) — промежуточный:
+      // сплиттер схлопнётся ниже, и итоговый мостик даст collapse-проход.
+      if (!predecessorIsEqualSplit) bridgesCreated.push(...bridges);
+    }
     nodes = nodes.filter((nd) => nd.id !== node.id);
   }
 
+  const collapsed = collapseDegenerateEqualSplits(nodes, edges);
+  nodes = collapsed.nodes;
+  edges = collapsed.edges;
+  bridgesCreated.push(...collapsed.newBridges);
+
   // ── Новые каналы ────────────────────────────────────────────────────────
   const remainingComm = nodes.filter((nd) => isCommunicationNode(nd.data.nodeType));
-  const existingChannels = new Set(remainingComm.map((nd) => nd.data.nodeType as Channel));
-  const toAdd = nextChannels.filter((ch) => !existingChannels.has(ch));
-  if (toAdd.length === 0) return { nodes, edges };
+  let freshIndex = 0;
 
-  // Существующая коммуникационная нода первого прохода (по порядку в массиве
-  // нод она и есть первый проход — repeat-блок всегда добавляется позже).
-  const anchor = remainingComm[0];
+  if (remainingComm.length > 0) {
+    // Группируем уцелевшие комм-ноды по общему предку: если предок — реальный
+    // channel-сплиттер, его дети — однозначно соседи ОДНОЙ коммуникации
+    // (объединяем). Любой другой предок (одиночная нода ИЛИ защищённый сплит
+    // по сегменту, у которого разные ветки ведут в РАЗНЫЕ места) держит место
+    // отдельно — иначе разные сегменты/проходы, случайно деля предка,
+    // схлопнутся в одно место (ровно баг из Finding 2 про сегменты).
+    const slots = new Map<string, WorkflowNode[]>(); // predecessorId → участники (если сплиттер)
+    const singleSlots: { predecessorId: string; member: WorkflowNode }[] = [];
 
-  type Position = { sources: string[]; targets: string[] };
-  let positions: Position[];
-
-  if (anchor) {
-    positions = [
-      {
-        sources: edges.filter((ed) => ed.target === anchor.id).map((ed) => ed.source),
-        targets: edges.filter((ed) => ed.source === anchor.id).map((ed) => ed.target),
-      },
-    ];
-  } else if (bridgesCreated.length > 0) {
-    const seen = new Set<string>();
-    positions = [];
-    for (const b of bridgesCreated) {
-      const key = `${b.source}|${b.target}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      positions.push({ sources: [b.source], targets: [b.target] });
+    for (const node of remainingComm) {
+      const incomingEdge = edges.find((ed) => ed.target === node.id);
+      if (!incomingEdge) continue;
+      const predecessorNode = nodes.find((n) => n.id === incomingEdge.source);
+      if (isEqualChannelSplit(predecessorNode)) {
+        const list = slots.get(incomingEdge.source) ?? [];
+        list.push(node);
+        slots.set(incomingEdge.source, list);
+      } else {
+        singleSlots.push({ predecessorId: incomingEdge.source, member: node });
+      }
     }
-  } else {
-    // Коммуникаций не было вовсе («без коммуникации») — единственное место в
-    // минимальном шаблоне: рёбра, ведущие в успех.
-    positions = edges
-      .filter((ed) => nodes.find((nd) => nd.id === ed.target)?.data.isSuccess)
-      .map((ed) => ({ sources: [ed.source], targets: [ed.target] }));
-  }
 
-  positions.forEach((pos, i) => {
-    // Комм-ноды авто-заполняются шаблонами («магия» #2) — новый канал не
-    // блокирует запуск пустым текстом.
-    const block = buildChannelBlock(toAdd, `merged_${i}`, true);
+    const grouped = [
+      ...[...slots.entries()].map(([predecessorId, members]) => ({ predecessorId, members })),
+      ...singleSlots.map(({ predecessorId, member }) => ({ predecessorId, members: [member] })),
+    ];
 
-    if (!anchor) {
+    for (const { predecessorId, members } of grouped) {
+      const existingSlotChannels = new Set(members.map((m) => m.data.nodeType as Channel));
+      const slotToAdd = nextChannels.filter((ch) => !existingSlotChannels.has(ch));
+      if (slotToAdd.length === 0) continue;
+
+      const predecessorNode = nodes.find((n) => n.id === predecessorId);
+      if (!predecessorNode) continue;
+
+      const representative = members[0];
+      const successorTargets = edges
+        .filter((ed) => ed.source === representative.id)
+        .map((ed) => ed.target);
+
+      if (isEqualChannelSplit(predecessorNode)) {
+        // Предок — уже channel-сплиттер: новые каналы становятся ещё
+        // несколькими его ветками, параллельно уцелевшим.
+        for (const channel of slotToAdd) {
+          const block = buildChannelBlock([channel], `merged_${freshIndex++}`, true);
+          const newNode = block.nodes[0];
+          const columnX = representative.position.x;
+          const columnNodes = nodes.filter((nd) => nd.position.x === columnX);
+          const baseY = columnNodes.length
+            ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
+            : representative.position.y;
+          const placed = { ...newNode, position: { x: columnX, y: baseY } };
+          nodes = [...nodes, placed];
+          edges = dedupeEdges([
+            ...edges,
+            e(predecessorId, placed.id),
+            ...successorTargets.map((t) => e(placed.id, t)),
+          ]);
+        }
+      } else {
+        // Предок НЕ channel-сплиттер (одиночная нода или защищённый сплит по
+        // сегменту/random) — защищённый сплит не трогаем: вставляем НОВЫЙ
+        // channel-сплиттер МЕЖДУ предком и каналами этого места, сохраняя
+        // лейбл ребра предка (например, метку сегмента).
+        const oldLabelEdge = edges.find(
+          (ed) => ed.source === predecessorId && members.some((m) => m.id === ed.target)
+        );
+        const splitId = `merged_split_${freshIndex++}`;
+        const splitX = representative.position.x;
+        const splitNode = n(
+          splitId,
+          "Сплиттер",
+          "split",
+          splitX,
+          representative.position.y,
+          undefined,
+          undefined,
+          { kind: "split", by: "equal", branches: members.length + slotToAdd.length }
+        );
+
+        // Существующие участники сдвигаются на одну колонку вправо — на их
+        // место встаёт новый сплиттер (как в buildChannelBlock: сплит → канал).
+        const shiftedMembers = members.map((m) => ({
+          ...m,
+          position: { x: m.position.x + STEP, y: m.position.y },
+        }));
+
+        nodes = nodes
+          .filter((nd) => !members.some((m) => m.id === nd.id))
+          .concat(shiftedMembers, splitNode);
+
+        edges = edges.filter(
+          (ed) => !(ed.source === predecessorId && members.some((m) => m.id === ed.target))
+        );
+        edges = dedupeEdges([
+          ...edges,
+          e(predecessorId, splitId, oldLabelEdge?.label as string | undefined),
+          ...members.map((m) => e(splitId, m.id)),
+        ]);
+
+        slotToAdd.forEach((channel, i) => {
+          const block = buildChannelBlock([channel], `merged_${freshIndex++}`, true);
+          const newNode = block.nodes[0];
+          const y = representative.position.y + (members.length + i) * CHANNEL_Y_SPACING;
+          const placed = { ...newNode, position: { x: splitX + STEP, y } };
+          nodes = [...nodes, placed];
+          edges = dedupeEdges([
+            ...edges,
+            e(splitId, placed.id),
+            ...successorTargets.map((t) => e(placed.id, t)),
+          ]);
+        });
+      }
+    }
+  } else if (nextChannels.length > 0) {
+    // Коммуникаций не осталось нигде, но новый набор каналов НЕ пуст —
+    // подключаем недостающие каналы в места, освободившиеся при удалении в
+    // этом же вызове (по одному на каждую позицию — первый проход и повтор
+    // порождают РАЗНЫЕ мостики, иначе схлопнутся в одну ноду), либо — если
+    // коммуникаций не было никогда («без коммуникации», bug 2a/2b) — в
+    // единственный путь «Сигнал → Успех». Если nextChannels пуст, добавлять
+    // нечего — уже вычисленные мостики (или изначальное отсутствие комм-нод)
+    // и есть корректный итог, трогать их дальше не нужно.
+    type Position = { sources: string[]; targets: string[]; label?: string };
+    let positions: Position[];
+
+    if (bridgesCreated.length > 0) {
+      const seen = new Set<string>();
+      positions = [];
+      for (const b of bridgesCreated) {
+        const key = `${b.source}|${b.target}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        positions.push({ sources: [b.source], targets: [b.target], label: b.label as string | undefined });
+      }
+    } else {
+      positions = edges
+        .filter((ed) => nodes.find((nd) => nd.id === ed.target)?.data.isSuccess)
+        .map((ed) => ({ sources: [ed.source], targets: [ed.target] }));
+    }
+
+    positions.forEach((pos) => {
+      const block = buildChannelBlock(nextChannels, `merged_${freshIndex++}`, true);
+
       // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
       // сообщение получит окольный путь мимо новых каналов.
       edges = edges.filter(
         (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
       );
-    }
 
-    const baseX = anchor ? anchor.position.x : (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
-    const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
-    const baseY = columnNodes.length
-      ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
-      : 0;
+      const baseX = (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
+      const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
+      const baseY = columnNodes.length
+        ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
+        : 0;
 
-    const placedNodes = block.nodes.map((nd) => ({
-      ...nd,
-      position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
-    }));
+      const placedNodes = block.nodes.map((nd) => ({
+        ...nd,
+        position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
+      }));
 
-    nodes = [...nodes, ...placedNodes];
-    edges = dedupeEdges([
-      ...edges,
-      ...pos.sources.map((src) => e(src, block.entryId)),
-      ...block.edges,
-      ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
-    ]);
+      nodes = [...nodes, ...placedNodes];
+      edges = dedupeEdges([
+        ...edges,
+        ...pos.sources.map((src) => e(src, block.entryId, pos.label)),
+        ...block.edges,
+        ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
+      ]);
+    });
+  }
+
+  // ── Нормализация числа веток ────────────────────────────────────────────
+  // params.branches у channel-сплиттеров держим в согласии с фактическим
+  // числом исходящих рёбер (созданных/удалённых выше) — cost-модель читает
+  // реальные рёбра, а не это поле, но оно не должно врать в карточке ноды.
+  nodes = nodes.map((nd) => {
+    if (!isEqualChannelSplit(nd)) return nd;
+    const actual = edges.filter((ed) => ed.source === nd.id).length;
+    const params = nd.data.params as Extract<NodeParams, { kind: "split" }>;
+    if (params.branches === actual) return nd;
+    return { ...nd, data: { ...nd.data, params: { ...params, branches: actual } } };
   });
 
   return { nodes, edges };
