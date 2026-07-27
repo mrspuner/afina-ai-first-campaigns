@@ -1545,6 +1545,22 @@ describe("ViewAddress — campaign-payment round-trip", () => {
   });
 });
 
+describe("campaign_step_edit_requested — вход в визард с карточки", () => {
+  it("campaign_step_edit_requested открывает визард на нужном шаге", () => {
+    const draftCampaign = makeCampaign({ wizardData: makeStepData() });
+    const stateWithDraft: AppState = { ...initialState, campaigns: [draftCampaign] };
+    const next = appReducer(stateWithDraft, {
+      type: "campaign_step_edit_requested",
+      campaignId: "cmp_1",
+      step: "interests",
+    });
+    expect(next.view).toEqual({
+      kind: "guided-campaign",
+      editing: { campaignId: "cmp_1", step: "interests" },
+    });
+  });
+});
+
 import { activeNavSection } from "./app-state";
 
 describe("activeNavSection — подсветка пункта меню по view", () => {

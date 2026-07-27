@@ -14,7 +14,7 @@ import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integrat
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
 import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
-import { stepsForIntent } from "@/sections/campaigns/wizard/wizard-steps";
+import { stepsForIntent, type WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
 const FALLBACK_BASE = 10_000;
@@ -276,11 +276,16 @@ export function CampaignWorkspace({
   initialScenario,
   initialStepDataOverride,
   initialStep,
+  // `editing` принимается ради типизации точечной правки шага с карточки
+  // (Task 11), но пока ничего не делает — изолированный режим (рендер и
+  // коммит только одного шага) строит Task 12.
+  editing: _editing,
 }: {
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   initialStepDataOverride?: StepData;
   initialStep?: number;
+  editing?: { campaignId: string; step: WizardStepId };
 } = {}) {
   return (
     <WorkspaceInner

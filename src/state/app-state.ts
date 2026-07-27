@@ -7,6 +7,7 @@ import type { StepData, WizardSnapshot, Channel, SourceType } from "@/types/camp
 import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import { defaultCampaignName } from "./scenario-display";
 import {
   estimateArtifactCount,
@@ -208,7 +209,16 @@ export type ArtifactOrigin = "campaign" | "artifacts";
 export type View =
   | { kind: "welcome" }
   | { kind: "survey" }
-  | { kind: "guided-campaign"; initialScenario?: { id: string; name: string } }
+  | {
+      kind: "guided-campaign";
+      initialScenario?: { id: string; name: string };
+      /**
+       * Точечная правка одного шага визарда, открытая кликом по пилюле в
+       * описании карточки. Взаимоисключающе с `initialScenario` — обычный вход
+       * в визард никогда не задаёт `editing`.
+       */
+      editing?: { campaignId: string; step: WizardStepId };
+    }
   | { kind: "workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
@@ -221,7 +231,14 @@ export type View =
 // full View from this address + current campaigns[].
 export type ViewAddress =
   | { kind: "welcome" }
-  | { kind: "guided-campaign"; scenarioId?: string; scenarioName?: string }
+  | {
+      kind: "guided-campaign";
+      scenarioId?: string;
+      scenarioName?: string;
+      /** Точечная правка шага — см. `View["guided-campaign"].editing`. */
+      campaignId?: string;
+      step?: WizardStepId;
+    }
   | { kind: "workflow"; campaignId: string }
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
@@ -340,6 +357,10 @@ export type Action =
   | { type: "campaign_file_removed"; campaignId: string; index: number }
   | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[]; triggerConfig?: Record<string, TriggerDelta> }
   | { type: "campaign_saved_draft"; id: string }
+  // Точечная правка одного шага визарда с карточки (клик по пилюле-тегу в
+  // описании). Открывает guided-campaign в режиме editing без гейта анкеты —
+  // сама кампания уже прошла её при создании.
+  | { type: "campaign_step_edit_requested"; campaignId: string; step: WizardStepId }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
   | { type: "campaign_duplicated"; id: string; newId?: string }
@@ -695,6 +716,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       // граф живёт в локальном стейте редактора — поэтому глобальный стейт здесь
       // не меняется. Экшен сохраняем как точку синхронизации/возможный хук.
       return state;
+
+    case "campaign_step_edit_requested":
+      // Диспатчится из клика по пилюле в описании карточки — кампания уже
+      // отрендерена там из реального состояния, так что дополнительная
+      // проверка существования/снапшота здесь не нужна (в отличие от
+      // rebuildViewFromAddress, который восстанавливает адрес «вслепую»).
+      return {
+        ...state,
+        view: {
+          kind: "guided-campaign",
+          editing: { campaignId: action.campaignId, step: action.step },
+        },
+        activeSection: null,
+      };
 
     case "campaign_created":
       return {
@@ -1391,11 +1426,25 @@ export function appReducer(state: AppState, action: Action): AppState {
   }
 }
 
-function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View {
+export function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View {
   switch (addr.kind) {
     case "welcome":
       return { kind: "welcome" };
-    case "guided-campaign":
+    case "guided-campaign": {
+      if (addr.campaignId && addr.step) {
+        const c = campaigns.find((cc) => cc.id === addr.campaignId);
+        // Открываем правку, только если кампания жива и у неё есть снапшот
+        // визарда (его нет у запущенных кампаний — он удаляется при
+        // переходе в "active"). Иначе деградируем в обычный вход в визард
+        // создания, а не в пустой/сломанный экран.
+        if (c?.wizardData) {
+          return {
+            kind: "guided-campaign",
+            editing: { campaignId: c.id, step: addr.step },
+          };
+        }
+        return { kind: "guided-campaign" };
+      }
       return {
         kind: "guided-campaign",
         initialScenario:
@@ -1403,6 +1452,7 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
             ? { id: addr.scenarioId, name: addr.scenarioName }
             : undefined,
       };
+    }
     case "workflow": {
       const c = campaigns.find((cc) => cc.id === addr.campaignId);
       // If the campaign no longer exists, fall back to campaign list rather than
@@ -1452,6 +1502,8 @@ export function viewToAddress(view: View): ViewAddress {
         kind: "guided-campaign",
         scenarioId: view.initialScenario?.id,
         scenarioName: view.initialScenario?.name,
+        campaignId: view.editing?.campaignId,
+        step: view.editing?.step,
       };
     case "workflow":
       return { kind: "workflow", campaignId: view.campaign.id };
