@@ -6,7 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { DescriptionTag } from "@/state/graph-description";
-import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
+import type { NodeParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
+import type { DomainStatus } from "@/types/account-settings";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import {
@@ -17,6 +18,8 @@ import {
 import { STEP_ICON } from "./wizard/campaign-stepper";
 import { NODE_ICON, NODE_STYLES } from "./node-visuals";
 import { NodeTemplateList } from "./node-template-select";
+import { WaitFields } from "./wait-fields";
+import { DomainStatusBadge } from "@/sections/settings/domains-block";
 
 /**
  * Общая геометрия пилюли. `items-baseline`+`align-baseline` — пилюля сидит НА
@@ -80,6 +83,21 @@ interface DescriptionTagPillProps {
   onActivate?: (tag: DescriptionTag) => void;
   /** Тип ноды для целей `template`/`node-fields` — сам тег его не знает. */
   nodeType?: WorkflowNodeType;
+  /**
+   * Параметры ноды ожидания для цели `node-fields` (Task 8) — резолвятся
+   * вызывающим (`CampaignScreen`, из `launchGraph.nodes`) ТЕМ ЖЕ путём, что и
+   * `nodeType` выше, а не самой пилюлей: она не лезет в кэш графа напрямую.
+   * Без пропа (нода не нашлась) или при несовпадении `kind` (`params.kind !==
+   * "wait"`) пилюля деградирует к обычной кнопке-тултипу ниже — без пустого
+   * поповера.
+   */
+  waitParams?: WaitParams;
+  /** Все домены триггеров кампании со статусами — содержимое поповера цели
+   *  `domains` (Task 8). Приходит от `WorkflowDescription` (тот же проп, что
+   *  описание уже несёт как `facts.domains`), не читается пилюлей из module
+   *  state. Без пропа (или пустого списка) — деградация к обычной
+   *  кнопке-тултипу, как и `node-fields` без резолвнутых params. */
+  domains?: { domain: string; status: DomainStatus }[];
 }
 
 /**
@@ -88,7 +106,13 @@ interface DescriptionTagPillProps {
  * запущенная кампания или шаг, которого нет в её визарде (спека §2.12).
  * Отдельной read-only-ветки поэтому не требуется — это она и есть.
  */
-export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTagPillProps) {
+export function DescriptionTagPill({
+  tag,
+  onActivate,
+  nodeType,
+  waitParams,
+  domains,
+}: DescriptionTagPillProps) {
   const { className, style, Icon } = resolveVisual(tag, nodeType);
   const title = tag.hoverList?.join(", ");
 
@@ -126,6 +150,43 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
     );
   }
 
+  // Пауза (Task 8): содержимое поповера — тот же WaitFields, что нодо-блок
+  // графа несёт внутри себя (самодостаточен, диспатчит workflow_node_field_set
+  // сам). Без резолвнутых waitParams (нода не найдена, либо это не wait-нода —
+  // params.kind !== "wait") падаем ниже, к обычной кнопке-тултипу без
+  // поповера, а не открываем пустой поповер.
+  if (tag.target.kind === "node-fields" && waitParams) {
+    return (
+      <WaitFieldsTagPopover
+        nodeId={tag.target.nodeId}
+        params={waitParams}
+        className={cn(PILL_BASE, className)}
+        style={style}
+        title={title}
+      >
+        {content}
+      </WaitFieldsTagPopover>
+    );
+  }
+
+  // Домены (Task 8): чисто информационный поповер — список ВСЕХ доменов
+  // триггеров кампании (не только «на проверке») с их статусом модерации.
+  // Единственное место продукта, где одобренные/отклонённые домены вообще
+  // видны. Без списка (проп не пришёл или пуст) — деградация к обычной
+  // кнопке-тултипу ниже, как и у node-fields без params.
+  if (tag.target.kind === "domains" && domains && domains.length > 0) {
+    return (
+      <DomainsTagPopover
+        domains={domains}
+        className={cn(PILL_BASE, className)}
+        style={style}
+        title={title}
+      >
+        {content}
+      </DomainsTagPopover>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -147,6 +208,57 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
 }
 
 /**
+ * Общая оболочка «поповер у пилюли» (Task 7 → факторизовано в Task 8, когда
+ * появились ещё два поповера — пауза и домены — и копировать композицию в
+ * третий раз стало неоправданно). Стекует тултип «Нажмите для изменения» и
+ * сам поповер на ОДНОМ DOM-узле триггера: `TooltipTrigger render={<PopoverTrigger
+ * …/>}` — приём, которым уже пользуется `prompt-input.tsx` для
+ * `DropdownMenuTrigger render={<PromptInputButton/>}`. Открытость поповера
+ * остаётся у КАЖДОГО конкретного поповера (`useState` снаружи), а не внутри
+ * оболочки — иначе `TemplateTagPopover` не смог бы закрывать поповер из своих
+ * колбэков выбора/создания (`onSelect`/`onCreate`), а превью специально не
+ * закрывает. Задержку тултипа в 1с отдельно не задаём — она приходит от
+ * единственного `TooltipProvider delay={1000}`, которым `WorkflowDescription`
+ * оборачивает всё описание целиком (спека §2.4/AC17 — тултип обязателен у
+ * ЛЮБОГО интерактивного тега, поповерные — не исключение).
+ */
+function TagPopoverShell({
+  open,
+  onOpenChange,
+  className,
+  style,
+  title,
+  children,
+  contentClassName,
+  content,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  children: ReactNode;
+  contentClassName: string;
+  content: ReactNode;
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <Tooltip>
+        <TooltipTrigger
+          render={<PopoverTrigger className={className} style={style} title={title} />}
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent>Нажмите для изменения</TooltipContent>
+      </Tooltip>
+      <PopoverContent align="start" className={contentClassName}>
+        {content}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
  * Поповер выбора шаблона у тега названия (Task 7). Список — тот же
  * `NodeTemplateList`, что карточка узла графа использует внутри
  * `NodeTemplateSelect`: одна и та же «сходимость» списка, что и раньше была у
@@ -162,18 +274,6 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
  *
  * Превью НЕ закрывает поповер (глазик в списке); «Создать новый шаблон»
  * закрывает — оба поведения зеркалят `NodeTemplateSelect`.
- *
- * Триггер несёт И тултип «Нажмите для изменения» (спека §2.4/AC17 — ЛЮБОЙ
- * интерактивный тег обязан показывать его через секунду наведения; `template`
- * не исключение), И поповер — `TooltipTrigger render={<PopoverTrigger …/>}`
- * стекует два base-ui триггера на одном DOM-узле через их общий
- * `useRenderElement`-merge (тот же приём, что `prompt-input.tsx` уже
- * использует для `DropdownMenuTrigger render={<PromptInputButton/>}`, где
- * `PromptInputButton` сама оборачивает в `Tooltip`). Клик по-прежнему
- * раскрывает список — оба триггера работают одновременно, не взаимоисключающе.
- * Задержку 1с отдельно не задаём — она приходит от единственного
- * `TooltipProvider delay={1000}`, которым `WorkflowDescription` оборачивает
- * всё описание целиком.
  */
 function TemplateTagPopover({
   nodeId,
@@ -202,16 +302,14 @@ function TemplateTagPopover({
   const options = templateOptionsForKind(templates, nodeType);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger
-          render={<PopoverTrigger className={className} style={style} title={title} />}
-        >
-          {children}
-        </TooltipTrigger>
-        <TooltipContent>Нажмите для изменения</TooltipContent>
-      </Tooltip>
-      <PopoverContent align="start" className="w-72 p-0">
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      title={title}
+      contentClassName="w-72 p-0"
+      content={
         <NodeTemplateList
           templates={options}
           selectedName={selectedName}
@@ -233,7 +331,119 @@ function TemplateTagPopover({
             setOpen(false);
           }}
         />
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      {children}
+    </TagPopoverShell>
+  );
+}
+
+/**
+ * Поповер паузы у тега длительности (Task 8). Содержимое — РОВНО тот же
+ * `WaitFields`, что нодо-блок графа несёт внутри себя: компонент
+ * самодостаточен (сам диспатчит `workflow_node_field_set`, сам несёт режим +
+ * длительность/событие), поэтому оболочке достаточно передать ему `nodeId` +
+ * `params` — никакой собственной логики правки здесь нет. Тот же
+ * headless-апплаер (`useCampaignGraphApplier`) и та же цепочка
+ * версия-кэша→редрей описания, что и у поповера шаблона выше — правка не
+ * заводит второй путь применения.
+ *
+ * `onEventAiHandoff` — заглушка: на карточке нет сайдбара ИИ-редактирования
+ * поля (это функция канвасной ноды), а ветка «До события» всё равно доступна
+ * только через кнопку-хэндофф, которую здесь просто некуда вести. Поповер не
+ * закрывается сам — правки полей внутри WaitFields не одноразовый выбор
+ * (как шаблон), а серия независимых полей, каждое со своим собственным
+ * поповером-подменю.
+ */
+function WaitFieldsTagPopover({
+  nodeId,
+  params,
+  className,
+  style,
+  title,
+  children,
+}: {
+  nodeId: string;
+  params: WaitParams;
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      title={title}
+      contentClassName="w-72 p-2.5"
+      content={
+        <div className="flex flex-col gap-0.5">
+          <WaitFields
+            nodeId={nodeId}
+            params={params}
+            readOnly={false}
+            onEventAiHandoff={() => {}}
+          />
+        </div>
+      }
+    >
+      {children}
+    </TagPopoverShell>
+  );
+}
+
+/**
+ * Поповер доменов (Task 8) — чисто информационный, правок не производит.
+ * Перечисляет ВСЕ домены триггеров кампании (не только «на проверке» —
+ * одобренные и отклонённые сегодня больше нигде не видны) с их статусом
+ * модерации через `DomainStatusBadge` из реестра настроек
+ * (`src/sections/settings/domains-block.tsx`) — тот же компонент, что и там,
+ * чтобы формулировка статуса не могла разойтись между реестром и карточкой.
+ */
+function DomainsTagPopover({
+  domains,
+  className,
+  style,
+  title,
+  children,
+}: {
+  domains: { domain: string; status: DomainStatus }[];
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      title={title}
+      contentClassName="w-72 p-2"
+      content={
+        <div className="flex flex-col gap-1.5">
+          {domains.map((d) => (
+            <div
+              key={d.domain}
+              className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5"
+            >
+              <span className="truncate font-mono text-xs text-foreground">
+                {d.domain}
+              </span>
+              <DomainStatusBadge status={d.status} />
+            </div>
+          ))}
+        </div>
+      }
+    >
+      {children}
+    </TagPopoverShell>
   );
 }

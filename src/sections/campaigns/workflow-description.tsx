@@ -7,7 +7,8 @@ import type {
 } from "@/state/graph-description";
 import { DescriptionTagPill } from "./description-tag";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { WorkflowNodeType } from "@/types/workflow";
+import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
+import type { DomainStatus } from "@/types/account-settings";
 
 /**
  * Тип ноды по её id для целей `template`/`node-fields` — сам тег его не несёт
@@ -31,6 +32,22 @@ function nodeTypeForTag(
         ? target.nodeId
         : undefined;
   return nodeId !== undefined ? nodeTypes?.get(nodeId) : undefined;
+}
+
+/**
+ * Параметры ноды ожидания для цели `node-fields` (Task 8) — тем же путём, что
+ * и `nodeTypeForTag` выше: лукап строится вызывающим (`CampaignScreen`, из
+ * `launchGraph.nodes`), пилюля в кэш графа не лезет. `undefined`, если ноду не
+ * нашли ИЛИ она не «wait» (`params.kind !== "wait"`) — в обоих случаях пилюля
+ * рендерится без поповера, а не с пустым.
+ */
+function waitParamsForTag(
+  tag: DescriptionTag,
+  nodeParams: Map<string, NodeParams> | undefined,
+) {
+  if (tag.target.kind !== "node-fields") return undefined;
+  const params = nodeParams?.get(tag.target.nodeId);
+  return params?.kind === "wait" ? params : undefined;
 }
 
 /** Знаки, которые в тексте описания всегда стоят СРАЗУ за предыдущим словом,
@@ -94,6 +111,14 @@ interface WorkflowDescriptionProps {
   /** nodeId → nodeType — красит пилюли `template`/`node-fields` под цвет узла
    *  графа (Task 6). Без пропа все пилюли этих целей остаются нейтральными. */
   nodeTypes?: Map<string, WorkflowNodeType>;
+  /** nodeId → params ноды — содержимое поповера паузы (Task 8), резолвится
+   *  ТЕМ ЖЕ лукапом, что и `nodeTypes` (из `launchGraph.nodes` в
+   *  `CampaignScreen`). Без пропа пилюля `node-fields` остаётся без поповера. */
+  nodeParams?: Map<string, NodeParams>;
+  /** Все домены триггеров кампании со статусами — содержимое поповера
+   *  доменов (Task 8), тот же `facts.domains`, что уже строит
+   *  `CampaignScreen`. Без пропа пилюля `domains` остаётся без поповера. */
+  domains?: { domain: string; status: DomainStatus }[];
 }
 
 /**
@@ -113,6 +138,8 @@ export function WorkflowDescription({
   stageSlots,
   onTagActivate,
   nodeTypes,
+  nodeParams,
+  domains,
 }: WorkflowDescriptionProps) {
   if (!stages.length) return null;
 
@@ -137,6 +164,8 @@ export function WorkflowDescription({
                     tag={segment.tag}
                     onActivate={onTagActivate}
                     nodeType={nodeTypeForTag(segment.tag, nodeTypes)}
+                    waitParams={waitParamsForTag(segment.tag, nodeParams)}
+                    domains={domains}
                   />
                 ),
               )}

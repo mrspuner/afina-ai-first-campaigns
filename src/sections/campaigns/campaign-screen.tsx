@@ -48,7 +48,7 @@ import { formatRubPlain } from "@/lib/format-rub";
 import { scoringLineDisplay, FALLBACK_BASE } from "./campaign-payment-screen";
 import { stepsForIntent } from "./wizard/wizard-steps";
 import type { AnalysisMode } from "@/types/campaign";
-import type { WorkflowNodeType } from "@/types/workflow";
+import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -175,6 +175,15 @@ export function CampaignScreen() {
   // здесь, где launchGraph уже под рукой, и передаётся вниз в WorkflowDescription.
   const nodeTypes = new Map<string, WorkflowNodeType>(
     (launchGraph?.nodes ?? []).map((n) => [n.id, n.data.nodeType]),
+  );
+  // nodeId → params — содержимое поповера паузы (Task 8): пилюля `node-fields`
+  // получает WaitParams этим же лукапом, а не читает кэш графа сама (см.
+  // description-tag.tsx). Ноды без params (не comm/wait-ноды) не попадают в
+  // карту — .filter отсеивает их, а не молча кладёт undefined в значение.
+  const nodeParams = new Map<string, NodeParams>(
+    (launchGraph?.nodes ?? [])
+      .filter((n) => n.data.params !== undefined)
+      .map((n) => [n.id, n.data.params as NodeParams]),
   );
 
   if (view.kind !== "campaign") return null;
@@ -371,6 +380,8 @@ export function CampaignScreen() {
           <WorkflowDescription
             stages={descriptionStages}
             nodeTypes={nodeTypes}
+            nodeParams={nodeParams}
+            domains={facts.domains}
             onTagActivate={handleTagActivate}
           />
           <div className="flex flex-col gap-3 border-t border-border pt-5">

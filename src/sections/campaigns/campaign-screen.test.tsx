@@ -316,6 +316,38 @@ describe("CampaignScreen — поповер выбора шаблона у те�
   });
 });
 
+describe("CampaignScreen — поповер паузы у тега длительности (Task 8)", () => {
+  it("правка длительности в поповере паузы переписывает params ноды — описание перерисовывается", async () => {
+    // То же доказательство редрея, что и у поповера шаблона (Task 7) выше, но
+    // для второй цели поповера (node-fields): дефолтная пауза повтора Апсейла
+    // — «2 дня» (durationHours: 48). Меняем её через ВЛОЖЕННЫЙ поповер поля
+    // «Длительность» внутри WaitFields (тот же компонент, что несёт нодо-блок
+    // графа) и проверяем, что ИМЕННО пилюля «2 дня» сама сменила подпись на
+    // «5 дней» — признак того, что workflow_node_field_set дошёл до
+    // durable-кэша через headless useCampaignGraphApplier (граф-канвас на
+    // карточке не смонтирован, иначе слот некому было бы обработать) и
+    // CampaignScreen перерисовал описание с новой версией кэша.
+    const id = "cmp_wait_popover";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "2 дня" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Длительность»" }),
+    );
+    fireEvent.change(screen.getByLabelText("Число"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "дней" }));
+
+    expect(await screen.findByRole("button", { name: "5 дней" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2 дня" })).toBeNull();
+    // Кэш реально переписан (не только видимость).
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "wait" && (n.data.params as { durationHours?: number }).durationHours === 120,
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("CampaignScreen — #25 «Статус кампании» block removed", () => {
   it("does not render a «Статус кампании» section for an active campaign", () => {
     renderCampaign(

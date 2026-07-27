@@ -32,7 +32,13 @@ const DOMAIN_STATUS_TONE: Record<DomainStatus, string> = {
     "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
 };
 
-function DomainStatusBadge({ status }: { status: DomainStatus }) {
+/**
+ * Единственный источник формулировок статуса модерации домена — экспортирован
+ * (Task 8), чтобы поповер тега доменов на карточке кампании (`description-tag.tsx`)
+ * рендерил РОВНО те же слова/тон, что и этот реестр, а не заводил собственную
+ * копию карты статусов, которая рано или поздно разъедется с этой.
+ */
+export function DomainStatusBadge({ status }: { status: DomainStatus }) {
   return (
     <span
       className={cn(
