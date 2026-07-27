@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Database, Gauge, MessageSquare, Plug, Repeat, Route, Target, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 
@@ -14,6 +14,21 @@ export const STEP_LABELS: Record<WizardStepId, string> = {
   integration: "Интеграция",
   channels: "Каналы",
   budget: "Бюджет",
+};
+
+/**
+ * Иконка шага для тега-пилюли в описании кампании. Парная `STEP_LABELS`:
+ * держим рядом, чтобы новый шаг нельзя было завести с подписью, но без иконки.
+ */
+export const STEP_ICON: Record<WizardStepId, LucideIcon> = {
+  scenario: Route,
+  intent: Target,
+  interests: Gauge,
+  analysis: Repeat,
+  file: Database,
+  integration: Plug,
+  channels: MessageSquare,
+  budget: Wallet,
 };
 
 interface CampaignStepperProps {
