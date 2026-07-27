@@ -944,60 +944,108 @@ export function mergeChannelNodes(
       }
     }
   } else if (nextChannels.length > 0) {
-    // Коммуникаций не осталось нигде, но новый набор каналов НЕ пуст —
-    // подключаем недостающие каналы в места, освободившиеся при удалении в
-    // этом же вызове (по одному на каждую позицию — первый проход и повтор
-    // порождают РАЗНЫЕ мостики, иначе схлопнутся в одну ноду), либо — если
-    // коммуникаций не было никогда («без коммуникации», bug 2a/2b) — в
-    // единственный путь «Сигнал → Успех». Если nextChannels пуст, добавлять
-    // нечего — уже вычисленные мостики (или изначальное отсутствие комм-нод)
-    // и есть корректный итог, трогать их дальше не нужно.
-    type Position = { sources: string[]; targets: string[]; label?: string };
-    let positions: Position[];
+    // Коммуникаций не осталось нигде, но новый набор каналов НЕ пуст. Если
+    // condition-ноды («Взаимодействие») где-то ещё остались — юнит
+    // retry-цепочки (условие/задержка/повтор) уже существует (например, после
+    // раздельных «опустошили → заполнили» вызовов) и трогать его нельзя;
+    // просто находим места входа. Если condition-нод нет вовсе — коммуникации
+    // не было никогда («без коммуникации», bug 2a/2b) — и нужно построить
+    // ПОЛНОЦЕННЫЙ юнит через buildCommUnit (тот же билдер, что и
+    // createTemplate), а не голый блок каналов: иначе не будет retry-доли по
+    // DYNAMIC_RATE, и стоимость разойдётся с чистой пересборкой (Fix round 2,
+    // Important finding — "рёбра в успех" перестают быть однозначным
+    // ориентиром, как только в графе есть condition-ноды: у cond1 и cond2 ОБЕ
+    // YES-ветки ведут в success).
+    const conditionNodes = nodes.filter((nd) => nd.data.nodeType === "condition");
 
-    if (bridgesCreated.length > 0) {
+    if (conditionNodes.length > 0) {
+      type Position = { sources: string[]; targets: string[]; label?: string };
       const seen = new Set<string>();
-      positions = [];
-      for (const b of bridgesCreated) {
-        const key = `${b.source}|${b.target}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        positions.push({ sources: [b.source], targets: [b.target], label: b.label as string | undefined });
+      const positions: Position[] = [];
+      for (const cond of conditionNodes) {
+        for (const inEdge of edges.filter((ed) => ed.target === cond.id)) {
+          const key = `${inEdge.source}|${inEdge.target}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          positions.push({ sources: [inEdge.source], targets: [cond.id], label: inEdge.label as string | undefined });
+        }
       }
+
+      positions.forEach((pos) => {
+        const block = buildChannelBlock(nextChannels, `merged_${freshIndex++}`, true);
+
+        // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
+        // сообщение получит окольный путь мимо новых каналов.
+        edges = edges.filter(
+          (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
+        );
+
+        const baseX = (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
+        const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
+        const baseY = columnNodes.length
+          ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
+          : 0;
+
+        const placedNodes = block.nodes.map((nd) => ({
+          ...nd,
+          position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
+        }));
+
+        nodes = [...nodes, ...placedNodes];
+        edges = dedupeEdges([
+          ...edges,
+          ...pos.sources.map((src) => e(src, block.entryId, pos.label)),
+          ...block.edges,
+          ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
+        ]);
+      });
     } else {
-      positions = edges
-        .filter((ed) => nodes.find((nd) => nd.id === ed.target)?.data.isSuccess)
-        .map((ed) => ({ sources: [ed.source], targets: [ed.target] }));
+      const successNode = nodes.find((nd) => nd.data.isSuccess);
+      if (successNode) {
+        const predecessorEdges = edges.filter((ed) => ed.target === successNode.id);
+        predecessorEdges.forEach((predEdge) => {
+          const predecessorNode = nodes.find((nd) => nd.id === predEdge.source);
+          if (!predecessorNode) return;
+
+          const idx = freshIndex++;
+          const baseX = predecessorNode.position.x + STEP;
+          const endId = `merged_end_${idx}`;
+          const unit = buildCommUnit(nextChannels, {
+            prefix: `merged_${idx}`,
+            onEngaged: successNode.id,
+            onExhausted: endId,
+            xOffset: baseX,
+            yOffset: predecessorNode.position.y,
+            useTemplateParams: true,
+          });
+          // «Без коммуникации» никогда не строил свой «Конец» — его нет, и
+          // retry-цепочке нужен реальный узел для НЕТ-ветки второго условия.
+          const endNode = n(
+            endId,
+            "Конец",
+            "end",
+            baseX + estimateUnitWidth(nextChannels),
+            predecessorNode.position.y + 80,
+            undefined,
+            undefined,
+            { kind: "end" }
+          );
+
+          // Убираем прямой обход «Сигнал → Успех» — сообщение должно пройти
+          // через новый юнит, а не мимо него.
+          edges = edges.filter(
+            (ed) => !(ed.source === predEdge.source && ed.target === predEdge.target)
+          );
+
+          nodes = [...nodes, ...unit.nodes, endNode];
+          edges = dedupeEdges([
+            ...edges,
+            e(predecessorNode.id, unit.entryId, predEdge.label as string | undefined),
+            ...unit.edges,
+          ]);
+        });
+      }
     }
-
-    positions.forEach((pos) => {
-      const block = buildChannelBlock(nextChannels, `merged_${freshIndex++}`, true);
-
-      // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
-      // сообщение получит окольный путь мимо новых каналов.
-      edges = edges.filter(
-        (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
-      );
-
-      const baseX = (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
-      const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
-      const baseY = columnNodes.length
-        ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
-        : 0;
-
-      const placedNodes = block.nodes.map((nd) => ({
-        ...nd,
-        position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
-      }));
-
-      nodes = [...nodes, ...placedNodes];
-      edges = dedupeEdges([
-        ...edges,
-        ...pos.sources.map((src) => e(src, block.entryId, pos.label)),
-        ...block.edges,
-        ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
-      ]);
-    });
   }
 
   // ── Нормализация числа веток ────────────────────────────────────────────

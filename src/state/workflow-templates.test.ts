@@ -599,7 +599,7 @@ describe("mergeChannelNodes", () => {
   // Оба сценария ниже не описаны в брифе явно, но их код-путь — "коммуникационных
   // нод не осталось вовсе" (шаг 5 брифа) — иначе не покрыт ни одним тестом.
   describe("добавление, когда коммуникационных нод не осталось вовсе", () => {
-    it("канал, добавленный к «без коммуникации» графу (bug 2a/2b), встаёт между Сигналом и Успехом", () => {
+    it("канал, добавленный к «без коммуникации» графу (bug 2a/2b), встаёт в полноценный retry-юнит (условие/задержка/повтор)", () => {
       // own + explicitly empty channels[] → minimalTemplate: Сигнал → Успех, без comm-нод вовсе.
       const graph = createTemplate("Реактивация", "own", []);
       const signal = graph.nodes.find((n) => n.data.nodeType === "signal")!;
@@ -612,11 +612,28 @@ describe("mergeChannelNodes", () => {
       expect(merged.nodes.some((n) => n.data.nodeType === "push")).toBe(true);
       assertFullyReachableFromSingleRoot(merged);
 
+      // Fix round 2: канал не просто "встаёт между Сигналом и Успехом" —
+      // он встаёт в ПОЛНОЦЕННЫЙ retry-юнит (condition/wait/repeat/condition),
+      // как чистая пересборка createTemplate(...,["push"]) — иначе стоимость
+      // разойдётся (нет "repeat"-доли по DYNAMIC_RATE).
+      expect(merged.nodes.filter((n) => n.data.nodeType === "condition")).toHaveLength(2);
+      expect(merged.nodes.filter((n) => n.data.nodeType === "wait")).toHaveLength(1);
+      expect(merged.nodes.filter((n) => n.data.nodeType === "push")).toHaveLength(2); // первый проход + повтор
+      expect(merged.nodes.some((n) => n.data.nodeType === "end")).toBe(true); // «без коммуникации» его не строил
+
       // Прямой обход коммуникации убран — иначе письмо получило бы окольный
       // путь мимо только что добавленного канала.
       expect(merged.edges).not.toContainEqual(
         expect.objectContaining({ source: signal.id, target: success.id }),
       );
+
+      const mergedCost = computeCampaignCost(merged.nodes, merged.edges, 10_000);
+      const freshCost = computeCampaignCost(
+        createTemplate("Реактивация", "own", ["push"]).nodes,
+        createTemplate("Реактивация", "own", ["push"]).edges,
+        10_000,
+      );
+      expect(mergedCost.total).toBe(freshCost.total);
     });
 
     it("замена канала другим за один вызов: старый уходит из обоих проходов, новый встаёт на оба освободившихся места", () => {
@@ -746,5 +763,58 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
 
   it("тот же сценарий, own-источник (без скоринга) — линейный", () => {
     assertCostParity("Возврат", "own", ["sms", "email"], ["push"]);
+  });
+
+  // Fix round 2 (Important finding) — граф БЕЗ единой коммуникационной ноды:
+  // либо «без коммуникации» с самого начала (channels=[], bug 2a/2b), либо
+  // результат отдельного предыдущего merge, опустошившего канал. Раньше
+  // добавление сюда ориентировалось на "рёбра, ведущие в success" — ломается,
+  // как только в графе есть condition-ноды (у обоих — cond1 и cond2 — YES
+  // ведёт в success, так что этот ориентир перестаёт быть однозначным).
+  it("«без коммуникации» с самого начала: [] → [\"sms\"] даёт ту же стоимость, что и чистая пересборка", () => {
+    assertCostParity("Реактивация", "new", [], ["sms"]);
+  });
+
+  it("двухшаговый сценарий «опустошили → заполнили» (ровно то, что делает пользователь свапом каналов за 2 клика)", () => {
+    const original = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const emptied = mergeChannelNodes(original, []); // шаг 1: канал очищен — этот вызов НЕ добавляет ничего
+    const refilled = mergeChannelNodes(emptied, ["sms"]); // шаг 2: отдельный вызов, bridgesCreated этого вызова пуст
+    const fresh = createTemplate("Реактивация", "new", ["sms"]);
+
+    const ids = new Set(refilled.nodes.map((n) => n.id));
+    for (const edge of refilled.edges) {
+      expect(ids.has(edge.source), `висячее ребро ${edge.source}→${edge.target}`).toBe(true);
+      expect(ids.has(edge.target), `висячее ребро ${edge.source}→${edge.target}`).toBe(true);
+    }
+    assertFullyReachableFromSingleRoot(refilled);
+
+    const refilledCost = computeCampaignCost(refilled.nodes, refilled.edges, N);
+    const freshCost = computeCampaignCost(fresh.nodes, fresh.edges, N);
+    expect(refilledCost.total).toBe(freshCost.total);
+    expect(refilledCost.primary).toBe(freshCost.primary);
+    expect(refilledCost.repeat).toBe(freshCost.repeat);
+  });
+
+  it("двухшаговый сценарий, сегментированный сценарий («Апсейл»)", () => {
+    const original = createTemplate("Апсейл", "new", ["sms"]);
+    const emptied = mergeChannelNodes(original, []);
+    const refilled = mergeChannelNodes(emptied, ["sms", "push"]);
+    const fresh = createTemplate("Апсейл", "new", ["sms", "push"]);
+
+    assertFullyReachableFromSingleRoot(refilled);
+    const refilledCost = computeCampaignCost(refilled.nodes, refilled.edges, N);
+    const freshCost = computeCampaignCost(fresh.nodes, fresh.edges, N);
+    expect(refilledCost.total).toBe(freshCost.total);
+
+    // Метки сегментов на рёбрах сплиттера "по сегменту" не теряются через
+    // опустошение и повторное заполнение (дёшево проверить, раз уже здесь).
+    const segSplit = refilled.nodes.find(
+      (nd) => nd.data.nodeType === "split" && nd.data.params?.kind === "split" && nd.data.params.by === "segment",
+    )!;
+    const segLabels = refilled.edges
+      .filter((ed) => ed.source === segSplit.id)
+      .map((ed) => ed.label)
+      .sort();
+    expect(segLabels).toEqual(["Выс", "Низ", "Макс", "Ср"].sort());
   });
 });
