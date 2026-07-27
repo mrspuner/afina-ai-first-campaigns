@@ -15,12 +15,19 @@ import {
 
 const HISTORY_KEY = "__afina_view__";
 
-function addressKey(a: ViewAddress): string {
+/** Exported for a focused unit test — see `use-view-history.test.ts`. */
+export function addressKey(a: ViewAddress): string {
   switch (a.kind) {
     case "welcome":
       return a.kind;
     case "guided-campaign":
-      return `guided-campaign:${a.scenarioId ?? ""}`;
+      // Ключ ОБЯЗАН включать campaignId/step: это цель точечной правки шага
+      // (Task 11). Без них два разных point-edit адреса (одна и та же или
+      // разные кампании, разные шаги) схлопнутся в один ключ — pushState
+      // пропустится, и Back из визарда перепрыгнет через промежуточный шаг
+      // вместо честного возврата на предыдущий. Именно эту деградацию адрес
+      // и должен был исключить.
+      return `guided-campaign:${a.campaignId ?? a.scenarioId ?? ""}:${a.step ?? ""}`;
     case "workflow":
       return `workflow:${a.campaignId}`;
     case "campaign":
