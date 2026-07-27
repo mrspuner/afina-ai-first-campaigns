@@ -3,6 +3,8 @@ import {
   getCachedGraph,
   setCachedGraph,
   copyCachedGraph,
+  invalidateCachedGraph,
+  getGraphVersion,
 } from "./workflow-graph-cache";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
@@ -40,5 +42,24 @@ describe("workflow-graph-cache — copyCachedGraph (#10 duplicate 1-to-1)", () =
     copyCachedGraph("src3", undefined);
     // no throw, source untouched
     expect(getCachedGraph("src3")).toBeDefined();
+  });
+});
+
+describe("workflow-graph-cache — invalidateCachedGraph (сброс при смене сценария)", () => {
+  it("удаляет закэшированный граф и поднимает версию, чтобы подписчики перерендерились", () => {
+    setCachedGraph("inv1", { nodes: nodesOf("оригинал"), edges });
+    expect(getCachedGraph("inv1")).toBeDefined();
+
+    const versionBefore = getGraphVersion();
+    invalidateCachedGraph("inv1");
+
+    expect(getCachedGraph("inv1")).toBeUndefined();
+    expect(getGraphVersion()).toBeGreaterThan(versionBefore);
+  });
+
+  it("не падает без campaignId (no-op)", () => {
+    const versionBefore = getGraphVersion();
+    invalidateCachedGraph(undefined);
+    expect(getGraphVersion()).toBe(versionBefore);
   });
 });

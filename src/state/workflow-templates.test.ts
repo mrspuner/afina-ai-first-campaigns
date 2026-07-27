@@ -4,6 +4,7 @@ import {
   createTemplate,
   applyCampaignContext,
   fileSummaryLine,
+  mergeChannelNodes,
 } from "./workflow-templates";
 import { validateWorkflow } from "./workflow-validation";
 import type { SignalType } from "./app-state";
@@ -430,5 +431,166 @@ describe("applyCampaignContext — signal node files (spec C)", () => {
     const signal = out.nodes.find((n) => n.data.params?.kind === "signal");
     const params = signal!.data.params as SignalParams;
     expect(params.files ?? []).toEqual([]);
+  });
+});
+
+/**
+ * Все узлы, достижимые из единственного корня графа (нода без входящих
+ * рёбер), проверяются обходом в ширину — переиспользуется в тестах ниже,
+ * чтобы не дублировать одну и ту же проверку связности графа.
+ */
+function assertFullyReachableFromSingleRoot(graph: {
+  nodes: { id: string }[];
+  edges: { source: string; target: string }[];
+}) {
+  const hasIncoming = new Set(graph.edges.map((e) => e.target));
+  const roots = graph.nodes.filter((n) => !hasIncoming.has(n.id));
+  expect(roots).toHaveLength(1);
+
+  const adjacency = new Map<string, string[]>();
+  for (const e of graph.edges) {
+    adjacency.set(e.source, [...(adjacency.get(e.source) ?? []), e.target]);
+  }
+  const seen = new Set([roots[0].id]);
+  const queue = [roots[0].id];
+  while (queue.length) {
+    for (const next of adjacency.get(queue.shift()!) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      queue.push(next);
+    }
+  }
+  expect(seen.size).toBe(graph.nodes.length);
+}
+
+// "Реактивация" — реальный SignalType (не сегментированный: не входит в
+// SEGMENTED_TYPES). Через channel-aware путь (createTemplate с channels)
+// buildCommUnit гарантированно добавляет wait + 2 condition-ноды независимо
+// от типа сигнала, так что тест "задержки и условия остаются нетронутыми"
+// действительно что-то проверяет.
+describe("mergeChannelNodes", () => {
+  it("снятый канал уходит вместе со своими рёбрами", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const merged = mergeChannelNodes(graph, ["sms"]);
+    expect(merged.nodes.some((n) => n.data.nodeType === "email")).toBe(false);
+    const ids = new Set(merged.nodes.map((n) => n.id));
+    for (const e of merged.edges) {
+      expect(ids.has(e.source), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+      expect(ids.has(e.target), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+    }
+  });
+
+  it("цепочка не рвётся: путь от корня до конца сохраняется", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const merged = mergeChannelNodes(graph, ["sms"]);
+    assertFullyReachableFromSingleRoot(merged);
+  });
+
+  it("отредактированные вручную тексты остальных узлов сохраняются", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const sms = graph.nodes.find((n) => n.data.nodeType === "sms")!;
+    sms.data.params = { ...sms.data.params, text: "Правка руками" } as typeof sms.data.params;
+    const merged = mergeChannelNodes(graph, ["sms"]);
+    const keptSms = merged.nodes.find((n) => n.data.nodeType === "sms")!;
+    expect((keptSms.data.params as { text: string }).text).toBe("Правка руками");
+  });
+
+  it("новый канал добавляется нодой по умолчанию", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms"]);
+    const merged = mergeChannelNodes(graph, ["sms", "push"]);
+    expect(merged.nodes.some((n) => n.data.nodeType === "push")).toBe(true);
+  });
+
+  it("задержки и условия остаются нетронутыми", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const before = graph.nodes.filter((n) =>
+      ["wait", "condition", "split"].includes(n.data.nodeType),
+    ).length;
+    const merged = mergeChannelNodes(graph, ["sms"]);
+    const after = merged.nodes.filter((n) =>
+      ["wait", "condition", "split"].includes(n.data.nodeType),
+    ).length;
+    expect(after).toBe(before);
+  });
+
+  it("тот же набор каналов граф не меняет", () => {
+    const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
+    const merged = mergeChannelNodes(graph, ["sms", "email"]);
+    expect(merged.nodes.map((n) => n.id)).toEqual(graph.nodes.map((n) => n.id));
+  });
+
+  // "Апсейл" — сегментированный сценарий (SEGMENTED_TYPES): buildSegmentedChannelTemplate
+  // строит по одному comm-юниту НА КАЖДЫЙ из трёх активных сегментов (макс/выс/ср),
+  // а каждый comm-юнит сам дублирует каналы (первый проход + повтор). Значит
+  // "email" при channels=["sms","email"] встречается тут 6 раз (3 сегмента × 2
+  // прохода) — ровно тот случай, где мерж "по одной ноде на канал" бы сломался.
+  describe("сегментированный сценарий (несколько параллельных юнитов на канал)", () => {
+    it("снятый канал уходит из ВСЕХ сегментов без висячих рёбер", () => {
+      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
+      const emailCountBefore = graph.nodes.filter((n) => n.data.nodeType === "email").length;
+      expect(emailCountBefore).toBeGreaterThan(1); // предпосылка теста — каналов правда несколько
+
+      const merged = mergeChannelNodes(graph, ["sms"]);
+      expect(merged.nodes.some((n) => n.data.nodeType === "email")).toBe(false);
+
+      const ids = new Set(merged.nodes.map((n) => n.id));
+      for (const e of merged.edges) {
+        expect(ids.has(e.source), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+        expect(ids.has(e.target), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+      }
+    });
+
+    it("после удаления канала из всех сегментов граф остаётся полностью связным", () => {
+      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
+      const merged = mergeChannelNodes(graph, ["sms"]);
+      assertFullyReachableFromSingleRoot(merged);
+    });
+
+    it("сплиттер сегментов и внутренние сплиттеры каналов не трогаются", () => {
+      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
+      const before = graph.nodes.filter((n) => n.data.nodeType === "split").length;
+      const merged = mergeChannelNodes(graph, ["sms"]);
+      const after = merged.nodes.filter((n) => n.data.nodeType === "split").length;
+      expect(after).toBe(before);
+    });
+  });
+
+  // Оба сценария ниже не описаны в брифе явно, но их код-путь — "коммуникационных
+  // нод не осталось вовсе" (шаг 5 брифа) — иначе не покрыт ни одним тестом.
+  describe("добавление, когда коммуникационных нод не осталось вовсе", () => {
+    it("канал, добавленный к «без коммуникации» графу (bug 2a/2b), встаёт между Сигналом и Успехом", () => {
+      // own + explicitly empty channels[] → minimalTemplate: Сигнал → Успех, без comm-нод вовсе.
+      const graph = createTemplate("Реактивация", "own", []);
+      const signal = graph.nodes.find((n) => n.data.nodeType === "signal")!;
+      const success = graph.nodes.find((n) => n.data.isSuccess)!;
+      expect(graph.edges).toContainEqual(
+        expect.objectContaining({ source: signal.id, target: success.id }),
+      );
+
+      const merged = mergeChannelNodes(graph, ["push"]);
+      expect(merged.nodes.some((n) => n.data.nodeType === "push")).toBe(true);
+      assertFullyReachableFromSingleRoot(merged);
+
+      // Прямой обход коммуникации убран — иначе письмо получило бы окольный
+      // путь мимо только что добавленного канала.
+      expect(merged.edges).not.toContainEqual(
+        expect.objectContaining({ source: signal.id, target: success.id }),
+      );
+    });
+
+    it("замена канала другим за один вызов: старый уходит из обоих проходов, новый встаёт на оба освободившихся места", () => {
+      const graph = createTemplate("Реактивация", "own", ["sms"]);
+      const merged = mergeChannelNodes(graph, ["push"]);
+
+      expect(merged.nodes.some((n) => n.data.nodeType === "sms")).toBe(false);
+      expect(merged.nodes.filter((n) => n.data.nodeType === "push")).toHaveLength(2);
+      assertFullyReachableFromSingleRoot(merged);
+
+      const ids = new Set(merged.nodes.map((n) => n.id));
+      for (const e of merged.edges) {
+        expect(ids.has(e.source), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+        expect(ids.has(e.target), `висячее ребро ${e.source}→${e.target}`).toBe(true);
+      }
+    });
   });
 });

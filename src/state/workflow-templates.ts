@@ -1,16 +1,17 @@
 import type { SignalType } from "./app-state";
 import type { SourceType } from "@/types/campaign";
-import type {
-  NodeParams,
-  WorkflowNode,
-  WorkflowEdge,
-  WorkflowNodeType,
-  WorkflowNodeData,
-  CampaignFile,
+import {
+  isCommunicationNode,
+  type NodeParams,
+  type WorkflowNode,
+  type WorkflowEdge,
+  type WorkflowNodeType,
+  type WorkflowNodeData,
+  type CampaignFile,
 } from "@/types/workflow";
 
 import type { Channel } from "@/types/campaign";
-import { buildCommUnit } from "./channel-nodes";
+import { buildCommUnit, buildChannelBlock, CHANNEL_Y_SPACING } from "./channel-nodes";
 import { pluralRu } from "@/lib/plural-ru";
 
 export interface Template {
@@ -661,4 +662,150 @@ export function applyCampaignContext(
   });
 
   return { nodes, edges: t.edges };
+}
+
+// ── mergeChannelNodes ─────────────────────────────────────────────────────────
+
+/** Убирает повторы рёбер по паре source|target — реконнект может воспроизвести уже существующее ребро. */
+function dedupeEdges(edges: WorkflowEdge[]): WorkflowEdge[] {
+  const seen = new Set<string>();
+  const result: WorkflowEdge[] = [];
+  for (const edge of edges) {
+    const key = `${edge.source}|${edge.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(edge);
+  }
+  return result;
+}
+
+/**
+ * Мерж графа под новый набор каналов — смена каналов не должна стоить
+ * пользователю ручных и ИИ-правок остального графа.
+ *
+ * Снятые каналы: коммуникационные ноды удаляются, а их входящие рёбра
+ * переподключаются на цели исходящих — иначе цепочка порвалась бы и часть
+ * графа осталась недостижимой. Один и тот же канал может встречаться в графе
+ * несколько раз (первый проход/повтор в `buildCommUnit`, несколько
+ * сегментов в `buildSegmentedChannelTemplate`) — удаление обрабатывает КАЖДУЮ
+ * такую ноду по отдельности, а не по одной на канал.
+ *
+ * Новые каналы: добавляются ноды по умолчанию, параллельно уже существующей
+ * коммуникации первого прохода (те же входящие источники и те же исходящие
+ * цели — как дополнительная ветка, без слияния). Если коммуникационных нод не
+ * осталось вовсе, подключение идёт в места, освободившиеся при удалении в
+ * этом же вызове (по одному на каждый проход, иначе первый и повторный проход
+ * схлопнутся в одну ноду), либо — если коммуникаций не было никогда
+ * («без коммуникации», bug 2a/2b) — в единственный путь «Сигнал → Успех»
+ * минимального шаблона.
+ *
+ * Задержки, условия, разветвления и отредактированные тексты остальных нод не
+ * трогаются вовсе.
+ */
+export function mergeChannelNodes(
+  graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
+  nextChannels: Channel[]
+): { nodes: WorkflowNode[]; edges: WorkflowEdge[] } {
+  const nextSet = new Set(nextChannels);
+
+  let nodes = [...graph.nodes];
+  let edges = [...graph.edges];
+  // Рёбра, "перекинутые" на месте снятых нод в этом вызове — если после
+  // удаления коммуникаций не осталось вовсе, они подсказывают, куда
+  // подключать новые каналы (см. ветку добавления ниже).
+  const bridgesCreated: WorkflowEdge[] = [];
+
+  // ── Снятые каналы ───────────────────────────────────────────────────────
+  for (const node of graph.nodes) {
+    const nodeType = node.data.nodeType;
+    if (!isCommunicationNode(nodeType) || nextSet.has(nodeType as Channel)) continue;
+
+    // Живой список edges (а не исходный graph.edges) — если удаляемые ноды
+    // образуют цепочку, переподключение первой должно быть видно при
+    // обработке следующей.
+    const incoming = edges.filter((ed) => ed.target === node.id);
+    const outgoing = edges.filter((ed) => ed.source === node.id);
+    const bridges = incoming.flatMap((inEdge) =>
+      outgoing.map((outEdge) => e(inEdge.source, outEdge.target))
+    );
+
+    edges = dedupeEdges([
+      ...edges.filter((ed) => ed.source !== node.id && ed.target !== node.id),
+      ...bridges,
+    ]);
+    bridgesCreated.push(...bridges);
+    nodes = nodes.filter((nd) => nd.id !== node.id);
+  }
+
+  // ── Новые каналы ────────────────────────────────────────────────────────
+  const remainingComm = nodes.filter((nd) => isCommunicationNode(nd.data.nodeType));
+  const existingChannels = new Set(remainingComm.map((nd) => nd.data.nodeType as Channel));
+  const toAdd = nextChannels.filter((ch) => !existingChannels.has(ch));
+  if (toAdd.length === 0) return { nodes, edges };
+
+  // Существующая коммуникационная нода первого прохода (по порядку в массиве
+  // нод она и есть первый проход — repeat-блок всегда добавляется позже).
+  const anchor = remainingComm[0];
+
+  type Position = { sources: string[]; targets: string[] };
+  let positions: Position[];
+
+  if (anchor) {
+    positions = [
+      {
+        sources: edges.filter((ed) => ed.target === anchor.id).map((ed) => ed.source),
+        targets: edges.filter((ed) => ed.source === anchor.id).map((ed) => ed.target),
+      },
+    ];
+  } else if (bridgesCreated.length > 0) {
+    const seen = new Set<string>();
+    positions = [];
+    for (const b of bridgesCreated) {
+      const key = `${b.source}|${b.target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      positions.push({ sources: [b.source], targets: [b.target] });
+    }
+  } else {
+    // Коммуникаций не было вовсе («без коммуникации») — единственное место в
+    // минимальном шаблоне: рёбра, ведущие в успех.
+    positions = edges
+      .filter((ed) => nodes.find((nd) => nd.id === ed.target)?.data.isSuccess)
+      .map((ed) => ({ sources: [ed.source], targets: [ed.target] }));
+  }
+
+  positions.forEach((pos, i) => {
+    // Комм-ноды авто-заполняются шаблонами («магия» #2) — новый канал не
+    // блокирует запуск пустым текстом.
+    const block = buildChannelBlock(toAdd, `merged_${i}`, true);
+
+    if (!anchor) {
+      // Убираем сквозное ребро в обход коммуникации на этом месте — иначе
+      // сообщение получит окольный путь мимо новых каналов.
+      edges = edges.filter(
+        (ed) => !(pos.sources.includes(ed.source) && pos.targets.includes(ed.target))
+      );
+    }
+
+    const baseX = anchor ? anchor.position.x : (nodes.find((nd) => nd.id === pos.sources[0])?.position.x ?? 0) + STEP;
+    const columnNodes = nodes.filter((nd) => nd.position.x === baseX);
+    const baseY = columnNodes.length
+      ? Math.max(...columnNodes.map((nd) => nd.position.y)) + CHANNEL_Y_SPACING
+      : 0;
+
+    const placedNodes = block.nodes.map((nd) => ({
+      ...nd,
+      position: { x: nd.position.x + baseX, y: nd.position.y + baseY },
+    }));
+
+    nodes = [...nodes, ...placedNodes];
+    edges = dedupeEdges([
+      ...edges,
+      ...pos.sources.map((src) => e(src, block.entryId)),
+      ...block.edges,
+      ...pos.targets.flatMap((tgt) => block.exitIds.map((exit) => e(exit, tgt))),
+    ]);
+  });
+
+  return { nodes, edges };
 }

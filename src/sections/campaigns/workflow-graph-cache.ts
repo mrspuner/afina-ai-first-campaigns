@@ -77,6 +77,17 @@ export function setCachedGraph(
 }
 
 /**
+ * Выбросить кэшированный граф кампании. Нужен смене сценария: граф там
+ * собирается заново из шаблона, и без сброса кэш всегда побеждал бы шаблон
+ * (карточка читает `getCachedGraph(...) ?? createTemplate(...)`).
+ */
+export function invalidateCachedGraph(campaignId: string | undefined): void {
+  if (!campaignId) return;
+  graphs.delete(campaignId);
+  bumpVersion();
+}
+
+/**
  * Deep-copy the cached graph of `fromId` onto `toId` — used by campaign
  * duplication (#10) so the copy carries the original's exact, edited
  * nodes/edges/params, not just a scenario-template rebuild. No-op when the
