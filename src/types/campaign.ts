@@ -87,6 +87,15 @@ export interface StepData {
   ownSignalType?: SignalType;
 }
 
+/**
+ * Сериализуемый слепок ответов визарда, хранимый на кампании.
+ *
+ * Совпадает со `StepData` — после перевода `files` на `BaseFile` в нём нет
+ * несериализуемых значений, поэтому параллельного типа не заводим. Псевдоним
+ * существует ради читаемости на стороне `Campaign`.
+ */
+export type WizardSnapshot = StepData;
+
 export const initialStepData: StepData = {
   scenario: null,
   interests: [],

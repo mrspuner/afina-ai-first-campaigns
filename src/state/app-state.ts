@@ -3,7 +3,7 @@ import type { StructuralOp } from "./structural-commands";
 import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
-import type { StepData, Channel, SourceType } from "@/types/campaign";
+import type { StepData, WizardSnapshot, Channel, SourceType } from "@/types/campaign";
 import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
@@ -101,6 +101,13 @@ export type Campaign = {
    */
   templateIds?: string[];
   scenario?: { id: string; name: string };
+  /**
+   * Слепок ответов визарда. Нужен ТОЛЬКО для гидрации визарда при точечной
+   * правке с карточки — значения для тегов описания берутся с полей самой
+   * кампании, поэтому удаление снапшота при запуске ничего в тексте не рушит.
+   * Отсутствует у запущенных кампаний и у сидовых пресетов.
+   */
+  wizardData?: WizardSnapshot;
 };
 
 /**
@@ -460,6 +467,34 @@ export const initialState: AppState = {
   screenHintsOwner: null,
 };
 
+/**
+ * Проекция ответов визарда в поля кампании. Общая для создания
+ * (`campaign_created_from_wizard`) и для коммита правки с карточки
+ * (`campaign_wizard_edit_applied`) — иначе две ветки неизбежно разъехались бы
+ * в том, какие поля переносятся.
+ *
+ * `id`, `name`, `createdAt`, `status`, `phase` и `scenario` сюда НЕ входят: они
+ * зависят от того, создаётся кампания или правится, и решаются на стороне
+ * вызова.
+ */
+export function projectStepDataOntoCampaign(sd: StepData): Partial<Campaign> {
+  return {
+    sourceType: sd.sourceType,
+    channels: sd.channels,
+    interests: sd.interests,
+    triggers: sd.triggers,
+    triggerConfig:
+      Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
+    // `StepData.files` уже несёт число строк по каждому файлу — распределять
+    // суммарный `fileRowCount` по файлам больше не нужно.
+    files: sd.files.length ? sd.files.map((f) => ({ ...f })) : undefined,
+    budget: sd.budget ?? undefined,
+    dailyBudget: sd.dailyBudget,
+    maxDailyBudget: sd.maxDailyBudget,
+    wizardData: structuredClone(sd),
+  };
+}
+
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "start_campaign_flow":
@@ -525,24 +560,12 @@ export function appReducer(state: AppState, action: Action): AppState {
       const scenarioId = sd.scenario ?? "";
       const n =
         state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
-      // `StepData.files` уже несёт число строк по каждому файлу — распределять
-      // суммарный `fileRowCount` по файлам больше не нужно.
-      const files = sd.files.length ? sd.files.map((f) => ({ ...f })) : undefined;
       const newCampaign: Campaign = {
+        ...projectStepDataOntoCampaign(sd),
         id: `cmp_${nanoid(6)}`,
         name: defaultCampaignName(action.scenarioName, n),
         status: "draft",
         createdAt: new Date().toISOString(),
-        sourceType: sd.sourceType,
-        channels: sd.channels,
-        interests: sd.interests,
-        triggers: sd.triggers,
-        triggerConfig:
-          Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
-        files,
-        budget: sd.budget ?? undefined,
-        dailyBudget: sd.dailyBudget,
-        maxDailyBudget: sd.maxDailyBudget,
         // new drafts collect signals pre-launch — start in the scoring phase so
         // the campaign card shows collection progress and gates «Запустить».
         // stream/own launch immediately, so they carry no pre-launch phase.
@@ -696,6 +719,11 @@ export function appReducer(state: AppState, action: Action): AppState {
             // overwrite launchedAt. Fresh launch (from draft) sets launchedAt.
             next.pausedAt = undefined;
             if (!c.launchedAt) next.launchedAt = action.timestamp;
+            // Кампания стала активной — снапшот визарда больше не нужен (и
+            // не должен) существовать: карточка читает свои же поля, а не
+            // снапшот, так что удаление ничего не рушит и убирает второй
+            // источник правды.
+            next.wizardData = undefined;
           }
           if (action.status === "paused") {
             next.pausedAt = action.timestamp ?? new Date().toISOString();
@@ -734,6 +762,9 @@ export function appReducer(state: AppState, action: Action): AppState {
         files: original.files ? original.files.map((f) => ({ ...f })) : undefined,
         templateIds: original.templateIds ? [...original.templateIds] : undefined,
         scenario: original.scenario ? { ...original.scenario } : undefined,
+        // Копия остаётся правимой независимо от оригинала — глубокая копия,
+        // не общая ссылка.
+        wizardData: original.wizardData ? structuredClone(original.wizardData) : undefined,
       };
       return {
         ...state,
@@ -1160,6 +1191,11 @@ export function appReducer(state: AppState, action: Action): AppState {
                 budget: action.budget > 0 ? action.budget : cc.budget,
                 dailyBudget: action.dailyBudget ?? cc.dailyBudget,
                 templateIds: incomingIds.length > 0 ? incomingIds : cc.templateIds,
+                // Тот же переход в "active", что и у campaign_status_changed —
+                // снапшот визарда снимается здесь тоже, иначе кампания,
+                // запущенная с экрана оплаты, осталась бы с редактируемым
+                // (и бессмысленным) снапшотом.
+                wizardData: undefined,
               }
             : cc
         ),
