@@ -277,6 +277,23 @@ describe("DescriptionTagPill — поповер паузы у тега длит�
     fireEvent.click(screen.getByRole("button", { name: /2 дня/ }));
     expect(screen.queryByText("Режим")).not.toBeInTheDocument();
   });
+
+  // fix round 1, Finding 2: карточка не несёт сайдбара ИИ-редактирования поля
+  // (это функция канвасной ноды) — раньше поповер передавал WaitFields
+  // заглушку `onEventAiHandoff={() => {}}`, и «Сформировать с помощью ИИ» в
+  // комбобоксе «Событие» рендерилась кнопкой, которая по клику молча ничего
+  // не делала. Теперь колбэк не передаётся вовсе — пункт не рендерится.
+  it("режим «До события»: комбобокс события в поповере паузы НЕ несёт «Сформировать с помощью ИИ»", async () => {
+    renderPillWithProviders({
+      tag: waitTag,
+      waitParams: { kind: "wait", mode: "until_event", untilEvent: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /2 дня/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Событие»" }),
+    );
+    expect(screen.queryByText("Сформировать с помощью ИИ")).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -15,11 +15,24 @@ function conditionTriggerLabel(t: string): string {
   }
 }
 
+/**
+ * Подзаголовок ноды ожидания в мини-превью графа. Недельная ветка мирроит
+ * `waitPhrase` (graph-description.ts) и `splitDuration` (wait-fields.tsx) —
+ * та же лестница «крупнейшая точная единица» (168 → 24 → 1). Найдено при
+ * проверке fix round 1, Finding 1: мини-превью рендерится на той же карточке
+ * кампании, что и пилюля+поповер паузы, и без этой ветки давало ТРЕТЬЕ
+ * значение («35 дней») рядом с уже согласованными пилюлей и полем («5
+ * недель») — тот же класс бага, просто ещё не названный ревьюером явно.
+ */
 function waitSublabel(p: Extract<NodeParams, { kind: "wait" }>): string {
   if (p.mode === "until_event") return p.untilEvent ? `До: ${p.untilEvent}` : "До события";
   const h = p.durationHours ?? 0;
   if (h < 1) return `${Math.round(h * 60)} мин`;
   if (h < 24) return `${h} ч`;
+  if (h >= 168 && h % 168 === 0) {
+    const weeks = h / 168;
+    return `${weeks} ${pluralRu(weeks, ["неделя", "недели", "недель"])}`;
+  }
   const days = Math.round(h / 24);
   return `${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
 }

@@ -47,6 +47,13 @@ export function splitDuration(hours: number): { value: number; unitIdx: number }
  * Поля ноды ожидания (Block 7 §3): «Режим» — Select (длительность / до
  * события); далее в зависимости от режима — «Длительность» (число + единица) или
  * «Событие» (combo из справочника событий).
+ *
+ * `onEventAiHandoff` опционален (round 1, Finding 2): граф-канвасная нода
+ * передаёт рабочий колбэк (открывает сайдбар ИИ-редактирования поля), а
+ * поповер паузы на карточке кампании (`description-tag.tsx`) — нет, там
+ * такого сайдбара не существует. Проброс идёт неизменным в
+ * `NodeFieldCombobox`, которая и решает: без колбэка пункт «Сформировать с
+ * помощью ИИ» не рендерится вовсе, а не рендерится как кнопка-пустышка.
  */
 export function WaitFields({
   nodeId,
@@ -59,7 +66,7 @@ export function WaitFields({
   params: WaitParams;
   dirtyParams?: string[];
   readOnly: boolean;
-  onEventAiHandoff: () => void;
+  onEventAiHandoff?: () => void;
 }) {
   const dispatch = useAppDispatch();
 

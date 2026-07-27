@@ -9,6 +9,17 @@ describe("computeNodeSublabel", () => {
     expect(computeNodeSublabel({ kind: "wait", mode: "duration", durationHours: 2 })).toBe("2 ч");
     expect(computeNodeSublabel({ kind: "wait", mode: "until_event", untilEvent: "клик" })).toBe("До: клик");
   });
+
+  // fix round 1, Finding 1 (extended): найдено при проверке фикса пилюли/поля
+  // — это мини-превью графа рендерится на той же карточке кампании, и без
+  // недельной ветки 840ч читались бы «35 дней» здесь, третьим несогласованным
+  // значением рядом с уже исправленными пилюлей и полем.
+  it("wait → duration кратна неделе — «N недель», не «N*7 дней»", () => {
+    expect(computeNodeSublabel({ kind: "wait", mode: "duration", durationHours: 168 })).toBe("1 неделя");
+    expect(computeNodeSublabel({ kind: "wait", mode: "duration", durationHours: 336 })).toBe("2 недели");
+    expect(computeNodeSublabel({ kind: "wait", mode: "duration", durationHours: 840 })).toBe("5 недель");
+    expect(computeNodeSublabel({ kind: "wait", mode: "duration", durationHours: 840 })).not.toBe("35 дней");
+  });
   it("condition → interaction label", () => {
     expect(computeNodeSublabel({ kind: "condition", trigger: "opened" })).toBe("Открыто");
     expect(computeNodeSublabel({ kind: "condition", trigger: "clicked" })).toBe("Кликнуто");

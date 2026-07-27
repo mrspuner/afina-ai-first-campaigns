@@ -10,7 +10,9 @@ import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
 import type { Campaign, MessageTemplate, Preset } from "@/state/app-state";
 import { initialStepData } from "@/types/campaign";
-import { getCachedGraph } from "./workflow-graph-cache";
+import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
+import { getScenario } from "@/data/scenarios";
+import { createTemplate } from "@/state/workflow-templates";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
 // mount — absent in jsdom. Provide a minimal no-op shim so the screen renders.
@@ -345,6 +347,64 @@ describe("CampaignScreen — поповер паузы у тега длител�
         (n) => n.data.params?.kind === "wait" && (n.data.params as { durationHours?: number }).durationHours === 120,
       ),
     ).toBe(true);
+  });
+
+  // fix round 1, Finding 1 — live repro reproduced as a test: `waitPhrase`
+  // (пилюля, graph-description.ts) раньше форматировала только дни/часы, а
+  // `splitDuration` (поле «Длительность» внутри ЭТОГО ЖЕ ещё открытого
+  // поповера, wait-fields.tsx) уже предпочитало недели — 840ч читались как
+  // «35 дней» у пилюли и «5 недель» у поля ОДНОВРЕМЕННО, на одном экране.
+  // Фикстура (5 недель через юнит «недель») — ровно то же действие, которым
+  // ревьюер воспроизвёл баг в браузере; она бы упала на предыдущей версии
+  // `waitPhrase` (нет ветки недель → «35 дней»).
+  it("недельная длительность паузы: пилюля и поле внутри того же поповера согласованы (fix round 1, Finding 1)", async () => {
+    const id = "cmp_wait_weeks_agree";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "2 дня" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Длительность»" }),
+    );
+    fireEvent.change(screen.getByLabelText("Число"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "недель" }));
+
+    // Пилюля (waitPhrase) и строка поля (splitDuration) внутри ещё открытого
+    // поповера — ОБЕ читают «5 недель», не «35 дней» ни в одной из них.
+    expect(await screen.findByRole("button", { name: "5 недель" })).toBeInTheDocument();
+    expect(screen.getAllByText("5 недель").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/35 дней/)).not.toBeInTheDocument();
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "wait" && (n.data.params as { durationHours?: number }).durationHours === 840,
+      ),
+    ).toBe(true);
+  });
+
+  it("недельная длительность, заданная заранее в кэше (без правки через UI) — тоже согласована", async () => {
+    // Дополняет тест выше вторым путём попадания в это состояние: не правка
+    // через UI, а уже сохранённая неделя-кратная длительность (напр. правка
+    // из прошлой сессии) — пилюля должна читать её так же, как поле.
+    const id = "cmp_wait_weeks_seeded";
+    const campaign = baseCampaign({ id, channels: ["sms"] });
+    const signalType = getScenario(campaign.scenario!.id)!.signalType;
+    const template = createTemplate(signalType, campaign.sourceType, campaign.channels ?? []);
+    const waitNode = template.nodes.find((n) => n.data.nodeType === "wait")!;
+    setCachedGraph(id, {
+      nodes: template.nodes.map((n) =>
+        n.id === waitNode.id
+          ? { ...n, data: { ...n.data, params: { kind: "wait" as const, mode: "duration" as const, durationHours: 840 } } }
+          : n,
+      ),
+      edges: template.edges,
+    });
+
+    renderCampaign(campaign);
+
+    const pill = await screen.findByRole("button", { name: "5 недель" });
+    fireEvent.click(pill);
+    // Поле внутри поповера читает ту же самую строку, что и пилюля рядом с ним.
+    expect(await screen.findAllByText("5 недель")).toHaveLength(2);
+    expect(screen.queryByText(/35 дней/)).not.toBeInTheDocument();
   });
 });
 

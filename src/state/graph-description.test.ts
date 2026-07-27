@@ -154,6 +154,56 @@ describe("describeWorkflow", () => {
     });
   });
 
+  // fix round 1, Finding 1: `waitPhrase` раньше форматировала только
+  // дни/часы — 840 часов (ровно 5 недель) читались как «35 дней», пока
+  // `splitDuration` (wait-fields.tsx, поле внутри поповера паузы Task 8)
+  // тот же час читало как «5 недель» — два числа на одном экране одновременно
+  // противоречили друг другу. Хелпер подменяет durationHours retry-ноды
+  // «Возврата» (по умолчанию 48ч/«2 дня» — не кратно неделе, багом не ловится).
+  function graphWithRetryDuration(hours: number) {
+    const template = createTemplate("Возврат", "new", ["sms"]);
+    const waitNode = template.nodes.find((n) => n.data.nodeType === "wait")!;
+    return {
+      nodes: template.nodes.map((n) =>
+        n.id === waitNode.id
+          ? { ...n, data: { ...n.data, params: { kind: "wait" as const, mode: "duration" as const, durationHours: hours } } }
+          : n,
+      ),
+      edges: template.edges,
+    };
+  }
+
+  describe("waitPhrase — крупнейшая точная единица, зеркалит splitDuration (fix round 1, Finding 1)", () => {
+    it("840 часов (ровно 5 недель) — «5 недель», НЕ «35 дней»", () => {
+      const stages = describeWorkflow(graphWithRetryDuration(840), T);
+      const retry = stages.find((s) => s.id === "retry")!;
+      expect(segmentsText(retry.body)).toContain("5 недель");
+      expect(segmentsText(retry.body)).not.toContain("35 дней");
+    });
+
+    // Русское множественное число «неделя»/«недели»/«недель» — те же случаи,
+    // что оговорены в фиксе (1, 2, 5, 11, 21).
+    it.each([
+      [168, "1 неделя"],
+      [336, "2 недели"],
+      [840, "5 недель"],
+      [1848, "11 недель"],
+      [3528, "21 неделя"],
+    ])("%s часов → «%s»", (hours, expected) => {
+      const stages = describeWorkflow(graphWithRetryDuration(hours), T);
+      const retry = stages.find((s) => s.id === "retry")!;
+      expect(segmentsText(retry.body)).toContain(expected);
+    });
+
+    it("длительность, не кратная неделе, но кратная суткам — по-прежнему в днях", () => {
+      // Регресс-щит: неделя не должна начать «съедать» обычные дни (72ч = 3
+      // дня, ни разу не делится на 168 без остатка).
+      const stages = describeWorkflow(graphWithRetryDuration(72), T);
+      const retry = stages.find((s) => s.id === "retry")!;
+      expect(segmentsText(retry.body)).toContain("3 дня");
+    });
+  });
+
   describe("Итог", () => {
     it("после повтора описывает финальную проверку", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);

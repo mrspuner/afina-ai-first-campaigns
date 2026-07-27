@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, it, expect, vi } from "vitest";
-import { render, within, fireEvent } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 
 vi.mock("@/state/field-directory", () => ({
   getFieldOptions: () => ["Открыто", "Кликнуто"],
@@ -90,5 +90,57 @@ describe("NodeFieldCombobox — chevron affordance (spec B #4)", () => {
       />
     );
     expect(queryByRole("button", { name: "Предпросмотр" })).toBeNull();
+  });
+});
+
+describe("NodeFieldCombobox — «Сформировать с помощью ИИ» только когда есть кому его отдать (fix round 1, Finding 2)", () => {
+  it("рендерит пункт ИИ-хэндоффа, когда onAiHandoff передан (граф-канвасная нода)", () => {
+    render(
+      <NodeFieldCombobox
+        label="Событие"
+        value=""
+        optionsKey="eventCatalog"
+        isDirty={false}
+        onSelect={vi.fn()}
+        onAiHandoff={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Изменить поле «Событие»" }));
+    expect(screen.getByText("Сформировать с помощью ИИ")).toBeInTheDocument();
+  });
+
+  // Раньше вызывающий без реального адресата передавал заглушку `() => {}` —
+  // пункт рендерился, клик молча ничего не делал. Теперь отсутствие пропа —
+  // само по себе сигнал: пункт не рендерится вовсе (карточка кампании, где нет
+  // сайдбара ИИ-редактирования поля).
+  it("НЕ рендерит пункт ИИ-хэндоффа, когда onAiHandoff не передан (поповер паузы на карточке)", () => {
+    render(
+      <NodeFieldCombobox
+        label="Событие"
+        value=""
+        optionsKey="eventCatalog"
+        isDirty={false}
+        onSelect={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Изменить поле «Событие»" }));
+    expect(screen.queryByText("Сформировать с помощью ИИ")).not.toBeInTheDocument();
+  });
+
+  it("клик по пункту ИИ-хэндоффа вызывает onAiHandoff и закрывает поповер", () => {
+    const onAiHandoff = vi.fn();
+    render(
+      <NodeFieldCombobox
+        label="Событие"
+        value=""
+        optionsKey="eventCatalog"
+        isDirty={false}
+        onSelect={vi.fn()}
+        onAiHandoff={onAiHandoff}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Изменить поле «Событие»" }));
+    fireEvent.click(screen.getByText("Сформировать с помощью ИИ"));
+    expect(onAiHandoff).toHaveBeenCalledTimes(1);
   });
 });
