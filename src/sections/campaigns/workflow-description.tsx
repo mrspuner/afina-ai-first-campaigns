@@ -1,5 +1,6 @@
 import type {
   DescriptionMessage,
+  DescriptionSegment,
   DescriptionStage,
   DescriptionStageId,
   DescriptionTag,
@@ -13,15 +14,45 @@ import type { WorkflowNodeType } from "@/types/workflow";
  * (Task 5), поэтому пилюля резолвит цвет через лукап, который передаёт
  * вызывающий (`CampaignScreen`, построенный из `launchGraph.nodes`). Без
  * лукапа (или без совпадения) пилюля остаётся нейтральной — обратная
- * совместимость с Task 4/5.
+ * совместимость с Task 4/5. После демоции (`none`, fix round 2) `nodeId`
+ * переезжает на сам `none`-таргет (см. `graph-description.ts`), поэтому его
+ * тоже проверяем — иначе демотированный шаблон/пауза теряют nodeType и вместе
+ * с ним иконку.
  */
 function nodeTypeForTag(
   tag: DescriptionTag,
   nodeTypes: Map<string, WorkflowNodeType> | undefined,
 ): WorkflowNodeType | undefined {
   const target = tag.target;
-  if (target.kind !== "template" && target.kind !== "node-fields") return undefined;
-  return nodeTypes?.get(target.nodeId);
+  const nodeId =
+    target.kind === "template" || target.kind === "node-fields"
+      ? target.nodeId
+      : target.kind === "none"
+        ? target.nodeId
+        : undefined;
+  return nodeId !== undefined ? nodeTypes?.get(nodeId) : undefined;
+}
+
+/** Знаки, которые в тексте описания всегда стоят СРАЗУ за предыдущим словом,
+ *  без пробела («тег.», «тег,», «каналам:»). */
+const GLUED_PUNCTUATION = /^[.,:;!?]/;
+
+/**
+ * Пилюля — inline-flex бокс со своим правым паддингом+бордером (~7px,
+ * `PILL_BASE` в description-tag.tsx). Когда следом без пробела в самом
+ * тексте идёт знак препинания, этот паддинг визуально читается как пробел
+ * перед точкой/запятой — «Регистрация .» вместо «Регистрация.» — хотя в
+ * сегментах пробела нет (проверено: склейка сегментов не содержит лишних
+ * пробелов). Небольшой отрицательный margin у ТАКОГО текстового сегмента
+ * возвращает знак вплотную к пилюле. Сегменты, начинающиеся с буквы или
+ * пробела (обычные слова после тега — у них пробел законный, если он есть в
+ * тексте), не трогаем.
+ */
+function punctuationPullBack(
+  prev: DescriptionSegment | undefined,
+  text: string,
+): string | undefined {
+  return prev?.kind === "tag" && GLUED_PUNCTUATION.test(text) ? "-ml-[5px]" : undefined;
 }
 
 /**
@@ -83,7 +114,12 @@ export function WorkflowDescription({
               <strong className="font-semibold text-foreground">{stage.heading}</strong>{" "}
               {stage.body.map((segment, i) =>
                 segment.kind === "text" ? (
-                  <span key={i}>{segment.text}</span>
+                  <span
+                    key={i}
+                    className={punctuationPullBack(stage.body[i - 1], segment.text)}
+                  >
+                    {segment.text}
+                  </span>
                 ) : (
                   <DescriptionTagPill
                     key={segment.tag.id}

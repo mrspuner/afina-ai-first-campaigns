@@ -31,6 +31,15 @@ interface ResolvedVisual {
  * Tailwind-классы; `template`/`node-fields` красятся под ноду графа из
  * `NODE_STYLES`/`NODE_ICON` — источник истины для цвета нод (см. node-visuals.ts).
  * Тип ноды тег не хранит, поэтому приходит пропом; без него — нейтральный вид.
+ *
+ * `none` (кампания запущена, либо граф больше не правится) остаётся
+ * нейтральным по фону/бордеру — цвет узла означал бы «кликабельно», а это
+ * больше не так (спека §2.12). Но иконку демоция снимать не должна: без неё
+ * «12 000 строк» и «разовый» становятся одинаковыми серыми табличками, и
+ * прочитать, какой тег о чём, нельзя (fix round 2, Finding 2). Иконку
+ * резолвим по личности, которую демоция сохранила на `none` — `step`
+ * (шаговый тег → `STEP_ICON`) либо `nodeType`, пришедший пропом по `nodeId`,
+ * который тоже пережил демоцию (шаблон/пауза → `NODE_ICON`).
  */
 function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefined): ResolvedVisual {
   const target = tag.target;
@@ -50,7 +59,10 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
     case "domains":
       return { className: NEUTRAL_CLASS, Icon: Globe };
     case "none":
-      return { className: NEUTRAL_CLASS };
+      return {
+        className: NEUTRAL_CLASS,
+        Icon: target.step ? STEP_ICON[target.step] : nodeType ? NODE_ICON[nodeType] : undefined,
+      };
   }
 }
 

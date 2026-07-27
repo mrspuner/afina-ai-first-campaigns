@@ -177,4 +177,98 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
     const pill = screen.getByRole("button", { name: "SMS — шаблон" });
     expect(pill.className).toContain("border-border");
   });
+
+  it("nodeType резолвится и после демоции (none + nodeId) — иконка шаблона не пропадает", () => {
+    // fix round 2, Finding 2: demoted template/node-fields tags carry nodeId
+    // on the `none` target itself — nodeTypeForTag must follow it there too.
+    const demoted: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "SMS",
+            text: "Текст.",
+            templateTag: {
+              id: "msg-n1-template",
+              label: "SMS — шаблон",
+              target: { kind: "none", nodeId: "n1" },
+            },
+          },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={demoted} nodeTypes={new Map([["n1", "sms"]])} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    const pill = screen.getByText("SMS — шаблон").parentElement!;
+    expect(pill.querySelector("svg")).not.toBeNull();
+  });
+});
+
+describe("WorkflowDescription — пунктуация вплотную к пилюле (fix round 2, Finding 1)", () => {
+  it("текстовый сегмент сразу после тега, начинающийся со знака препинания, получает pull-back класс", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "start",
+        heading: "Старт.",
+        body: [
+          { kind: "text", text: "Сценарий — " },
+          { kind: "tag", tag: { id: "scenario", label: "Апсейл", target: { kind: "none" } } },
+          { kind: "text", text: "." },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} />);
+    const punct = screen.getByText(".");
+    expect(punct.className).toContain("-ml-[5px]");
+  });
+
+  it("несколько знаков подряд (запятая, двоеточие) после тега — та же обработка", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: [
+          { kind: "tag", tag: { id: "trig", label: "Ипотека", target: { kind: "none" } } },
+          { kind: "text", text: ", ещё текст" },
+          { kind: "tag", tag: { id: "chan", label: "SMS", target: { kind: "none" } } },
+          { kind: "text", text: ":" },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} />);
+    expect(screen.getByText(", ещё текст").className).toContain("-ml-[5px]");
+    expect(screen.getByText(":").className).toContain("-ml-[5px]");
+  });
+
+  it("обычный текстовый сегмент после тега (начинается с буквы) класс не получает", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "start",
+        heading: "Старт.",
+        body: [
+          { kind: "tag", tag: { id: "scenario", label: "Апсейл", target: { kind: "none" } } },
+          { kind: "text", text: " по триггеру Ипотека" },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} />);
+    expect(screen.getByText("по триггеру Ипотека", { exact: false }).className).toBe("");
+  });
+
+  it("текстовый сегмент, начинающийся с пунктуации, но НЕ следующий за тегом — класс не получает", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "start",
+        heading: "Старт.",
+        body: [
+          { kind: "text", text: "Текст." },
+          { kind: "text", text: " Ещё." },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} />);
+    expect(screen.getByText("Текст.").className).toBe("");
+  });
 });

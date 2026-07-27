@@ -45,14 +45,18 @@ export type DescriptionSegment =
 /**
  * Куда ведёт клик по тегу. Единственная цель, уводящая с карточки, — шаг
  * визарда; остальные раскрываются поповером у самой пилюли. `none` — значение
- * без цели: кампания запущена или такого шага в её визарде не существует.
+ * без цели: кампания запущена (или граф больше не правится), либо такого шага
+ * в её визарде не существует. `step`/`nodeId` на `none` — не цель клика (клика
+ * нет), а ЛИЧНОСТЬ демотированного тега: только по ней пилюля узнаёт, чью
+ * иконку показать (STEP_ICON/NODE_ICON) — без неё все демотированные пилюли
+ * стали бы одинаковыми серыми табличками (fix round 2, Finding 2).
  */
 export type TagTarget =
   | { kind: "wizard-step"; step: WizardStepId }
   | { kind: "template"; nodeId: string }
   | { kind: "node-fields"; nodeId: string }
   | { kind: "domains" }
-  | { kind: "none" };
+  | { kind: "none"; step?: WizardStepId; nodeId?: string };
 
 /** Значение параметра, вынесенное в кликабельную пилюлю внутри текста. */
 export interface DescriptionTag {
@@ -240,6 +244,9 @@ function describeMessage(
     // фактов описание остаётся чистым текстом (Task 4). Цель — только пока
     // граф ещё правится (§2.12): после запуска шаблон остаётся пилюлей со
     // значением, но клика не даёт — `none`, не отдельная read-only ветка.
+    // `nodeId` переносится на `none` тоже — не как цель (клика нет), а чтобы
+    // `WorkflowDescription` могло резолвить nodeType→NODE_ICON и после демоции
+    // (fix round 2, Finding 2).
     ...(withTags && templateName
       ? {
           templateTag: {
@@ -247,7 +254,7 @@ function describeMessage(
             label: templateName,
             target: graphEditable
               ? { kind: "template", nodeId: node.id }
-              : { kind: "none" },
+              : { kind: "none", nodeId: node.id },
           },
         }
       : {}),
@@ -309,7 +316,9 @@ export interface CampaignFacts {
  * Если шаг недоступен (кампания запущена — `editableSteps` пуст; либо шага в
  * визарде этой цели нет — например «Режим» у собственной базы), цель
  * становится `none`: пилюля рендерится без клика, но значение показывает.
- * Отдельной ветки read-only-рендера поэтому не требуется.
+ * Отдельной ветки read-only-рендера поэтому не требуется. `step` переносится
+ * на `none` и там же — не как цель клика (клика нет), а чтобы пилюля не
+ * потеряла свою иконку при демоции (fix round 2, Finding 2).
  */
 function stepTag(
   id: string,
@@ -324,7 +333,7 @@ function stepTag(
     tag: {
       id,
       label,
-      target: editable ? { kind: "wizard-step", step } : { kind: "none" },
+      target: editable ? { kind: "wizard-step", step } : { kind: "none", step },
       ...(hoverList ? { hoverList } : {}),
     },
   };
@@ -580,8 +589,9 @@ export function describeWorkflow(
       heading: "Пауза и повтор.",
       // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
       // правится (§2.12: после запуска — та же демоция в `none`, что и у
-      // шаблона). Без фактов (hasFacts=false) остаётся прежним единым текстом
-      // Task 3.
+      // шаблона, с тем же переносом nodeId ради иконки — fix round 2,
+      // Finding 2). Без фактов (hasFacts=false) остаётся прежним единым
+      // текстом Task 3.
       body: hasFacts
         ? mergeTextSegments([
             t(retryPrefix),
@@ -592,7 +602,7 @@ export function describeWorkflow(
                 label: waitPhrase(retryParams),
                 target: graphEditable
                   ? { kind: "node-fields", nodeId: retryWaits[0].id }
-                  : { kind: "none" },
+                  : { kind: "none", nodeId: retryWaits[0].id },
               },
             },
             t(retrySuffix),
