@@ -76,4 +76,30 @@ describe("campaign_created_from_wizard", () => {
     });
     expect(next.campaigns[0].phase).toBeUndefined();
   });
+
+  // Task 1 moved StepData.files to BaseFile (each entry already carries its
+  // own rowCount). Campaign.files must carry that per-file rowCount straight
+  // through, NOT redistribute a wizard-level total across the files evenly —
+  // Task 2's snapshot round-trip depends on this mapping being an identity.
+  it("carries each file's own rowCount through to Campaign.files, not a redistributed total", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: {
+        ...initialStepData,
+        scenario: "registration",
+        sourceType: "new",
+        channels: ["sms"],
+        files: [
+          { name: "base-1.csv", rowCount: 12_000 },
+          { name: "base-2.csv", rowCount: 3_000 },
+        ],
+        fileRowCount: 15_000,
+      },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].files).toEqual([
+      { name: "base-1.csv", rowCount: 12_000 },
+      { name: "base-2.csv", rowCount: 3_000 },
+    ]);
+  });
 });
