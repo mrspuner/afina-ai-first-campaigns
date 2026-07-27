@@ -67,6 +67,36 @@ describe("WorkflowDescription", () => {
       render(<WorkflowDescription stages={STAGES} />);
       expect(screen.queryAllByRole("button")).toHaveLength(0);
     });
+
+    // Все STAGES выше — однoсегментные, поэтому ни один тест ещё не проверял
+    // тело из НЕСКОЛЬКИХ сегментов (ровно форма шва судьбы доменов, которую
+    // Task 4 заполнит тегом). Сегменты рендерятся как соседние <span>, поэтому
+    // у React нет ни одного текстового узла с полным текстом — getByText(fullString)
+    // здесь не найдёт ничего, и это ловушка для Task 4/5. Проверяем через
+    // textContent параграфа, а не getByText — это рабочий паттерн для тех задач.
+    it("несколько сегментов body (текст+тег+текст) склеиваются в один textContent", () => {
+      const stages: DescriptionStage[] = [
+        {
+          id: "start",
+          heading: "Старт.",
+          body: [
+            { kind: "text", text: "Домены " },
+            { kind: "tag", tag: { id: "domains", label: "a.ru, b.ru" } },
+            { kind: "text", text: " отправлены на модерацию." },
+          ],
+        },
+      ];
+
+      const { container } = render(<WorkflowDescription stages={stages} />);
+      const p = container.querySelector("p")!;
+      expect(p.textContent).toBe("Старт. Домены a.ru, b.ru отправлены на модерацию.");
+
+      // Ловушка задокументирована: getByText на полную склеенную строку не
+      // находит ничего, потому что текст разбит по нескольким <span>.
+      expect(
+        screen.queryByText("Домены a.ru, b.ru отправлены на модерацию."),
+      ).not.toBeInTheDocument();
+    });
   });
 });
 
