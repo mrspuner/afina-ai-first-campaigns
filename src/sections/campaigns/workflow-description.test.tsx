@@ -135,3 +135,46 @@ describe("WorkflowDescription — stageSlots (нодо-блоки под кон�
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });
+
+describe("WorkflowDescription — nodeTypes для пилюль template/node-fields (Task 6)", () => {
+  // Тег сам по себе не несёт тип ноды (Task 5) — без лукапа пилюли template/
+  // node-fields падают на нейтральный серый (пробел, который эти тесты
+  // закрывают). Фикстура — тег шаблона внутри сообщения «Первого касания»,
+  // тот же путь, что реально использует CampaignScreen.
+  const stagesWithTemplateTag: DescriptionStage[] = [
+    {
+      id: "first-touch",
+      heading: "Первое касание.",
+      body: t("Первое сообщение:"),
+      messages: [
+        {
+          channel: "SMS",
+          text: "Текст.",
+          templateTag: {
+            id: "msg-n1-template",
+            label: "SMS — шаблон",
+            target: { kind: "template", nodeId: "n1" },
+          },
+        },
+      ],
+    },
+  ];
+
+  it("красит пилюлю шаблона под её nodeType, когда передан лукап nodeId→nodeType", () => {
+    render(
+      <WorkflowDescription
+        stages={stagesWithTemplateTag}
+        nodeTypes={new Map([["n1", "sms"]])}
+      />,
+    );
+    const pill = screen.getByRole("button", { name: "SMS — шаблон" });
+    // Нейтральный класс уходит — цвет теперь несёт inline style из NODE_STYLES.
+    expect(pill.className).not.toContain("border-border");
+  });
+
+  it("без лукапа (или без совпадения id) пилюля остаётся нейтральной", () => {
+    render(<WorkflowDescription stages={stagesWithTemplateTag} />);
+    const pill = screen.getByRole("button", { name: "SMS — шаблон" });
+    expect(pill.className).toContain("border-border");
+  });
+});

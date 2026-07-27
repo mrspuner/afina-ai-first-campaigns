@@ -6,6 +6,23 @@ import type {
 } from "@/state/graph-description";
 import { DescriptionTagPill } from "./description-tag";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { WorkflowNodeType } from "@/types/workflow";
+
+/**
+ * Тип ноды по её id для целей `template`/`node-fields` — сам тег его не несёт
+ * (Task 5), поэтому пилюля резолвит цвет через лукап, который передаёт
+ * вызывающий (`CampaignScreen`, построенный из `launchGraph.nodes`). Без
+ * лукапа (или без совпадения) пилюля остаётся нейтральной — обратная
+ * совместимость с Task 4/5.
+ */
+function nodeTypeForTag(
+  tag: DescriptionTag,
+  nodeTypes: Map<string, WorkflowNodeType> | undefined,
+): WorkflowNodeType | undefined {
+  const target = tag.target;
+  if (target.kind !== "template" && target.kind !== "node-fields") return undefined;
+  return nodeTypes?.get(target.nodeId);
+}
 
 /**
  * Текстовый «хвостик» после названия канала, когда за него можно уцепиться
@@ -32,6 +49,9 @@ interface WorkflowDescriptionProps {
   /** Клик по кликабельной пилюле (target ≠ `none`) — поднимается наверх, к
    *  экрану кампании, который знает, куда вести (шаг визарда/поповер). */
   onTagActivate?: (tag: DescriptionTag) => void;
+  /** nodeId → nodeType — красит пилюли `template`/`node-fields` под цвет узла
+   *  графа (Task 6). Без пропа все пилюли этих целей остаются нейтральными. */
+  nodeTypes?: Map<string, WorkflowNodeType>;
 }
 
 /**
@@ -46,7 +66,12 @@ interface WorkflowDescriptionProps {
  * клик по тегу лишь поднимает его наверх (`onTagActivate`), решение о том,
  * куда вести (шаг визарда/поповер), принимает вызывающий.
  */
-export function WorkflowDescription({ stages, stageSlots, onTagActivate }: WorkflowDescriptionProps) {
+export function WorkflowDescription({
+  stages,
+  stageSlots,
+  onTagActivate,
+  nodeTypes,
+}: WorkflowDescriptionProps) {
   if (!stages.length) return null;
 
   return (
@@ -60,7 +85,12 @@ export function WorkflowDescription({ stages, stageSlots, onTagActivate }: Workf
                 segment.kind === "text" ? (
                   <span key={i}>{segment.text}</span>
                 ) : (
-                  <DescriptionTagPill key={segment.tag.id} tag={segment.tag} onActivate={onTagActivate} />
+                  <DescriptionTagPill
+                    key={segment.tag.id}
+                    tag={segment.tag}
+                    onActivate={onTagActivate}
+                    nodeType={nodeTypeForTag(segment.tag, nodeTypes)}
+                  />
                 ),
               )}
             </p>
@@ -74,7 +104,11 @@ export function WorkflowDescription({ stages, stageSlots, onTagActivate }: Workf
                     {message.templateTag ? (
                       <>
                         {", шаблон "}
-                        <DescriptionTagPill tag={message.templateTag} onActivate={onTagActivate} />
+                        <DescriptionTagPill
+                          tag={message.templateTag}
+                          onActivate={onTagActivate}
+                          nodeType={nodeTypeForTag(message.templateTag, nodeTypes)}
+                        />
                       </>
                     ) : (
                       qualifierText(message)
