@@ -1,9 +1,10 @@
 import { beforeAll, describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { DescriptionTagPill } from "./description-tag";
 import type { DescriptionTag } from "@/state/graph-description";
 import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { WorkflowNodeType } from "@/types/workflow";
 
 afterEach(cleanup);
@@ -40,6 +41,10 @@ beforeAll(() => {
  * оборачиваем в те же провайдеры, что `use-campaign-graph-applier.test.tsx`
  * использует для headless-хуков. nodeType по умолчанию "sms" — ровно то, что
  * `nodeTypes`-лукап в `CampaignScreen` передал бы для sms-ноды графа.
+ *
+ * `TooltipProvider delay={1000}` — та же обёртка, что `WorkflowDescription`
+ * реально ставит вокруг всего описания (fix round 1): без неё тест ничего не
+ * говорит про задержку в 1с, на которой настаивает спека §2.4/AC17.
  */
 function renderPillWithProviders({
   tag,
@@ -51,7 +56,9 @@ function renderPillWithProviders({
   return render(
     <AppStateProvider>
       <ChatProvider>
-        <DescriptionTagPill tag={tag} nodeType={nodeType} />
+        <TooltipProvider delay={1000}>
+          <DescriptionTagPill tag={tag} nodeType={nodeType} />
+        </TooltipProvider>
       </ChatProvider>
     </AppStateProvider>,
   );
@@ -98,6 +105,68 @@ describe("DescriptionTagPill", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Приветствие/ }));
     expect(await screen.findByText("Создать новый шаблон")).toBeInTheDocument();
+  });
+});
+
+describe("DescriptionTagPill — тултип у поповерного тега шаблона (fix round 1: спека §2.4/AC17)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // §2.4: «Тултип с задержкой 1 секунда… Неинтерактивный тег (после запуска)
+  // тултипа не несёт.» Только `none` — исключение; поповерный `template` этот
+  // тултип обязан нести наравне с обычными кликабельными тегами (AC17).
+  // Проверяем именно ЗАДЕРЖКУ (не просто наличие текста рано или поздно) —
+  // 999мс тултипа ещё нет, 1000мс — уже есть. Задержка приходит от
+  // `TooltipProvider delay={1000}`, которым renderPillWithProviders
+  // оборачивает пилюлю (та же обёртка, что реально ставит WorkflowDescription)
+  // — не от отдельного таймера здесь.
+  it("наведение на интерактивный тег шаблона показывает тултип «Нажмите для изменения» через 1с", () => {
+    vi.useFakeTimers();
+    renderPillWithProviders({
+      tag: { id: "msg-n1-template", label: "Приветствие", target: { kind: "template", nodeId: "n1" } },
+    });
+    const trigger = screen.getByRole("button", { name: /Приветствие/ });
+
+    // base-ui's Tooltip.Trigger opens on a REST delay, not on `mouseenter`
+    // itself — it needs a `mousemove` over the trigger to arm the rest timer
+    // (mirrors real cursor movement onto the element), then waits `restMs`
+    // (here: the provider's `delay`) with no further movement.
+    fireEvent.mouseEnter(trigger);
+    fireEvent.mouseMove(trigger);
+    expect(screen.queryByText("Нажмите для изменения")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(screen.queryByText("Нажмите для изменения")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByText("Нажмите для изменения")).toBeInTheDocument();
+  });
+
+  it("клик по тегу шаблона всё ещё раскрывает поповер со списком шаблонов — тултип не мешает клику", async () => {
+    renderPillWithProviders({
+      tag: { id: "msg-n1-template", label: "Приветствие", target: { kind: "template", nodeId: "n1" } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Приветствие/ }));
+    expect(await screen.findByText("Создать новый шаблон")).toBeInTheDocument();
+  });
+
+  it("none-таргет тега шаблона остаётся без тултипа и без поповера — демоция не регрессирует", () => {
+    render(
+      <DescriptionTagPill
+        tag={{ id: "msg-n1-template", label: "SMS — напоминание", target: { kind: "none", nodeId: "n1" } }}
+        nodeType="sms"
+      />,
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    fireEvent.mouseEnter(screen.getByText("SMS — напоминание"));
+    expect(screen.queryByText("Нажмите для изменения")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("SMS — напоминание"));
+    expect(screen.queryByText("Создать новый шаблон")).not.toBeInTheDocument();
   });
 });
 

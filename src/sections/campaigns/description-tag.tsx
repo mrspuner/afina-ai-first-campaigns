@@ -162,6 +162,18 @@ export function DescriptionTagPill({ tag, onActivate, nodeType }: DescriptionTag
  *
  * Превью НЕ закрывает поповер (глазик в списке); «Создать новый шаблон»
  * закрывает — оба поведения зеркалят `NodeTemplateSelect`.
+ *
+ * Триггер несёт И тултип «Нажмите для изменения» (спека §2.4/AC17 — ЛЮБОЙ
+ * интерактивный тег обязан показывать его через секунду наведения; `template`
+ * не исключение), И поповер — `TooltipTrigger render={<PopoverTrigger …/>}`
+ * стекует два base-ui триггера на одном DOM-узле через их общий
+ * `useRenderElement`-merge (тот же приём, что `prompt-input.tsx` уже
+ * использует для `DropdownMenuTrigger render={<PromptInputButton/>}`, где
+ * `PromptInputButton` сама оборачивает в `Tooltip`). Клик по-прежнему
+ * раскрывает список — оба триггера работают одновременно, не взаимоисключающе.
+ * Задержку 1с отдельно не задаём — она приходит от единственного
+ * `TooltipProvider delay={1000}`, которым `WorkflowDescription` оборачивает
+ * всё описание целиком.
  */
 function TemplateTagPopover({
   nodeId,
@@ -191,9 +203,14 @@ function TemplateTagPopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className={className} style={style} title={title}>
-        {children}
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger
+          render={<PopoverTrigger className={className} style={style} title={title} />}
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent>Нажмите для изменения</TooltipContent>
+      </Tooltip>
       <PopoverContent align="start" className="w-72 p-0">
         <NodeTemplateList
           templates={options}
