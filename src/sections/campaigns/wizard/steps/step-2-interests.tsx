@@ -18,7 +18,13 @@ import { interestsScreenHints } from "./screen-hints";
  * «Продолжить» footer) and the co-located PromptBar hints. Keeping the editor
  * shared means the wizard and the drawer are visually + functionally identical.
  */
-export function Step2Interests({ data, onNext, onBack, active }: StepProps) {
+export function Step2Interests({
+  data,
+  onNext,
+  onBack,
+  active,
+  footerOverride,
+}: StepProps) {
   // Mirror of the editor's current selection (LABELS), kept fresh via onChange
   // so the footer can gate «Продолжить» and `handleContinue` can serialize the
   // selection into StepData for downstream steps.
@@ -66,11 +72,15 @@ export function Step2Interests({ data, onNext, onBack, active }: StepProps) {
           onChange={setSelection}
         />
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={handleContinue}
-          continueDisabled={!canContinue}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={handleContinue}
+            continueLabel={footerOverride?.continueLabel}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue}
+          />
+        )}
       </div>
     </StepContent>
   );

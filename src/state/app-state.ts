@@ -361,6 +361,12 @@ export type Action =
   // описании). Открывает guided-campaign в режиме editing без гейта анкеты —
   // сама кампания уже прошла её при создании.
   | { type: "campaign_step_edit_requested"; campaignId: string; step: WizardStepId }
+  // Коммит изолированной сессии правки (Task 12) — вызывается ОДИН раз, на
+  // «Применить и вернуться» последнего шага сессии. `stepData` — уже
+  // смерженный локальный снапшот сессии, а не голый partial: промежуточные
+  // «Далее» наружу ничего не пишут (см. IsolatedEditSession), поэтому здесь
+  // всегда есть ровно один финальный вызов.
+  | { type: "campaign_wizard_edit_applied"; campaignId: string; stepData: StepData }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
   | { type: "campaign_duplicated"; id: string; newId?: string }
@@ -730,6 +736,27 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
         activeSection: null,
       };
+
+    case "campaign_wizard_edit_applied": {
+      // Проекция та же, что и у создания кампании (projectStepDataOntoCampaign) —
+      // id/name/createdAt/status/phase/scenario ею намеренно не переносятся:
+      // правка одного шага их не касается.
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) =>
+          c.id === action.campaignId
+            ? { ...c, ...projectStepDataOntoCampaign(action.stepData) }
+            : c,
+        ),
+        // Финал правки — та же карточка, что и финал визарда.
+        view: (() => {
+          const c = state.campaigns.find((cc) => cc.id === action.campaignId);
+          return c
+            ? { kind: "campaign" as const, campaign: { id: c.id, name: c.name } }
+            : state.view;
+        })(),
+      };
+    }
 
     case "campaign_created":
       return {

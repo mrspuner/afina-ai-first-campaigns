@@ -63,7 +63,7 @@ const collapseMotion = {
   className: "overflow-hidden",
 };
 
-export function Step1Scenario({ data, onNext, active }: StepProps) {
+export function Step1Scenario({ data, onNext, active, onValueChange }: StepProps) {
   useScreenHints(active ? SCENARIO_SCREEN_HINTS : null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
@@ -104,6 +104,12 @@ export function Step1Scenario({ data, onNext, active }: StepProps) {
   }
 
   function handleSelect(id: string) {
+    // Живое уведомление ПЕРЕД onNext — тот же контракт, что и у остальных
+    // шагов из STEP_INVALIDATES, хоть здесь оба вызова и происходят одним
+    // кликом (карточки сценария автоприменяют выбор, отдельной кнопки нет).
+    // Изолированный режим правки использует его для решения о каскаде;
+    // диалог-подтверждение смены сценария — Task 13.
+    onValueChange?.({ scenario: id });
     onNext({ scenario: id });
   }
 

@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
-import { StepData, initialStepData } from "@/types/campaign";
+import { StepData, initialStepData, type Channel } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { StepIntent } from "@/sections/campaigns/wizard/steps/step-intent";
 import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
 import { StepAnalysis } from "@/sections/campaigns/wizard/steps/step-analysis";
-import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
+import { StepFile, sameFileSet } from "@/sections/campaigns/wizard/steps/step-file";
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
@@ -286,22 +286,304 @@ function WorkspaceInner({
   );
 }
 
+/** Каналы совпадают по составу И порядку — `toggleChannel` держит канонический
+ *  порядок CHANNELS, так что сравнение по индексу корректно определяет «то же
+ *  значение». */
+function channelsEqual(a: Channel[], b: Channel[]): boolean {
+  return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
+/**
+ * Отличается ли живое значение шага (переданное через `onValueChange`) от
+ * снапшота кампании — единственный вопрос, который решает, каскадирует ли
+ * правка (см. `STEP_INVALIDATES` в wizard-navigation.ts). Только шаги,
+ * которые вообще зовут `onValueChange` (scenario/analysis/file/channels),
+ * когда-либо доходят сюда с непустым `partial`.
+ */
+function stepValueDiffers(
+  step: WizardStepId,
+  partial: Partial<StepData>,
+  snapshot: StepData
+): boolean {
+  switch (step) {
+    case "scenario":
+      return partial.scenario !== undefined && partial.scenario !== snapshot.scenario;
+    case "analysis":
+      return (
+        partial.analysisMode !== undefined &&
+        partial.analysisMode !== snapshot.analysisMode
+      );
+    case "file":
+      return partial.files !== undefined && !sameFileSet(partial.files, snapshot.files);
+    case "channels":
+      return (
+        partial.channels !== undefined && !channelsEqual(partial.channels, snapshot.channels)
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * Изолированная сессия точечной правки одного шага с карточки (Task 12).
+ *
+ * Колонка начинается с ОДНОГО запрошенного шага и растёт РОВНО на те шаги,
+ * которые правка обнулила (`invalidatedBy`/`resetFieldsFor` из Task 10) — та
+ * же таблица зависимостей, что обслуживает обычный проход визарда, здесь
+ * читается ещё раз, а не задублирована. «Далее» перемещает пользователя
+ * ВНУТРИ сессии (правит только ЛОКАЛЬНЫЙ `stepData`) и не пишет наружу
+ * ничего; «Применить и вернуться» коммитит ОДИН раз, на основной кнопке
+ * последнего шага сессии. «Отмена» возвращает на карточку без коммита.
+ *
+ * Почему это важно конкретно: если бы каждое «Далее» писало наружу, то
+ * пользователь, сменивший каналы и бросивший сессию на середине, оставил бы
+ * кампанию с новыми каналами и `budget: null` — черновик, который нельзя
+ * запустить. Коммит один раз означает, что отмена ничего не меняет.
+ */
+function IsolatedEditSession({
+  editing,
+  snapshot,
+  onCommit,
+  onCancel,
+}: {
+  editing: { campaignId: string; step: WizardStepId };
+  snapshot: StepData;
+  onCommit?: (stepData: StepData) => void;
+  onCancel?: () => void;
+}) {
+  // «Отмена» рендерится ВСЕГДА (левая кнопка футера показывается только когда
+  // `onBack` truthy) — коллбек опционален для вызывающего кода/тестов, но
+  // сама кнопка не должна пропадать только потому, что его не передали.
+  const handleCancel = onCancel ?? (() => {});
+  const [stepData, setStepData] = useState<StepData>(snapshot);
+  const [activeStepId, setActiveStepId] = useState<WizardStepId>(editing.step);
+  const [animatingStep, setAnimatingStep] = useState<WizardStepId | null>(editing.step);
+  // Живое, реактивное «что обнулилось» — обновляется по каждому onValueChange
+  // активного шага (см. handleValueChange). НЕ сбрасывается при переходе на
+  // следующий шаг: «Бюджет» сам onValueChange никогда не шлёт, так что если
+  // сбрасывать pendingResets на переходе, «Бюджет» тут же выпал бы из
+  // видимой колонки в момент, когда он и должен на ней остаться (см. отчёт
+  // Task 10 — этот же вопрос про пересчёт бюджета в изолированной колонке).
+  const [pendingResets, setPendingResets] = useState<WizardStepId[]>([]);
+  // Бампается на каждое применение resetFieldsFor — форсирует remount только
+  // что обнулённого шага (см. `key` ниже), чтобы его локальный React-стейт
+  // (например, StepBudget's `mode`/`customValue`) не тянул устаревшее
+  // значение, захваченное ДО сброса, когда шаг впервые смонтировался
+  // реактивно (колонка растёт по live pendingResets, до нажатия «Далее»).
+  const [resetGeneration, setResetGeneration] = useState(0);
+
+  const orderedSteps = stepsForIntent(stepData.intent);
+  const columnSet = new Set<WizardStepId>([editing.step, ...pendingResets]);
+  const visibleStepIds = orderedSteps.filter((id) => columnSet.has(id));
+  const activeIndex = visibleStepIds.indexOf(activeStepId);
+  const isLastInColumn = activeIndex === visibleStepIds.length - 1;
+  const continueLabel =
+    pendingResets.length > 0 && !isLastInColumn ? "Далее" : "Применить и вернуться";
+
+  const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingScroll = useRef<{ step: WizardStepId; behavior: ScrollBehavior } | null>(null);
+
+  function scrollToStep(step: WizardStepId, behavior: ScrollBehavior = "smooth") {
+    stepRefs.current[step]?.scrollIntoView({ behavior, block: "start" });
+  }
+
+  useEffect(() => {
+    if (!pendingScroll.current) return;
+    const { step, behavior } = pendingScroll.current;
+    pendingScroll.current = null;
+    scrollToStep(step, behavior);
+  });
+
+  function handleValueChange(stepId: WizardStepId, partial: Partial<StepData>) {
+    const differs = stepValueDiffers(stepId, partial, snapshot);
+    setPendingResets(differs ? invalidatedBy(stepId) : []);
+  }
+
+  function handleIsolatedNext(partial: Partial<StepData>) {
+    const merged = { ...stepData, ...partial };
+    // Ветка выбирается по УЖЕ показанной подписи кнопки — та и есть источник
+    // истины: пользователь жмёт то, что видит.
+    if (continueLabel === "Далее") {
+      const patched = { ...merged, ...resetFieldsFor(pendingResets) };
+      setStepData(patched);
+      setResetGeneration((g) => g + 1);
+      const next = visibleStepIds[activeIndex + 1] ?? activeStepId;
+      setAnimatingStep(next);
+      setActiveStepId(next);
+      pendingScroll.current = { step: next, behavior: "smooth" };
+      return;
+    }
+    onCommit?.(merged);
+  }
+
+  function handleStepperClick(step: number) {
+    const id = orderedSteps[step - 1];
+    if (!id || !columnSet.has(id)) return;
+    setAnimatingStep(null);
+    setActiveStepId(id);
+    pendingScroll.current = { step: id, behavior: "instant" };
+  }
+
+  function renderIsolatedStep(id: WizardStepId) {
+    const isActive = id === activeStepId;
+    const footerOverride = {
+      continueLabel,
+      backLabel: "Отмена",
+      hidden: !isActive,
+    };
+    switch (id) {
+      case "scenario":
+        // «Сценарий» автоприменяет выбор и футера не имеет — подтверждающий
+        // диалог смены сценария в изолированной сессии строит Task 13.
+        return (
+          <Step1Scenario
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onValueChange={(p) => handleValueChange("scenario", p)}
+          />
+        );
+      case "interests":
+        return (
+          <Step2Interests
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            footerOverride={footerOverride}
+          />
+        );
+      case "analysis":
+        return (
+          <StepAnalysis
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("analysis", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "file":
+        return (
+          <StepFile
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("file", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "channels":
+        return (
+          <StepChannels
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("channels", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "budget":
+        return (
+          <StepBudget
+            data={stepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            footerOverride={footerOverride}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
+  const currentStep = orderedSteps.indexOf(activeStepId) + 1;
+  const visitedPositions = new Set(
+    visibleStepIds.map((id) => orderedSteps.indexOf(id) + 1)
+  );
+  const maxStep = Math.max(...visitedPositions);
+
+  return (
+    <div
+      className="relative flex flex-1 flex-col overflow-hidden transition-[padding] duration-300"
+      style={{ paddingRight: "var(--chat-sidebar-width, 0px)" }}
+    >
+      <div
+        className="absolute top-6 z-10 transition-[right] duration-300"
+        style={{ right: "calc(1.5rem + var(--chat-sidebar-width, 0px))" }}
+      >
+        {/* Полный список шагов — кликабельны только попавшие в колонку правки. */}
+        <CampaignStepper
+          steps={orderedSteps}
+          currentStep={currentStep}
+          maxStep={maxStep}
+          onStepClick={handleStepperClick}
+          visitedSteps={visitedPositions}
+        />
+      </div>
+
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {visibleStepIds.map((id) => (
+          <motion.div
+            key={`${id}-${resetGeneration}`}
+            ref={(el) => { stepRefs.current[id] = el; }}
+            initial={id === animatingStep ? { y: 60, opacity: 0 } : false}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="flex min-h-screen shrink-0 flex-col items-center justify-center px-8 pb-promptbar pt-10"
+          >
+            {renderIsolatedStep(id)}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CampaignWorkspace({
   onLaunchRequested,
   initialScenario,
   initialStepDataOverride,
   initialStep,
-  // `editing` принимается ради типизации точечной правки шага с карточки
-  // (Task 11), но пока ничего не делает — изолированный режим (рендер и
-  // коммит только одного шага) строит Task 12.
-  editing: _editing,
+  editing,
+  onCommit,
+  onCancel,
 }: {
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   initialStepDataOverride?: StepData;
   initialStep?: number;
+  /** Точечная правка с карточки: колонка начинается с одного шага и дорастает
+   *  ровно на те шаги, которые обнулила правка. */
   editing?: { campaignId: string; step: WizardStepId };
+  /** Коммит правки — вызывается ОДИН раз, на основной кнопке последнего шага
+   *  сессии. Промежуточные «Далее» наружу ничего не пишут: брошенная на
+   *  полпути правка не должна оставить черновик с обнулённым бюджетом. */
+  onCommit?: (stepData: StepData) => void;
+  /** «Отмена» — возврат на карточку без коммита (не «Назад»: у изолированной
+   *  сессии нет предыдущего шага визарда, есть только выход). */
+  onCancel?: () => void;
 } = {}) {
+  if (editing) {
+    // Изолированная правка гидрируется снапшотом кампании
+    // (initialStepDataOverride); без него редактировать нечего — вызывающий
+    // код (rebuildViewFromAddress / guided-campaign-section.tsx) уже не
+    // должен сюда доходить в этом случае, но явный guard лучше падения на
+    // undefined-обращениях внутри.
+    if (!initialStepDataOverride) return null;
+    return (
+      <IsolatedEditSession
+        editing={editing}
+        snapshot={initialStepDataOverride}
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />
+    );
+  }
   return (
     <WorkspaceInner
       onLaunchRequested={onLaunchRequested}

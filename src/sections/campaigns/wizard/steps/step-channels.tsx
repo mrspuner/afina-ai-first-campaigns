@@ -24,11 +24,25 @@ export function formatUnitCost(channel: Channel): string {
   return `${rub} ₽ / отправка`;
 }
 
-export function StepChannels({ data, onNext, onBack }: StepProps) {
+export function StepChannels({
+  data,
+  onNext,
+  onBack,
+  onValueChange,
+  footerOverride,
+}: StepProps) {
   const [channels, setChannels] = useState<Channel[]>(data.channels);
 
   function toggle(channel: Channel) {
-    setChannels((prev) => toggleChannel(prev, channel));
+    // `onValueChange` уведомляет РОДИТЕЛЯ (изолированную сессию правки) —
+    // вызывать его нужно из обработчика клика напрямую, а не из функционального
+    // апдейтера `setChannels`: апдейтер выполняется React во время рендера
+    // ЭТОГО компонента, и setState другого компонента оттуда — ошибка
+    // "Cannot update a component while rendering a different component"
+    // (проверено вживую в браузере при точечной правке шага «Каналы»).
+    const next = toggleChannel(channels, channel);
+    setChannels(next);
+    onValueChange?.({ channels: next });
   }
 
   // Communication is mandatory here; signals-only is now path A at step 2.
@@ -79,12 +93,15 @@ export function StepChannels({ data, onNext, onBack }: StepProps) {
           })}
         </div>
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={() => onNext({ channels })}
-          continueLabel="Далее"
-          continueDisabled={!canContinue}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={() => onNext({ channels })}
+            continueLabel={footerOverride?.continueLabel ?? "Далее"}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue}
+          />
+        )}
       </div>
     </StepContent>
   );

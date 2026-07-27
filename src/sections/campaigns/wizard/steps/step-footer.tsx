@@ -13,6 +13,7 @@ export function StepFooter({
   continueDisabled,
   continueClassName,
   hint,
+  backLabel = "Назад",
 }: {
   onBack?: () => void;
   onContinue: () => void;
@@ -20,13 +21,17 @@ export function StepFooter({
   continueDisabled?: boolean;
   continueClassName?: string;
   hint?: string;
+  /** Изолированная сессия правки шага (Task 12) читает здесь «Отмена» вместо
+   *  обычного «Назад» — у неё нет предыдущего шага, есть только выход без
+   *  коммита. */
+  backLabel?: string;
 }) {
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3">
         {onBack ? (
           <Button variant="outline" onClick={onBack}>
-            Назад
+            {backLabel}
           </Button>
         ) : (
           <span aria-hidden />

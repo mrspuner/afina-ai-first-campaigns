@@ -89,7 +89,14 @@ function ScenarioMatchNotice({ scenarioId }: { scenarioId: string | null }) {
   );
 }
 
-export function StepFile({ data, onNext, onBack, active }: StepProps) {
+export function StepFile({
+  data,
+  onNext,
+  onBack,
+  active,
+  onValueChange,
+  footerOverride,
+}: StepProps) {
   useScreenHints(active ? FILE_SCREEN_HINTS : null);
   // One or more bases (Block 4b). Seeded from the wizard's `files`, so revisits
   // keep the uploaded set and skip re-hashing unless the user changes it.
@@ -107,21 +114,30 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
   // convert it immediately to the lightweight, serializable shape used everywhere else.
   const toBase = (f: File): BaseFile => ({ name: f.name, rowCount: simulateRowCount(f) });
 
+  // `onValueChange` уведомляет РОДИТЕЛЯ (изолированную сессию правки) — вызывать
+  // его нужно из обработчика события напрямую, а не изнутри функционального
+  // апдейтера `setFiles`: апдейтер выполняется React во время рендера ЭТОГО
+  // компонента, и setState другого компонента оттуда — ошибка "Cannot update a
+  // component while rendering a different component" (тот же баг, что был в
+  // step-channels.tsx, проверено вживую в браузере).
   function addFile(f: File) {
-    setFiles((prev) => [...prev, toBase(f)]);
+    const next = [...files, toBase(f)];
+    setFiles(next);
+    onValueChange?.({ files: next });
     setShowAddSlot(false);
   }
 
   function replaceAt(index: number, f: File) {
-    setFiles((prev) => prev.map((x, i) => (i === index ? toBase(f) : x)));
+    const next = files.map((x, i) => (i === index ? toBase(f) : x));
+    setFiles(next);
+    onValueChange?.({ files: next });
   }
 
   function removeAt(index: number) {
-    setFiles((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      if (next.length === 0) setShowAddSlot(true);
-      return next;
-    });
+    const next = files.filter((_, i) => i !== index);
+    setFiles(next);
+    if (next.length === 0) setShowAddSlot(true);
+    onValueChange?.({ files: next });
   }
 
   function emit(rowCount: number) {
@@ -207,12 +223,15 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
           </p>
         </div>
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={handleContinue}
-          continueLabel="Далее"
-          continueDisabled={!canContinue || isHashing}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={handleContinue}
+            continueLabel={footerOverride?.continueLabel ?? "Далее"}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue || isHashing}
+          />
+        )}
       </div>
     </StepContent>
   );

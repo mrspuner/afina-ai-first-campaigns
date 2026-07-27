@@ -2,10 +2,13 @@
 
 import { useCallback, useState } from "react";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
-import { SCENARIO_NAMES } from "@/data/scenarios";
+import { SCENARIO_NAMES, getScenario } from "@/data/scenarios";
 import { SurveySection } from "@/sections/survey/survey-section";
 import { CampaignWorkspace, type LaunchRequest } from "@/sections/campaigns/wizard/campaign-workspace";
 import { shouldShowSurveyGate } from "@/state/survey-gate";
+import type { StepData } from "@/types/campaign";
+import { createTemplate, mergeChannelNodes } from "@/state/workflow-templates";
+import { getCachedGraph, setCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
 
 /**
  * Thin host for the campaign-creation wizard: gates on the survey, then renders
@@ -41,6 +44,56 @@ export function GuidedCampaignSection() {
     [dispatch, initial?.name],
   );
 
+  // Коммит изолированной сессии правки (Task 12) — вызывается ОДИН раз, на
+  // «Применить и вернуться». Граф живёт в отдельном, не-redux кэше
+  // (workflow-graph-cache.ts), поэтому его пересборка при смене каналов
+  // происходит здесь, ДО диспатча самого коммита — тот только проецирует
+  // stepData на поля кампании (см. campaign_wizard_edit_applied в app-state.ts).
+  const handleEditCommit = useCallback(
+    (stepData: StepData) => {
+      if (!editing) return;
+      const { campaignId } = editing;
+      const channelsChanged =
+        editingCampaign &&
+        JSON.stringify(editingCampaign.channels ?? []) !==
+          JSON.stringify(stepData.channels);
+      if (channelsChanged) {
+        const signalType = editingCampaign.scenario
+          ? getScenario(editingCampaign.scenario.id)?.signalType
+          : undefined;
+        if (signalType) {
+          // Тот же порядок разрешения графа, что и use-campaign-graph-applier.ts's
+          // resolveBaseGraph: durable-кэш побеждает, иначе — свежий шаблон по
+          // ДОкоммитным каналам кампании (то, от чего мержим).
+          const cached = getCachedGraph(campaignId);
+          const baseGraph = cached
+            ? { nodes: cached.nodes, edges: cached.edges }
+            : (() => {
+                const t = createTemplate(
+                  signalType,
+                  editingCampaign.sourceType ?? "new",
+                  editingCampaign.channels ?? [],
+                );
+                return { nodes: t.nodes, edges: t.edges };
+              })();
+          const merged = mergeChannelNodes(baseGraph, stepData.channels, {
+            signalType,
+            sourceType: stepData.sourceType,
+          });
+          setCachedGraph(campaignId, merged);
+        }
+      }
+      // Перестройка графа при смене сценария — Task 13.
+      dispatch({ type: "campaign_wizard_edit_applied", campaignId, stepData });
+    },
+    [dispatch, editing, editingCampaign],
+  );
+
+  const handleEditCancel = useCallback(() => {
+    if (!editing) return;
+    dispatch({ type: "campaign_opened", id: editing.campaignId });
+  }, [dispatch, editing]);
+
   // Правка уже созданной кампании — не новый вход в воронку, так что анкету
   // повторно не спрашиваем (тот же смысл, что и `isResuming` для resume).
   const showSurvey =
@@ -56,6 +109,8 @@ export function GuidedCampaignSection() {
       initialStep={wizardSeed?.step}
       initialStepDataOverride={editingCampaign?.wizardData ?? wizardSeed?.stepData}
       editing={editing}
+      onCommit={handleEditCommit}
+      onCancel={handleEditCancel}
     />
   );
 }

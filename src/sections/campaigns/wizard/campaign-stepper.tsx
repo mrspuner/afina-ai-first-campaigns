@@ -38,6 +38,16 @@ interface CampaignStepperProps {
   maxStep: number;
   onStepClick: (step: number) => void;
   disabled?: boolean;
+  /**
+   * Изолированная сессия правки шага (Task 12): набор позиций, доступных для
+   * клика/подсвеченных как «пройденные». Колонка правки может пропускать
+   * шаги ПОСЕРЕДИНЕ (например, «Анализ»(4) и «Бюджет»(7) без «Файла»(5)/
+   * «Каналов»(6) между ними — правка одного не проходит через другие), так
+   * что сплошная проверка `step <= maxStep` тут не подходит. Когда задано,
+   * ЗАМЕНЯЕТ обычную проверку `isVisited` целиком; обычный проход визарда его
+   * не передаёт и остаётся на прежней сплошной логике.
+   */
+  visitedSteps?: Set<number>;
 }
 
 export function CampaignStepper({
@@ -46,6 +56,7 @@ export function CampaignStepper({
   maxStep,
   onStepClick,
   disabled = false,
+  visitedSteps,
 }: CampaignStepperProps) {
   return (
     <div className="flex flex-col gap-1">
@@ -53,9 +64,9 @@ export function CampaignStepper({
         const step = idx + 1;
         const label = STEP_LABELS[id];
         const isActive = step === currentStep;
-        const isVisited = step <= maxStep;
+        const isVisited = visitedSteps ? visitedSteps.has(step) : step <= maxStep;
         const isCompleted = isVisited && !isActive;
-        const isPending = step > maxStep;
+        const isPending = !isVisited && !isActive;
         const isClickable = isVisited && !isActive && !disabled;
 
         return (
