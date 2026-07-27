@@ -1,8 +1,12 @@
 import { isCommunicationNode, type NodeParams, type WorkflowEdge, type WorkflowNode } from "@/types/workflow";
 import { pluralRu } from "@/lib/plural-ru";
+import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
 import { channelForNodeKind, templateOptionsForKind } from "./node-template-options";
 import type { MessageTemplate } from "./app-state";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
+import type { DomainStatus } from "@/types/account-settings";
+import type { Channel, AnalysisMode } from "@/types/campaign";
 
 /**
  * Детерминированное описание workflow-графа человеческим текстом.
@@ -24,6 +28,8 @@ export interface DescriptionMessage {
   subject?: string;
   /** Текст сообщения, взятый из params ноды. */
   text: string;
+  /** Название шаблона как тег — раскрывает поповер выбора шаблона у пилюли. */
+  templateTag?: DescriptionTag;
 }
 
 export type DescriptionStageId = "start" | "first-touch" | "check" | "retry" | "outcome";
@@ -31,17 +37,31 @@ export type DescriptionStageId = "start" | "first-touch" | "check" | "retry" | "
 /**
  * Кусок текста описания. Значения параметров кампании выносятся в теги-пилюли,
  * поэтому тело этапа больше не строка — оно чередует текст и теги.
- * `DescriptionTag` объявляется в следующем шаге трека; пока сегменты только
- * текстовые.
  */
 export type DescriptionSegment =
   | { kind: "text"; text: string }
   | { kind: "tag"; tag: DescriptionTag };
 
-// Временная заглушка — Task 4 расширит `target` и `hoverList`.
-interface DescriptionTag {
+/**
+ * Куда ведёт клик по тегу. Единственная цель, уводящая с карточки, — шаг
+ * визарда; остальные раскрываются поповером у самой пилюли. `none` — значение
+ * без цели: кампания запущена или такого шага в её визарде не существует.
+ */
+export type TagTarget =
+  | { kind: "wizard-step"; step: WizardStepId }
+  | { kind: "template"; nodeId: string }
+  | { kind: "node-fields"; nodeId: string }
+  | { kind: "domains" }
+  | { kind: "none" };
+
+/** Значение параметра, вынесенное в кликабельную пилюлю внутри текста. */
+export interface DescriptionTag {
+  /** Уникален в пределах описания — используется как React-ключ. */
   id: string;
   label: string;
+  target: TagTarget;
+  /** Раскрывается по наведению: остаток схлопнутого перечисления. */
+  hoverList?: string[];
 }
 
 /** Короткий конструктор текстового сегмента — читаемость сборки описания. */
@@ -220,6 +240,7 @@ function communicationDedupKey(node: WorkflowNode): string | null {
 function describeMessage(
   node: WorkflowNode,
   templates: MessageTemplate[],
+  withTags: boolean,
 ): DescriptionMessage | null {
   const params = node.data.params;
   if (!params) return null;
@@ -245,6 +266,17 @@ function describeMessage(
       ? { subject: params.subject }
       : {}),
     text,
+    // Тег появляется только в режиме тегов (вызвавший передал факты) — без
+    // фактов описание остаётся чистым текстом (Task 4).
+    ...(withTags && templateName
+      ? {
+          templateTag: {
+            id: `msg-${node.id}-template`,
+            label: templateName,
+            target: { kind: "template", nodeId: node.id },
+          },
+        }
+      : {}),
   };
 }
 
@@ -264,30 +296,100 @@ function waitPhrase(params: Extract<NodeParams, { kind: "wait" }>): string {
 // ── Сборка описания ──────────────────────────────────────────────────────────
 
 /**
- * Pending-domain input for the `start` stage — the moderation "fate" line
- * (Task 11). Statuses live in the account registry (`ownDomains`) and are
- * resolved by the CALLER against `Campaign.triggerConfig`; this function
- * stays a pure graph→text transform and never reads state itself.
+ * Факты кампании, которые описание вплетает в текст тегами.
+ *
+ * `describeWorkflow` остаётся ЧИСТОЙ функцией от графа: состояние она не
+ * читает, всё приходит сюда от вызывающего (`CampaignScreen`). Поле `pending`
+ * — прежний `DomainStatuses`, сохранено ради обратной совместимости вызова.
  */
-export interface DomainStatuses {
+export interface CampaignFacts {
+  /** Домены на модерации — управляет выводом фразы о модерации. */
   pending: string[];
+  /** Все домены триггеров со статусами — содержимое поповера доменов. */
+  domains?: { domain: string; status: DomainStatus }[];
+  baseRows?: number;
+  triggers?: string[];
+  channels?: Channel[];
+  budget?: number;
+  /** Отсутствует у собственной базы — шага «Режим» в её визарде нет. */
+  analysisMode?: AnalysisMode;
+  scenarioName?: string;
+  /**
+   * Шаги, на которые тег имеет право увести. Пустой список = кампания
+   * запущена: теги рендерятся как носители значений без клика. Это и есть
+   * механизм read-only, отдельной ветки рендера не требуется.
+   */
+  editableSteps?: WizardStepId[];
+}
+
+/**
+ * Сегмент-тег со значением параметра, ведущий на шаг визарда.
+ *
+ * Если шаг недоступен (кампания запущена — `editableSteps` пуст; либо шага в
+ * визарде этой цели нет — например «Режим» у собственной базы), цель
+ * становится `none`: пилюля рендерится без клика, но значение показывает.
+ * Отдельной ветки read-only-рендера поэтому не требуется.
+ */
+function stepTag(
+  id: string,
+  label: string,
+  step: WizardStepId,
+  editableSteps: WizardStepId[] | undefined,
+  hoverList?: string[],
+): DescriptionSegment {
+  const editable = editableSteps?.includes(step) ?? false;
+  return {
+    kind: "tag",
+    tag: {
+      id,
+      label,
+      target: editable ? { kind: "wizard-step", step } : { kind: "none" },
+      ...(hoverList ? { hoverList } : {}),
+    },
+  };
+}
+
+/**
+ * Склеивает соседние текстовые сегменты в один. Фразы собираются по кускам
+ * (одни условные, другие нет), но соседние `text`+`text` должны читаться ОДНИМ
+ * сегментом — это ровно то, что фиксирует тест на точный шов фразы о
+ * модерации. Теги не трогает и порядок не меняет.
+ */
+function mergeTextSegments(segments: DescriptionSegment[]): DescriptionSegment[] {
+  const merged: DescriptionSegment[] = [];
+  for (const seg of segments) {
+    const last = merged[merged.length - 1];
+    if (seg.kind === "text" && last?.kind === "text") {
+      merged[merged.length - 1] = { kind: "text", text: last.text + seg.text };
+    } else {
+      merged.push(seg);
+    }
+  }
+  return merged;
 }
 
 export function describeWorkflow(
   graph: DescribableGraph,
   templates: MessageTemplate[],
-  domainStatuses?: DomainStatuses,
+  facts?: CampaignFacts,
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
   const { ordered, commNodes, retryWaits, isFirstPass } = traverseGraph(graph);
+
+  // Без фактов описание остаётся ровно тем, что производил Task 3 — чистым
+  // текстом. Теги, не привязанные к конкретному полю CampaignFacts (шаблон
+  // сообщения, пауза повтора — они читаются из графа, а не из facts),
+  // включаются этим единственным флагом.
+  const hasFacts = facts !== undefined;
+  const editableSteps = facts?.editableSteps;
 
   // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
   // канал (дедуп по каналу и тексту, а не по ноде).
   const messages: DescriptionMessage[] = [];
   const seenMessages = new Set<string>();
   for (const node of commNodes.filter(isFirstPass)) {
-    const message = describeMessage(node, templates);
+    const message = describeMessage(node, templates, hasFacts);
     if (!message) continue;
     // Не может быть null здесь: describeMessage вернул сообщение только если
     // канал резолвится и текст непуст — ровно условия communicationDedupKey.
@@ -309,34 +411,128 @@ export function describeWorkflow(
   const startBody = hasScoring
     ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
     : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
+
+  // Строка о загруженной базе — тег со строками, если их число известно.
+  const baseSegments: DescriptionSegment[] = facts?.baseRows !== undefined
+    ? [
+        t(" В работу идёт "),
+        stepTag(
+          "start-base",
+          `база на ${facts.baseRows.toLocaleString("ru-RU")} строк`,
+          "file",
+          editableSteps,
+        ),
+        t("."),
+      ]
+    : [];
+
+  // Перечисление триггеров: два названных тега, остаток — схлопка с формой
+  // числительного и hoverList на остаток. Ноль или один триггер — без схлопки.
+  const triggerSegments: DescriptionSegment[] = [];
+  if (facts?.triggers?.length) {
+    const [first, second, ...rest] = facts.triggers;
+    triggerSegments.push(t(" Работает по триггерам "), stepTag("start-trigger-0", first, "interests", editableSteps));
+    if (second) {
+      triggerSegments.push(
+        t(rest.length ? ", " : " и "),
+        stepTag("start-trigger-1", second, "interests", editableSteps),
+      );
+    }
+    if (rest.length) {
+      triggerSegments.push(
+        t(" и "),
+        stepTag(
+          "start-triggers-more",
+          `ещё ${rest.length} ${pluralRu(rest.length, ["триггеру", "триггерам", "триггерам"])}`,
+          "interests",
+          editableSteps,
+          rest,
+        ),
+      );
+    }
+    triggerSegments.push(t("."));
+  }
+
+  // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
+  // не приходит вовсе, и тег не появляется.
+  const modeSegments: DescriptionSegment[] = facts?.analysisMode !== undefined
+    ? [
+        t(" Анализ — "),
+        stepTag(
+          "start-mode",
+          facts.analysisMode === "once" ? "разовый" : "потоковый",
+          "analysis",
+          editableSteps,
+        ),
+        t("."),
+      ]
+    : [];
+
+  const scenarioSegments: DescriptionSegment[] = facts?.scenarioName !== undefined
+    ? [
+        t(" Сценарий — "),
+        stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps),
+        t("."),
+      ]
+    : [];
+
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
-  // есть pending-домены — граф + статусы решают, LLM тут ни при чём.
-  const pendingDomains = domainStatuses?.pending ?? [];
+  // есть pending-домены — граф + статусы решают, LLM тут ни при чём. Домены —
+  // тег с целью на поповер модерации, а не сырой текст.
+  const pendingDomains = facts?.pending ?? [];
+  const domainSegments: DescriptionSegment[] = pendingDomains.length
+    ? [
+        t(" Домены "),
+        {
+          kind: "tag",
+          tag: {
+            id: "start-domains",
+            label: pendingDomains.join(", "),
+            target: { kind: "domains" },
+          },
+        },
+        t(" отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании."),
+      ]
+    : [];
+
   stages.push({
     id: "start",
     heading: "Старт.",
-    // Task 4 вставит между первым и третьим сегментом тег доменов вместо
-    // склеенной строки — сегментация уже сейчас сохраняет ровно те же пробелы.
-    body: pendingDomains.length
-      ? [
-          t(`${startBody} Домены `),
-          t(pendingDomains.join(", ")),
-          t(" отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании."),
-        ]
-      : [t(startBody)],
+    body: mergeTextSegments([
+      t(startBody),
+      ...baseSegments,
+      ...triggerSegments,
+      ...modeSegments,
+      ...scenarioSegments,
+      ...domainSegments,
+    ]),
   });
 
   if (messages.length) {
+    // Каналы первого касания — один тег с перечислением, а не по тегу на канал.
+    const channelsSegments: DescriptionSegment[] = facts?.channels?.length
+      ? [
+          t("Сообщения идут по каналам "),
+          stepTag(
+            "first-touch-channels",
+            facts.channels.map((c) => CHANNEL_LABEL[c]).join(", "),
+            "channels",
+            editableSteps,
+          ),
+          t(". "),
+        ]
+      : [];
     stages.push({
       id: "first-touch",
       heading: "Первое касание.",
-      body: [
+      body: mergeTextSegments([
+        ...channelsSegments,
         t(
           hasSplit
             ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
             : "Каждому контакту уходит первое сообщение:",
         ),
-      ],
+      ]),
       messages,
     });
   }
@@ -356,23 +552,44 @@ export function describeWorkflow(
   }
 
   if (hasRetry) {
+    const retryPrefix = "Тем, кто не отреагировал, кампания выжидает ";
+    const retrySuffix = multiChannel
+      ? " и повторяет ту же серию сообщений по тем же каналам."
+      : " и повторяет то же сообщение.";
     stages.push({
       id: "retry",
       heading: "Пауза и повтор.",
-      body: [
-        t(
-          multiChannel
-            ? `Тем, кто не отреагировал, кампания выжидает ${waitPhrase(retryParams)} и повторяет ту же серию сообщений по тем же каналам.`
-            : `Тем, кто не отреагировал, кампания выжидает ${waitPhrase(retryParams)} и повторяет то же сообщение.`,
-        ),
-      ],
+      // Пауза — тег с целью node-fields на саму ноду ожидания. Без фактов
+      // (hasFacts=false) остаётся прежним единым текстом Task 3.
+      body: hasFacts
+        ? mergeTextSegments([
+            t(retryPrefix),
+            {
+              kind: "tag",
+              tag: {
+                id: "retry-wait",
+                label: waitPhrase(retryParams),
+                target: { kind: "node-fields", nodeId: retryWaits[0].id },
+              },
+            },
+            t(retrySuffix),
+          ])
+        : [t(`${retryPrefix}${waitPhrase(retryParams)}${retrySuffix}`)],
     });
   }
+
+  const budgetSegments: DescriptionSegment[] = facts?.budget !== undefined
+    ? [
+        t(" Бюджет — "),
+        stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps),
+        t("."),
+      ]
+    : [];
 
   stages.push({
     id: "outcome",
     heading: "Итог.",
-    body: [
+    body: mergeTextSegments([
       t(
         !messages.length
           ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
@@ -380,7 +597,8 @@ export function describeWorkflow(
             ? "После повтора — финальная проверка: отреагировавшие засчитываются в успех, остальные завершают путь без конверсии."
             : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
       ),
-    ],
+      ...budgetSegments,
+    ]),
   });
 
   return stages;

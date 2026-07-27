@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describeWorkflow, firstTouchCommunicationNodes, segmentsText } from "./graph-description";
+import {
+  describeWorkflow,
+  firstTouchCommunicationNodes,
+  segmentsText,
+  type CampaignFacts,
+} from "./graph-description";
 import { createTemplate } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
 
@@ -60,12 +65,18 @@ describe("describeWorkflow", () => {
     it("шов фразы о модерации несёт точные пробелы — collapse их бы скрыл", () => {
       const stages = describeWorkflow(graphWithScoring, T, { pending: ["a.ru", "b.ru"] });
       const start = stages.find((s) => s.id === "start")!;
+      // Task 4: средний сегмент — раньше сырой текст "a.ru, b.ru" — теперь тег
+      // с целью `{ kind: "domains" }`. Соседние текстовые сегменты несут те же
+      // пробелы, что и раньше: этот тест и существует, чтобы шов не потерялся.
       expect(start.body).toEqual([
         {
           kind: "text",
           text: "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности. Домены ",
         },
-        { kind: "text", text: "a.ru, b.ru" },
+        {
+          kind: "tag",
+          tag: { id: "start-domains", label: "a.ru, b.ru", target: { kind: "domains" } },
+        },
         {
           kind: "text",
           text: " отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании.",
@@ -224,5 +235,135 @@ describe("firstTouchCommunicationNodes", () => {
     const nodes = firstTouchCommunicationNodes(graph);
     expect(nodes).toHaveLength(1);
     expect(nodes[0].data.nodeType).toBe("sms");
+  });
+});
+
+describe("describeWorkflow — теги", () => {
+  // «Возврат»/new/sms несёт и коммуникационную ноду (sms первого касания,
+  // шаблон резолвится — см. "Первое касание" выше), и retry-wait ноду (те же
+  // 48 часов, что использует "берёт длительность паузы..."), поэтому годится
+  // фикстурой сразу для тестов шаблона и паузы.
+  const graph = createTemplate("Возврат", "new", ["sms"]);
+  const templates = T;
+
+  /** Все теги описания одним плоским списком — удобно для утверждений. */
+  const allTags = (stages: ReturnType<typeof describeWorkflow>) =>
+    stages.flatMap((s) => [
+      ...s.body.filter((seg) => seg.kind === "tag").map((seg) => seg.tag),
+      ...(s.messages ?? []).flatMap((m) => (m.templateTag ? [m.templateTag] : [])),
+    ]);
+
+  const facts: CampaignFacts = {
+    pending: [],
+    baseRows: 12_000,
+    triggers: ["Ипотека", "Новостройки", "Вторичка", "Аренда"],
+    channels: ["sms", "email"],
+    budget: 50_000,
+    analysisMode: "once",
+    scenarioName: "Ипотечный интерес",
+    editableSteps: ["scenario", "intent", "interests", "analysis", "file", "channels", "budget"],
+  };
+
+  it("без фактов тегов нет — описание остаётся чистым текстом", () => {
+    const tags = allTags(describeWorkflow(graph, templates));
+    expect(tags).toHaveLength(0);
+  });
+
+  it("число строк базы, каналы, бюджет, режим и сценарий присутствуют тегами", () => {
+    const tags = allTags(describeWorkflow(graph, templates, facts));
+    const steps = tags
+      .filter((t) => t.target.kind === "wizard-step")
+      .map((t) => (t.target as { step: string }).step);
+    expect(steps).toEqual(
+      expect.arrayContaining(["file", "interests", "channels", "budget", "analysis", "scenario"]),
+    );
+  });
+
+  it("перечисление триггеров — два названных плюс схлопка с формой числительного", () => {
+    const tags = allTags(describeWorkflow(graph, templates, facts));
+    const collapse = tags.find((t) => t.label.startsWith("ещё "));
+    expect(collapse?.label).toBe("ещё 2 триггерам");
+    // Схлопка ведёт туда же, куда названные триггеры.
+    expect(collapse?.target).toEqual({ kind: "wizard-step", step: "interests" });
+    // По наведению — остаток перечисления.
+    expect(collapse?.hoverList).toEqual(["Вторичка", "Аренда"]);
+  });
+
+  it("три триггера дают форму «ещё 1 триггеру»", () => {
+    const tags = allTags(
+      describeWorkflow(graph, templates, { ...facts, triggers: ["А", "Б", "В"] }),
+    );
+    expect(tags.find((t) => t.label.startsWith("ещё "))?.label).toBe("ещё 1 триггеру");
+  });
+
+  it("два триггера схлопки не дают", () => {
+    const tags = allTags(
+      describeWorkflow(graph, templates, { ...facts, triggers: ["А", "Б"] }),
+    );
+    expect(tags.some((t) => t.label.startsWith("ещё "))).toBe(false);
+  });
+
+  it("пустой editableSteps снимает цель со всех шаговых тегов — кампания запущена", () => {
+    const tags = allTags(describeWorkflow(graph, templates, { ...facts, editableSteps: [] }));
+    expect(tags.some((t) => t.target.kind === "wizard-step")).toBe(false);
+    // Значения при этом остаются — теги носители данных, а не только аффорданс.
+    // toLocaleString("ru-RU") группирует разряды через NBSP (U+00A0), не через
+    // обычный пробел — используем ту же букву, что реально возвращает форматтер
+    // (сверено эмпирически; ASCII-пробел в буквальном тексте брифа не совпал бы).
+    expect(tags.some((t) => t.label.includes("50 000"))).toBe(true);
+  });
+
+  it("шаг, отсутствующий у этой цели, тега не даёт", () => {
+    // Собственная база: шагов «Режим» и «Интересы» в её визарде не существует.
+    const tags = allTags(
+      describeWorkflow(graph, templates, {
+        ...facts,
+        analysisMode: undefined,
+        editableSteps: ["scenario", "intent", "file", "channels", "budget"],
+      }),
+    );
+    expect(tags.some((t) => t.label === "разовый")).toBe(false);
+  });
+
+  it("отсутствующее значение тега не даёт, текст остаётся связным", () => {
+    const stages = describeWorkflow(graph, templates, { ...facts, baseRows: undefined });
+    const tags = allTags(stages);
+    expect(tags.some((t) => t.target.kind === "wizard-step" && t.target.step === "file")).toBe(
+      false,
+    );
+    expect(segmentsText(stages[0].body)).not.toContain("undefined");
+    expect(segmentsText(stages[0].body)).not.toMatch(/\s{2}/);
+  });
+
+  it("домены на модерации несут тег со всеми доменами и статусами", () => {
+    const stages = describeWorkflow(graph, templates, {
+      ...facts,
+      pending: ["new.example.ru"],
+      domains: [
+        { domain: "new.example.ru", status: "pending" },
+        { domain: "old.example.ru", status: "approved" },
+      ],
+    });
+    const tag = allTags(stages).find((t) => t.target.kind === "domains");
+    expect(tag).toBeDefined();
+    expect(tag!.label).toBe("new.example.ru");
+  });
+
+  it("название шаблона становится тегом с целью на свою ноду", () => {
+    const stages = describeWorkflow(graph, templates, facts);
+    const message = stages.find((s) => s.id === "first-touch")?.messages?.[0];
+    expect(message?.templateTag?.target.kind).toBe("template");
+  });
+
+  it("пауза несёт тег с целью node-fields на ноду ожидания", () => {
+    const tags = allTags(describeWorkflow(graph, templates, facts));
+    const wait = tags.find((t) => t.target.kind === "node-fields");
+    expect(wait).toBeDefined();
+    expect(wait!.label).toMatch(/дн|час/);
+  });
+
+  it("идентификаторы тегов уникальны — годятся как React-ключи", () => {
+    const ids = allTags(describeWorkflow(graph, templates, facts)).map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

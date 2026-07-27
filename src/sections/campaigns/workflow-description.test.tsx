@@ -81,7 +81,7 @@ describe("WorkflowDescription", () => {
           heading: "Старт.",
           body: [
             { kind: "text", text: "Домены " },
-            { kind: "tag", tag: { id: "domains", label: "a.ru, b.ru" } },
+            { kind: "tag", tag: { id: "domains", label: "a.ru, b.ru", target: { kind: "domains" } } },
             { kind: "text", text: " отправлены на модерацию." },
           ],
         },
