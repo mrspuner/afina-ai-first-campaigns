@@ -366,7 +366,18 @@ export type Action =
   // смерженный локальный снапшот сессии, а не голый partial: промежуточные
   // «Далее» наружу ничего не пишут (см. IsolatedEditSession), поэтому здесь
   // всегда есть ровно один финальный вызов.
-  | { type: "campaign_wizard_edit_applied"; campaignId: string; stepData: StepData }
+  // `scenarioName` — тот же приём, что у `campaign_created_from_wizard`:
+  // имя сценария резолвится на стороне вызова (guided-campaign-section.tsx
+  // уже держит `SCENARIO_NAMES`), реducer его не ищет. Нужен, когда правка
+  // меняет `stepData.scenario` (Task 13) — иначе `campaign.scenario`
+  // (id+name, читает карточка/канвас-хэдер/резолв signalType) остался бы
+  // указывать на СТАРЫЙ сценарий, хотя граф уже пересобран под новый.
+  | {
+      type: "campaign_wizard_edit_applied";
+      campaignId: string;
+      stepData: StepData;
+      scenarioName?: string;
+    }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
   | { type: "campaign_duplicated"; id: string; newId?: string }
@@ -739,15 +750,23 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case "campaign_wizard_edit_applied": {
       // Проекция та же, что и у создания кампании (projectStepDataOntoCampaign) —
-      // id/name/createdAt/status/phase/scenario ею намеренно не переносятся:
-      // правка одного шага их не касается.
+      // id/name/createdAt/status/phase ею намеренно не переносятся: правка
+      // одного шага их не касается. `scenario` — исключение (Task 13): если
+      // правка сменила сценарий, id+name кампании обязаны последовать за
+      // ним, иначе карточка/канвас-хэдер продолжили бы показывать СТАРЫЙ
+      // сценарий, хотя граф уже пересобран под новый (guided-campaign-section.tsx).
+      // Не изменившийся сценарий — `c.scenario` не трогаем вовсе.
       return {
         ...state,
-        campaigns: state.campaigns.map((c) =>
-          c.id === action.campaignId
-            ? { ...c, ...projectStepDataOntoCampaign(action.stepData) }
-            : c,
-        ),
+        campaigns: state.campaigns.map((c) => {
+          if (c.id !== action.campaignId) return c;
+          const scenarioId = action.stepData.scenario;
+          const scenario =
+            scenarioId && scenarioId !== c.scenario?.id
+              ? { id: scenarioId, name: action.scenarioName ?? c.scenario?.name ?? "" }
+              : c.scenario;
+          return { ...c, ...projectStepDataOntoCampaign(action.stepData), scenario };
+        }),
         // Финал правки — та же карточка, что и финал визарда.
         view: (() => {
           const c = state.campaigns.find((cc) => cc.id === action.campaignId);

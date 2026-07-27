@@ -8,7 +8,11 @@ import { CampaignWorkspace, type LaunchRequest } from "@/sections/campaigns/wiza
 import { shouldShowSurveyGate } from "@/state/survey-gate";
 import type { StepData } from "@/types/campaign";
 import { createTemplate, mergeChannelNodes } from "@/state/workflow-templates";
-import { getCachedGraph, setCachedGraph } from "@/sections/campaigns/workflow-graph-cache";
+import {
+  getCachedGraph,
+  setCachedGraph,
+  invalidateCachedGraph,
+} from "@/sections/campaigns/workflow-graph-cache";
 
 /**
  * Thin host for the campaign-creation wizard: gates on the survey, then renders
@@ -46,45 +50,70 @@ export function GuidedCampaignSection() {
 
   // Коммит изолированной сессии правки (Task 12) — вызывается ОДИН раз, на
   // «Применить и вернуться». Граф живёт в отдельном, не-redux кэше
-  // (workflow-graph-cache.ts), поэтому его пересборка при смене каналов
-  // происходит здесь, ДО диспатча самого коммита — тот только проецирует
-  // stepData на поля кампании (см. campaign_wizard_edit_applied в app-state.ts).
+  // (workflow-graph-cache.ts), поэтому его пересборка при смене сценария/
+  // каналов происходит здесь, ДО диспатча самого коммита — тот только
+  // проецирует stepData на поля кампании (см. campaign_wizard_edit_applied
+  // в app-state.ts).
   const handleEditCommit = useCallback(
     (stepData: StepData) => {
       if (!editing) return;
       const { campaignId } = editing;
+      // Снапшот кампании ДО этого коммита — сравнение против него, а не
+      // против `editingCampaign.scenario?.id`/`.channels`: `wizardData`
+      // всегда актуален (пишется на каждом коммите, см. projectStepDataOntoCampaign),
+      // тогда как поле `scenario` кампании обновляется НИЖЕ в этом же коммите,
+      // так что сравнивать с ним было бы сравнением с самим собой.
+      const before = editingCampaign?.wizardData;
+      // `!!editingCampaign &&` — тот же guard, что был у channelsChanged до
+      // Task 13: без найденной кампании сравнивать не с чем, обе ветки ниже
+      // должны молчать, а не спотыкаться об `undefined`.
+      const scenarioChanged =
+        !!editingCampaign && stepData.scenario !== (before?.scenario ?? null);
       const channelsChanged =
-        editingCampaign &&
-        JSON.stringify(editingCampaign.channels ?? []) !==
-          JSON.stringify(stepData.channels);
-      if (channelsChanged) {
-        const signalType = editingCampaign.scenario
-          ? getScenario(editingCampaign.scenario.id)?.signalType
-          : undefined;
-        if (signalType) {
-          // Тот же порядок разрешения графа, что и use-campaign-graph-applier.ts's
-          // resolveBaseGraph: durable-кэш побеждает, иначе — свежий шаблон по
-          // ДОкоммитным каналам кампании (то, от чего мержим).
-          const cached = getCachedGraph(campaignId);
-          const baseGraph = cached
-            ? { nodes: cached.nodes, edges: cached.edges }
-            : (() => {
-                const t = createTemplate(
-                  signalType,
-                  editingCampaign.sourceType ?? "new",
-                  editingCampaign.channels ?? [],
-                );
-                return { nodes: t.nodes, edges: t.edges };
-              })();
-          const merged = mergeChannelNodes(baseGraph, stepData.channels, {
-            signalType,
-            sourceType: stepData.sourceType,
-          });
-          setCachedGraph(campaignId, merged);
+        !!editingCampaign &&
+        JSON.stringify(before?.channels ?? []) !== JSON.stringify(stepData.channels);
+      const scenario = stepData.scenario ? getScenario(stepData.scenario) : undefined;
+
+      if (scenarioChanged) {
+        // Полная пересборка: диалог на шаге «Сценарий» (Task 13) уже
+        // предупредил, что ручные и ИИ-правки структуры теряются — это ровно
+        // то, что здесь происходит. Мержить НЕ нужно (и нельзя): свежий
+        // шаблон уже строится под АКТУАЛЬНЫЙ набор каналов, так что даже если
+        // каналы поменялись в той же сессии, мерж поверх свежего шаблона был
+        // бы лишним и мог бы исказить только что собранную структуру.
+        invalidateCachedGraph(campaignId);
+        if (scenario) {
+          const t = createTemplate(scenario.signalType, stepData.sourceType, stepData.channels);
+          setCachedGraph(campaignId, { nodes: t.nodes, edges: t.edges });
         }
+      } else if (channelsChanged && scenario) {
+        // Тот же порядок разрешения графа, что и use-campaign-graph-applier.ts's
+        // resolveBaseGraph: durable-кэш побеждает, иначе — свежий шаблон по
+        // ДОкоммитным каналам кампании (то, от чего мержим).
+        const cached = getCachedGraph(campaignId);
+        const baseGraph = cached
+          ? { nodes: cached.nodes, edges: cached.edges }
+          : (() => {
+              const t = createTemplate(
+                scenario.signalType,
+                editingCampaign?.sourceType ?? "new",
+                editingCampaign?.channels ?? [],
+              );
+              return { nodes: t.nodes, edges: t.edges };
+            })();
+        const merged = mergeChannelNodes(baseGraph, stepData.channels, {
+          signalType: scenario.signalType,
+          sourceType: stepData.sourceType,
+        });
+        setCachedGraph(campaignId, merged);
       }
-      // Перестройка графа при смене сценария — Task 13.
-      dispatch({ type: "campaign_wizard_edit_applied", campaignId, stepData });
+
+      dispatch({
+        type: "campaign_wizard_edit_applied",
+        campaignId,
+        stepData,
+        scenarioName: scenario?.name,
+      });
     },
     [dispatch, editing, editingCampaign],
   );

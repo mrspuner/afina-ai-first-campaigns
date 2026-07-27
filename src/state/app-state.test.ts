@@ -302,6 +302,50 @@ describe("appReducer — campaign_saved_draft", () => {
   });
 });
 
+describe("appReducer — campaign_wizard_edit_applied, смена сценария (Task 13)", () => {
+  it("updates campaign.scenario (id+name) when stepData.scenario changed", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [
+        makeCampaign({
+          id: "cmp_A",
+          scenario: { id: "old-id", name: "Старый" },
+          wizardData: makeStepData({ scenario: "old-id" }),
+        }),
+      ],
+    };
+    const next = appReducer(state, {
+      type: "campaign_wizard_edit_applied",
+      campaignId: "cmp_A",
+      stepData: makeStepData({ scenario: "new-id" }),
+      scenarioName: "Новый",
+    });
+    expect(next.campaigns[0].scenario).toEqual({ id: "new-id", name: "Новый" });
+  });
+
+  it("leaves campaign.scenario untouched when stepData.scenario is unchanged", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [
+        makeCampaign({
+          id: "cmp_A",
+          scenario: { id: "same-id", name: "Тот же" },
+          wizardData: makeStepData({ scenario: "same-id" }),
+        }),
+      ],
+    };
+    const next = appReducer(state, {
+      type: "campaign_wizard_edit_applied",
+      campaignId: "cmp_A",
+      // Каналы поменялись, сценарий — нет; scenarioName нарочно не передан,
+      // как и делает вызывающий код (guided-campaign-section.tsx), когда
+      // сценарий не менялся — не должно всё равно перезаписать имя.
+      stepData: makeStepData({ scenario: "same-id", channels: ["email"] }),
+    });
+    expect(next.campaigns[0].scenario).toEqual({ id: "same-id", name: "Тот же" });
+  });
+});
+
 describe("appReducer — workflow node selection + AI cycle", () => {
   it("workflow_node_selected stores id and label", () => {
     const next = appReducer(initialState, {

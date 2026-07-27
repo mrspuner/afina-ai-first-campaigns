@@ -129,3 +129,68 @@ describe("Step1Scenario — фильтры всегда сверху + «Пок�
     expect(onNext).toHaveBeenCalledWith({ scenario: target.id });
   });
 });
+
+describe("Step1Scenario — подтверждение смены сценария в режиме правки (Task 13)", () => {
+  afterEach(cleanup);
+
+  // Реальные, видимые по умолчанию сценарии (подборка) — базовые (isBase) в
+  // UI не рендерятся вовсе, а плейсхолдеры брифа ("s1"/"Другой сценарий"/
+  // "Текущий сценарий") не существуют в SCENARIO_NAMES.
+  const [current, other] = SCENARIOS.filter((s) => s.isCurated);
+  const stepData = initialStepData;
+
+  function renderStep({
+    editing,
+    data = stepData,
+    onNext = vi.fn(),
+  }: {
+    editing?: boolean;
+    data?: typeof stepData;
+    onNext?: (partial: Partial<typeof stepData>) => void;
+  } = {}) {
+    return render(
+      <AppStateProvider>
+        <Step1Scenario data={data} onNext={onNext} editing={editing} />
+      </AppStateProvider>
+    );
+  }
+
+  it("в режиме правки смена сценария сначала спрашивает подтверждение", () => {
+    renderStep({ editing: true, data: { ...stepData, scenario: current.id } });
+    fireEvent.click(screen.getByRole("button", { name: other.name }));
+    expect(
+      screen.getByText(
+        "Смена сценария пересоберёт цепочку кампании. Правки логики, сделанные вручную и через ИИ, будут потеряны.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("подтверждение применяет смену", () => {
+    const onNext = vi.fn();
+    renderStep({ editing: true, data: { ...stepData, scenario: current.id }, onNext });
+    fireEvent.click(screen.getByRole("button", { name: other.name }));
+    fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
+    expect(onNext).toHaveBeenCalled();
+  });
+
+  it("отмена оставляет на шаге и сценарий не меняет", () => {
+    const onNext = vi.fn();
+    renderStep({ editing: true, data: { ...stepData, scenario: current.id }, onNext });
+    fireEvent.click(screen.getByRole("button", { name: other.name }));
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it("клик по уже выбранному сценарию диалога не поднимает", () => {
+    renderStep({ editing: true, data: { ...stepData, scenario: current.id } });
+    fireEvent.click(screen.getByRole("button", { name: current.name }));
+    expect(screen.queryByText(/пересоберёт цепочку/)).toBeNull();
+  });
+
+  it("в обычном проходе визарда диалога нет", () => {
+    const onNext = vi.fn();
+    renderStep({ editing: false, data: stepData, onNext });
+    fireEvent.click(screen.getByRole("button", { name: other.name }));
+    expect(onNext).toHaveBeenCalled();
+  });
+});

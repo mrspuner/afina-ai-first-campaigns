@@ -474,14 +474,16 @@ function IsolatedEditSession({
     };
     switch (id) {
       case "scenario":
-        // «Сценарий» автоприменяет выбор и футера не имеет — подтверждающий
-        // диалог смены сценария в изолированной сессии строит Task 13.
+        // «Сценарий» автоприменяет выбор и футера не имеет — `editing` включает
+        // подтверждающий диалог смены сценария (Task 13): смена на ДРУГОЙ
+        // сценарий здесь пересобирает граф кампании с нуля на коммите.
         return (
           <Step1Scenario
             data={effectiveStepData}
             active={isActive}
             onNext={handleIsolatedNext}
             onValueChange={(p) => handleValueChange("scenario", p)}
+            editing
           />
         );
       case "interests":
