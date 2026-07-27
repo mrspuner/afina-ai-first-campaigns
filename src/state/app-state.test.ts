@@ -540,6 +540,27 @@ describe("appReducer — launched campaign screen", () => {
     expect(updated?.budget).toBe(999);
   });
 
+  it("campaign_launched (payment-screen path) also drops the wizard snapshot", () => {
+    // Two paths land a campaign in "active": campaign_status_changed AND this
+    // one, fired from the payment screen. Both must drop wizardData, or a
+    // campaign launched from payment would keep an editable (and stale) snapshot.
+    const c = makeCampaign({
+      id: "cmp_A",
+      name: "C",
+      status: "draft",
+      wizardData: makeStepData(),
+    });
+    const state: AppState = { ...initialState, campaigns: [c] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_A",
+      timestamp: "2026-05-20T00:00:00.000Z",
+      budget: 500,
+    });
+    const updated = next.campaigns.find((x) => x.id === "cmp_A");
+    expect(updated?.wizardData).toBeUndefined();
+  });
+
   it("open_workflow switches the view to a launched workflow", () => {
     const state: AppState = {
       ...initialState,
