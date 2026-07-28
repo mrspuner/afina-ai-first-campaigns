@@ -187,6 +187,13 @@ export function DescriptionTagPill({
     );
   }
 
+  // Item 4 (финальное ревью): раньше `title` (остаток схлопнутого
+  // перечисления, «ещё N триггерам») сидел на ТОМ ЖЕ узле, что оборачивает
+  // base-ui's Tooltip — наведение показывало ДВА конкурирующих оверлея:
+  // нативный `title` браузера и тултип «Нажмите для изменения». Остаток
+  // теперь живёт ВНУТРИ содержимого тултипа — единственная поверхность на
+  // наведение, несущая оба факта; нативный `title` на кнопке больше не
+  // задаётся.
   return (
     <Tooltip>
       <TooltipTrigger
@@ -195,14 +202,22 @@ export function DescriptionTagPill({
             type="button"
             className={cn(PILL_BASE, className)}
             style={style}
-            title={title}
             onClick={() => onActivate?.(tag)}
           />
         }
       >
         {content}
       </TooltipTrigger>
-      <TooltipContent>Нажмите для изменения</TooltipContent>
+      <TooltipContent>
+        {title ? (
+          <div className="flex flex-col gap-0.5">
+            <span>{title}</span>
+            <span className="text-background/70">Нажмите для изменения</span>
+          </div>
+        ) : (
+          "Нажмите для изменения"
+        )}
+      </TooltipContent>
     </Tooltip>
   );
 }

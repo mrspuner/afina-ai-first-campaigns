@@ -112,13 +112,30 @@ describe("DescriptionTagPill", () => {
     expect(screen.getByText(/база на 12 000 строк/)).toBeInTheDocument();
   });
 
-  it("схлопка перечисления несёт остаток в title для наведения", () => {
-    render(
-      <DescriptionTagPill
-        tag={{ ...stepTag, label: "ещё 2 триггерам", hoverList: ["Вторичка", "Аренда"] }}
-      />,
-    );
-    expect(screen.getByRole("button")).toHaveAttribute("title", "Вторичка, Аренда");
+  // Item 4 (финальное ревью): раньше `title={hoverList.join(", ")}` сидел на
+  // ТОМ ЖЕ узле, что base-ui's Tooltip оборачивает — наведение на «ещё N
+  // триггерам» показывало ДВА конкурирующих оверлея (нативный title ОС и
+  // тултип «Нажмите для изменения»). Остаток теперь живёт ВНУТРИ содержимого
+  // тултипа — единственная поверхность на наведение, несущая оба факта.
+  it("схлопка перечисления показывает остаток и «Нажмите для изменения» ОДНИМ тултипом, без конкурирующего native title", () => {
+    vi.useFakeTimers();
+    try {
+      renderPillWithProviders({
+        tag: { ...stepTag, label: "ещё 2 триггерам", hoverList: ["Вторичка", "Аренда"] },
+      });
+      const trigger = screen.getByRole("button", { name: /ещё 2 триггерам/ });
+      expect(trigger).not.toHaveAttribute("title");
+
+      fireEvent.mouseEnter(trigger);
+      fireEvent.mouseMove(trigger);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByText("Вторичка, Аренда")).toBeInTheDocument();
+      expect(screen.getByText("Нажмите для изменения")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("тег шаблона раскрывает список шаблонов канала прямо у пилюли", async () => {
