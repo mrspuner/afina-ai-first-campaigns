@@ -7,11 +7,18 @@ import { SurveySection } from "@/sections/survey/survey-section";
 import { CampaignWorkspace, type LaunchRequest } from "@/sections/campaigns/wizard/campaign-workspace";
 import { shouldShowSurveyGate } from "@/state/survey-gate";
 import type { StepData } from "@/types/campaign";
-import { createTemplate, mergeChannelNodes } from "@/state/workflow-templates";
+import {
+  createTemplate,
+  mergeChannelNodes,
+  applyCampaignContext,
+} from "@/state/workflow-templates";
+import { computeNeedsAttention } from "@/state/workflow-validation";
+import { computeSublabels } from "@/state/node-sublabel";
 import {
   getCachedGraph,
   setCachedGraph,
   invalidateCachedGraph,
+  type CachedGraph,
 } from "@/sections/campaigns/workflow-graph-cache";
 
 /**
@@ -74,6 +81,27 @@ export function GuidedCampaignSection() {
         JSON.stringify(before?.channels ?? []) !== JSON.stringify(stepData.channels);
       const scenario = stepData.scenario ? getScenario(stepData.scenario) : undefined;
 
+      // Финальное ревью, Item 1: раньше кэш переписывался ТОЛЬКО в двух
+      // структурных ветках (сценарий/каналы), и даже там сценарийная ветка
+      // писала голый `createTemplate(...)`, минуя ту же цепочку деривации,
+      // что применяет `initialGraph` в workflow-view.tsx
+      // (applyCampaignContext → computeNeedsAttention → computeSublabels).
+      // Три следствия одного корня: смена сценария стирала базу/интересы/
+      // триггеры со «Скоринга»/«Сигнала» (голый шаблон их не несёт); правка
+      // ТОЛЬКО интересов/базы (без смены сценария/каналов) не писала кэш
+      // вовсе — карточка и граф расходились сразу под текстом карточки; мерж
+      // каналов добавлял ноды без пересчёта подзаголовков (у нового
+      // сплиттера подзаголовка не было, пока graph-tab не откроют заново).
+      //
+      // Фикс: считаем БАЗОВЫЙ граф (голый шаблон при смене сценария, мерж при
+      // смене каналов, иначе — текущий кэш как есть), затем ВСЕГДА прогоняем
+      // его через ту же цепочку, что и `initialGraph`, с контекстом из ТОЛЬКО
+      // ЧТО закоммиченного `stepData` (а не `editingCampaign`, который на
+      // этой строке ещё дореформенный — проекция в `campaign.*` происходит
+      // НИЖЕ, диспатчем). Так граф согласуется с карточкой на КАЖДОМ коммите,
+      // а не только на структурных.
+      let baseGraph: CachedGraph | undefined;
+
       if (scenarioChanged) {
         // Полная пересборка: диалог на шаге «Сценарий» (Task 13) уже
         // предупредил, что ручные и ИИ-правки структуры теряются — это ровно
@@ -84,14 +112,14 @@ export function GuidedCampaignSection() {
         invalidateCachedGraph(campaignId);
         if (scenario) {
           const t = createTemplate(scenario.signalType, stepData.sourceType, stepData.channels);
-          setCachedGraph(campaignId, { nodes: t.nodes, edges: t.edges });
+          baseGraph = { nodes: t.nodes, edges: t.edges };
         }
       } else if (channelsChanged && scenario) {
         // Тот же порядок разрешения графа, что и use-campaign-graph-applier.ts's
         // resolveBaseGraph: durable-кэш побеждает, иначе — свежий шаблон по
         // ДОкоммитным каналам кампании (то, от чего мержим).
         const cached = getCachedGraph(campaignId);
-        const baseGraph = cached
+        const priorGraph = cached
           ? { nodes: cached.nodes, edges: cached.edges }
           : (() => {
               const t = createTemplate(
@@ -101,11 +129,32 @@ export function GuidedCampaignSection() {
               );
               return { nodes: t.nodes, edges: t.edges };
             })();
-        const merged = mergeChannelNodes(baseGraph, stepData.channels, {
+        baseGraph = mergeChannelNodes(priorGraph, stepData.channels, {
           signalType: scenario.signalType,
           sourceType: stepData.sourceType,
         });
-        setCachedGraph(campaignId, merged);
+      } else {
+        // Ничего структурного не поменялось (интересы/триггеры/база/бюджет) —
+        // берём кэш как есть; если его ещё нет (правка раньше самого первого
+        // открытия графа-таба), деривировать не от чего — первый рендер
+        // WorkflowView сам построит `initialGraph` с уже актуальным
+        // (закоммиченным этой же функцией) контекстом кампании.
+        const cached = getCachedGraph(campaignId);
+        baseGraph = cached ? { nodes: cached.nodes, edges: cached.edges } : undefined;
+      }
+
+      if (baseGraph) {
+        // Тот же контекст, что `projectStepDataOntoCampaign` спроецирует на
+        // кампанию НИЖЕ — то есть граф увидит РОВНО то, что увидит карточка.
+        const withContext = applyCampaignContext(baseGraph, {
+          files: stepData.files,
+          interests: stepData.interests,
+          triggers: stepData.triggers,
+        });
+        setCachedGraph(campaignId, {
+          nodes: computeSublabels(computeNeedsAttention(withContext.nodes)),
+          edges: withContext.edges,
+        });
       }
 
       dispatch({
