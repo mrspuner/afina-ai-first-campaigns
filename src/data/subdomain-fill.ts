@@ -7,16 +7,30 @@
  * генератору, приходит аргументами.
  */
 
-import { rngFor } from "@/state/metrics";
+import { rngFor, seededInt } from "@/state/metrics";
 
 /** Глубина датасета у триггера. Задаётся природой вертикали, не случайно. */
 export type DomainTier = "shallow" | "medium" | "deep";
 
-/** Минимум поддоменов НА КАЖДЫЙ корневой домен для каждого тира. */
+/** Минимум поддоменов НА КАЖДЫЙ корневой домен для каждого тира. Это ПОЛ, не
+ *  цель — см. `TIER_SPREAD` ниже: реальное количество тянется случайно (но
+ *  детерминированно) выше планки, иначе все корни одного тира несут
+ *  одинаковый ·N и карточка триггера читается как сгенерированная. */
 export const TIER_QUOTA: Record<DomainTier, number> = {
   shallow: 3,
   medium: 7,
   deep: 12,
+};
+
+/**
+ * Разброс сверх планки: итоговое количество поддоменов корня — случайное
+ * целое из `[0, TIER_SPREAD[tier]]`, добавленное к `TIER_QUOTA[tier]`.
+ * Итоговый диапазон на корень: shallow 3–5, medium 7–11, deep 12–18.
+ */
+export const TIER_SPREAD: Record<DomainTier, number> = {
+  shallow: 2,
+  medium: 4,
+  deep: 6,
 };
 
 /**
@@ -90,7 +104,7 @@ export const REGION_PREFIXES: readonly string[] = [
 ];
 
 /** Доля сервисных префиксов в доборе. Округление вверх (см. §4.3 спеки). */
-const SERVICE_SHARE = 0.55;
+export const SERVICE_SHARE = 0.55;
 
 /** Перестановка Фишера—Йетса по переданному ГПСЧ. Исходный пул не мутируется. */
 function shuffle(pool: readonly string[], rng: () => number): string[] {
@@ -114,12 +128,14 @@ function prefixOf(subdomain: string, root: string): string | null {
 }
 
 /**
- * Дописывает поддомены третьего уровня до планки тира.
+ * Дописывает поддомены третьего уровня до случайно (но детерминированно)
+ * отрисованного количества — планка тира — это ПОЛ, а не цель.
  *
  * Рукописный слой неприкосновенен: `existing` всегда возвращается целиком, в
  * исходном порядке и первым. Без этого добор затёр бы настоящие поддомены
  * Сбера, МТС и auto.ru генерическими префиксами — то есть испортил бы лучшую
- * часть датасета.
+ * часть датасета. Группа, чьих рукописных уже не меньше отрисованного
+ * количества, не меняется вовсе и не сжимается, если рукописных больше.
  *
  * Детерминизм — по сиду КОРНЯ, без идентификатора триггера: один и тот же
  * домен (`sberbank.ru` живёт сразу в трёх триггерах) получает согласованный
@@ -133,7 +149,17 @@ export function fillSubdomains(
   tier: DomainTier,
 ): string[] {
   const quota = TIER_QUOTA[tier];
-  const need = quota - existing.length;
+  const spread = TIER_SPREAD[tier];
+
+  // Один поток ГПСЧ на выбор итогового количества и обе перестановки —
+  // воспроизводимо и не требует нескольких сидов. Первое число потока даёт
+  // добавку сверх планки: [0, spread]. Она зависит только от (root, tier),
+  // не от `existing` — поэтому один и тот же корень тянет одно и то же
+  // итоговое количество независимо от того, сколько уже написано руками.
+  const rng = rngFor("subdomain-fill", root);
+  const target = quota + seededInt(rng, 0, spread);
+
+  const need = target - existing.length;
   if (need <= 0) return [...existing];
 
   // Префиксы, уже занятые рукописным слоем — повторно не используем.
@@ -143,8 +169,6 @@ export function fillSubdomains(
     if (p !== null) taken.add(p);
   }
 
-  // Один поток ГПСЧ на обе перестановки: воспроизводимо и не требует двух сидов.
-  const rng = rngFor("subdomain-fill", root);
   const service = shuffle(SERVICE_PREFIXES, rng).filter((p) => !taken.has(p));
   const region = shuffle(REGION_PREFIXES, rng).filter((p) => !taken.has(p));
 

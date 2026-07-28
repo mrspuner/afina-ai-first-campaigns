@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TRIGGER_DOMAINS, getTriggerDomains, knownTriggerDomains, type DomainGroup } from "./trigger-domains";
-import { TIER_QUOTA, tierForTrigger } from "./subdomain-fill";
+import { TIER_QUOTA, TIER_SPREAD, tierForTrigger } from "./subdomain-fill";
 
 // B3 reference tables — verbatim root → subdomains mapping for the three
 // pinned verticals. Any drift in trigger-domains.ts must be intentional and
@@ -73,13 +73,28 @@ describe("TRIGGER_DOMAINS dataset", () => {
     }
   });
 
-  it("каждый корень добран до планки своего тира", () => {
+  it("каждый корень добран не меньше планки и не больше планки+разброса своего тира", () => {
     for (const [id] of entries) {
-      const quota = TIER_QUOTA[tierForTrigger(id)];
+      const tier = tierForTrigger(id);
+      const quota = TIER_QUOTA[tier];
+      const max = quota + TIER_SPREAD[tier];
       for (const grp of getTriggerDomains(id)) {
         expect(grp.subdomains.length, `${id}/${grp.root}`).toBeGreaterThanOrEqual(quota);
+        expect(grp.subdomains.length, `${id}/${grp.root}`).toBeLessThanOrEqual(max);
       }
     }
+  });
+
+  // Это и есть свойство, которое пользователь на самом деле просил: планка —
+  // минимум, а не цель. До фикса добор всегда бил ровно в планку тира, и
+  // раскрытая карточка триггера показывала одинаковый ·N на всех корнях —
+  // читалось как сгенерированные данные, а не реальные. credit-banks — deep
+  // тир с 12 корнями, включая рукописный B3-слой, поэтому один тест на нём
+  // покрывает и «варьируется», и «рукописный слой не мешает вариации».
+  it("длины поддоменов варьируются между корнями одного глубокого триггера — не все ·N одинаковые", () => {
+    const groups = getTriggerDomains("credit-banks");
+    const lengths = groups.map((g) => g.subdomains.length);
+    expect(new Set(lengths).size).toBeGreaterThan(1);
   });
 
   it("поддомены уникальны, подчинены корню и строго третьего уровня", () => {
