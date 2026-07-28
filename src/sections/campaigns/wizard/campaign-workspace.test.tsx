@@ -230,6 +230,93 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
   });
 });
 
+// Final-review fix (Item 2): `Step1Scenario.applyScenario` calls
+// `onValueChange` and `onNext` from the SAME synchronous click handler (the
+// confirm button in the change-scenario dialog) — unlike channels/file/
+// analysis, which fire `onValueChange` on live interaction and `onNext` on a
+// LATER, separate footer click. `handleIsolatedNext` used to read the
+// `pendingResets` STATE set by that `onValueChange` call, but React hadn't
+// re-rendered yet, so it still held the value from the PREVIOUS render —
+// empty on a fresh session. That made `STEP_INVALIDATES.scenario = ["budget"]`
+// dead in the isolated flow: the scenario committed immediately, budget
+// untouched, and the card showed a stale budget pill next to a payment-screen
+// total that had already moved on.
+describe("CampaignWorkspace — изолированная «Сценарий»: смена каскадирует на «Бюджет», не коммитит сразу", () => {
+  afterEach(cleanup);
+
+  const scenarioSnapshot: StepData = {
+    ...initialStepData,
+    scenario: "cur-abandoned-cart",
+    channels: ["sms", "email"],
+    fileRowCount: 5000,
+    budget: 42000,
+    budgetMode: "recommended",
+  };
+
+  it("подтверждение смены сценария растит колонку до «Бюджета» и НЕ коммитит", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "scenario" },
+      snapshot: scenarioSnapshot,
+      onCommit,
+    });
+
+    // Выбрать ДРУГОЙ сценарий — поднимает диалог подтверждения (editing=true).
+    fireEvent.click(screen.getByRole("button", { name: "Спящий клиент" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
+
+    // Коммита ещё не было — сценарий применился в СЕССИЮ, а не наружу.
+    expect(onCommit).not.toHaveBeenCalled();
+    // Колонка выросла до «Бюджета» — ровно то, что делает каскад канала.
+    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    ).toBeInTheDocument();
+  });
+
+  it("после смены сценария и ввода бюджета коммит несёт НОВЫЙ сценарий и введённый бюджет", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "scenario" },
+      snapshot: scenarioSnapshot,
+      onCommit,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Спящий клиент" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
+      target: { value: "77777" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    );
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0] as StepData;
+    expect(committed.scenario).toBe("cur-sleeping");
+    expect(committed.budget).toBe(77777);
+  });
+
+  it("клик по УЖЕ выбранному сценарию не поднимает диалог и коммитит сразу, бюджет не трогая", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "scenario" },
+      snapshot: scenarioSnapshot,
+      onCommit,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Брошенная корзина" }));
+
+    expect(screen.queryByText("Сменить сценарий?")).toBeNull();
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0] as StepData;
+    expect(committed.scenario).toBe("cur-abandoned-cart");
+    expect(committed.budget).toBe(scenarioSnapshot.budget);
+  });
+});
+
 // Track-14 fix (final-review Critical finding): the isolated «Интересы» step
 // hydrated the shared editor with `StepData.interests`/`triggers` LABEL
 // arrays where it expects internal ids (`resolveSelectionIds` was missing —

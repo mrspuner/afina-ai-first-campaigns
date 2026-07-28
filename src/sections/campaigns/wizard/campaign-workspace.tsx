@@ -404,8 +404,16 @@ function IsolatedEditSession({
   // при коммите свежий `partial` активного шага спредится ПОСЛЕ маски (в
   // handleIsolatedNext) — явная правка ВСЕГДА побеждает маску, даже если шаг
   // формально всё ещё числится обнулённым.
-  function deriveStepData(withEdits: Partial<StepData>): StepData {
-    return { ...snapshot, ...withEdits, ...resetFieldsFor(pendingResets) };
+  //
+  // `resets` по умолчанию читает состояние `pendingResets` (рендер), но
+  // `handleIsolatedNext` (Item 2, финальное ревью) передаёт СВЕЖЕ вычисленное
+  // значение явно — на коммите с шага, синхронно зовущего и onValueChange, и
+  // onNext (сценарий), состояние ещё не успело перерендериться.
+  function deriveStepData(
+    withEdits: Partial<StepData>,
+    resets: WizardStepId[] = pendingResets,
+  ): StepData {
+    return { ...snapshot, ...withEdits, ...resetFieldsFor(resets) };
   }
 
   const effectiveStepData = deriveStepData(edits);
@@ -439,11 +447,42 @@ function IsolatedEditSession({
 
   function handleIsolatedNext(partial: Partial<StepData>) {
     const nextEdits = { ...edits, ...partial };
-    // Ветка выбирается по УЖЕ показанной подписи кнопки — та и есть источник
-    // истины: пользователь жмёт то, что видит.
-    if (continueLabel === "Далее") {
+
+    // Свежий каскад для ЭТОГО коммита — не читаем `continueLabel`/
+    // `pendingResets` напрямую из состояния для решения о ветке. Большинство
+    // шагов (каналы/файл/режим) зовут `onValueChange` на живом взаимодействии
+    // и `onNext` ПОЗЖЕ, отдельным кликом по футеру — к этому моменту
+    // `pendingResets` уже успел перерендериться и корректен. Но «Сценарий»
+    // (Item 2, финальное ревью) зовёт `onValueChange` и `onNext` ОДНИМ
+    // синхронным кликом — диалог подтверждения сам вызывает оба одно за
+    // другим, — и React ещё не перерендерил `pendingResets` к этому вызову:
+    // состояние несёт значение с ПРЕДЫДУЩЕГО рендера (для свежей сессии —
+    // пустое), из-за чего `STEP_INVALIDATES.scenario = ["budget"]` был мёртв
+    // в изолированной сессии. Пересчитываем каскад заново из `partial`, но
+    // ТОЛЬКО когда коммитит сам `editing.step` — шаги, добавленные в колонку
+    // ЧУЖИМ каскадом (например, «Бюджет» после смены каналов), сами
+    // `onValueChange` не зовут, и для них состояние остаётся источником
+    // истины (иначе пересчёт для «Бюджета» ошибочно даст пустой каскад и
+    // выбросит сам «Бюджет» из колонки на середине коммита).
+    const resets =
+      activeStepId === editing.step
+        ? stepValueDiffers(activeStepId, partial, snapshot)
+          ? invalidatedBy(activeStepId)
+          : []
+        : pendingResets;
+    setPendingResets(resets);
+
+    const freshStepData = deriveStepData(nextEdits, resets);
+    const freshColumnSet = new Set<WizardStepId>([editing.step, ...resets]);
+    const freshVisible = stepsForIntent(freshStepData.intent).filter((id) =>
+      freshColumnSet.has(id),
+    );
+    const freshIndex = freshVisible.indexOf(activeStepId);
+    const isLastFresh = freshIndex === freshVisible.length - 1;
+
+    if (resets.length > 0 && !isLastFresh) {
       setEdits(nextEdits);
-      const next = visibleStepIds[activeIndex + 1] ?? activeStepId;
+      const next = freshVisible[freshIndex + 1] ?? activeStepId;
       setAnimatingStep(next);
       setActiveStepId(next);
       pendingScroll.current = { step: next, behavior: "smooth" };
@@ -451,10 +490,10 @@ function IsolatedEditSession({
     }
     setEdits(nextEdits);
     // `partial` спредится ПОСЛЕДНИМ: если активный шаг сам входит в
-    // pendingResets (штатно — «Бюджет» коммитит именно так, будучи обнулённым
+    // resets (штатно — «Бюджет» коммитит именно так, будучи обнулённым
     // до этого клика), его СВЕЖЕЕ значение обязано победить маску, которую
     // deriveStepData иначе наложила бы поверх.
-    onCommit?.({ ...deriveStepData(nextEdits), ...partial });
+    onCommit?.({ ...freshStepData, ...partial });
   }
 
   function handleStepperClick(step: number) {
