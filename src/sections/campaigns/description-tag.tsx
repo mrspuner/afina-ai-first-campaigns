@@ -310,7 +310,7 @@ function TemplateTagPopover({
   const [open, setOpen] = useState(false);
   const { templates } = useAppState();
   const dispatch = useAppDispatch();
-  const { openTemplatePreview, openTemplateCreate } = useChat();
+  const { openTemplatePreview, openTemplateCreate, openSidebar } = useChat();
 
   const channel = channelForNodeKind(nodeType);
   const paramKey = templateParamKeyForKind(nodeType);
@@ -342,7 +342,15 @@ function TemplateTagPopover({
           }}
           onPreview={(templateId) => openTemplatePreview(templateId)}
           onCreate={() => {
-            if (channel) openTemplateCreate(channel);
+            // Item 4 (финальная полировка): без openSidebar() вопрос намерения
+            // утекал в НЕОТКРЫТЫЙ нижний промпт-бар — тот же приём, что уже
+            // работает у сплиттера графа (handleSplitAiField в
+            // node-card-content.tsx), открываем боковую панель ИИ ПЕРЕД
+            // хендоффом канала.
+            if (channel) {
+              openSidebar();
+              openTemplateCreate(channel);
+            }
             setOpen(false);
           }}
         />
