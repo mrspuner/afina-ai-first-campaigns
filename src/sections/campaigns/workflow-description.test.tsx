@@ -42,6 +42,20 @@ describe("WorkflowDescription", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  // Item 1 (finale-полировка): пилюли (~23.6px) выше строки текста при
+  // leading-relaxed (1.625 × 14px = 22.75px) — соседние строки внутри одного
+  // абзаца с несколькими тегами (напр. перечисление триггеров в «Старте»)
+  // визуально слипаются, пилюли соприкасаются краями. Подобрано глазом на
+  // реальной карточке (несколько пилюль в одном абзаце): 1.75 даёт видимый
+  // зазор, не раздувая текст. Меняем только контейнер описания — глобальная
+  // типографика (leading-relaxed в других местах приложения) не трогается.
+  it("несёт увеличенный line-height контейнера (не leading-relaxed) — пилюли не слипаются со строкой", () => {
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    const root = container.firstChild as HTMLElement;
+    expect(root.className).toContain("leading-[1.75]");
+    expect(root.className).not.toContain("leading-relaxed");
+  });
+
   describe("текст описания", () => {
     it("показывает подзаголовок и тело каждого этапа", () => {
       render(<WorkflowDescription stages={STAGES} />);
