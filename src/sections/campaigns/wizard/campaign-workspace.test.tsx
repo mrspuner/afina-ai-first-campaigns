@@ -230,6 +230,69 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
   });
 });
 
+// Track-14 fix (final-review Critical finding): the isolated «Интересы» step
+// hydrated the shared editor with `StepData.interests`/`triggers` LABEL
+// arrays where it expects internal ids (`resolveSelectionIds` was missing —
+// the scoring drawer's `ScoringInterestsPanel` performs that resolution
+// correctly, `Step2Interests` did not). A campaign edited through this path
+// showed ZERO pre-existing selections, and applying anything silently
+// replaced the campaign's real targeting instead of merging into it.
+describe("CampaignWorkspace — изолированная «Интересы»: гидрация из снапшота кампании", () => {
+  afterEach(cleanup);
+
+  const interestsSnapshot: StepData = {
+    ...initialStepData,
+    scenario: "base-registration",
+    interests: ["Кредитование"],
+    triggers: ["Посещение сайтов банков с предложениями кредитов"],
+    triggerConfig: {
+      "credit-banks": { added: ["example.ru"], excluded: [] },
+    },
+  };
+
+  it("показывает сохранённые интерес и триггер кампании выбранными, а не пустыми", () => {
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "interests" },
+      snapshot: interestsSnapshot,
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Кредитование" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("checkbox", { name: "Снять выбор триггера" }),
+    ).toBeInTheDocument();
+  });
+
+  it("выбор ДОПОЛНИТЕЛЬНОГО интереса сохраняет исходные интерес/триггер/triggerConfig — мёрдж, а не замена", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "interests" },
+      snapshot: interestsSnapshot,
+      onCommit,
+    });
+
+    // Добавляем ВТОРОЙ интерес того же направления, не трогая уже выбранный.
+    fireEvent.click(screen.getByRole("button", { name: "Рассрочка и BNPL" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    );
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const committed = onCommit.mock.calls[0][0] as StepData;
+    expect(committed.interests).toEqual(
+      expect.arrayContaining(["Кредитование", "Рассрочка и BNPL"]),
+    );
+    expect(committed.triggers).toEqual(
+      expect.arrayContaining(["Посещение сайтов банков с предложениями кредитов"]),
+    );
+    expect(committed.triggerConfig["credit-banks"]).toEqual({
+      added: ["example.ru"],
+      excluded: [],
+    });
+  });
+});
+
 // Fix round 2 (coordinator review): the ORDINARY (non-isolated) wizard's own
 // launch handoff dropped the Budget step's submitted partial —
 // `onNext={() => handleLaunchFromBudget()}` discarded whatever `StepBudget`
