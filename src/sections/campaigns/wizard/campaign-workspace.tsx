@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
 import { StepData, initialStepData, type Channel } from "@/types/campaign";
@@ -52,6 +52,15 @@ function WorkspaceInner({
   const [currentStep, setCurrentStep] = useState(startStep);
   const [maxStep, setMaxStep] = useState(startStep);
   const [animatingStep, setAnimatingStep] = useState<number | null>(startStep);
+  // prefers-reduced-motion: та же конвенция, что и StepContent — вход шага
+  // выключается целиком (initial совпадает с animate, кадров нет). Раньше
+  // этот `motion.div` не читал `useReducedMotion()` вовсе, из-за чего
+  // визуальный харнесс (эмулирующий reduced-motion ИМЕННО чтобы убрать
+  // анимационный джиттер) всё равно ловил шаг 5/7 в СЛУЧАЙНОЙ точке
+  // 350-мс въезда — высота/позиция контента внутри `justify-center` плыла
+  // на десятки px между прогонами. Гейт на reduceMotion делает первый рендер
+  // (обычный старт ИЛИ seeded resume на произвольный шаг) детерминированным.
+  const reduceMotion = useReducedMotion();
   const [stepData, setStepData] = useState<StepData>(
     initialStepDataOverride
       ? initialStepDataOverride
@@ -288,7 +297,11 @@ function WorkspaceInner({
           <motion.div
             key={step}
             ref={(el) => { stepRefs.current[step] = el; }}
-            initial={step === animatingStep ? { y: 60, opacity: 0 } : false}
+            initial={
+              !reduceMotion && step === animatingStep
+                ? { y: 60, opacity: 0 }
+                : false
+            }
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
             className="flex min-h-screen shrink-0 flex-col items-center justify-center px-8 pb-promptbar pt-10"
@@ -391,6 +404,10 @@ function IsolatedEditSession({
   const [edits, setEdits] = useState<Partial<StepData>>({});
   const [activeStepId, setActiveStepId] = useState<WizardStepId>(editing.step);
   const [animatingStep, setAnimatingStep] = useState<WizardStepId | null>(editing.step);
+  // prefers-reduced-motion: см. комментарий у одноимённого хука в
+  // `WorkspaceInner` — тот же гейт нужен и здесь, у изолированной сессии
+  // правки свой собственный `motion.div` со входом шага.
+  const reduceMotion = useReducedMotion();
   // Живое, реактивное «что обнулилось» — обновляется по каждому onValueChange
   // активного шага (см. handleValueChange). НЕ хранит историю: как только
   // очередной live-выбор снова совпадает со снапшотом, обнулять нечего, и
@@ -613,7 +630,11 @@ function IsolatedEditSession({
           <motion.div
             key={id}
             ref={(el) => { stepRefs.current[id] = el; }}
-            initial={id === animatingStep ? { y: 60, opacity: 0 } : false}
+            initial={
+              !reduceMotion && id === animatingStep
+                ? { y: 60, opacity: 0 }
+                : false
+            }
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
             className="flex min-h-screen shrink-0 flex-col items-center justify-center px-8 pb-promptbar pt-10"
