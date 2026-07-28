@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TRIGGER_DOMAINS, getTriggerDomains, knownTriggerDomains, type DomainGroup } from "./trigger-domains";
+import { TIER_QUOTA, tierForTrigger } from "./subdomain-fill";
 
 // B3 reference tables — verbatim root → subdomains mapping for the three
 // pinned verticals. Any drift in trigger-domains.ts must be intentional and
@@ -72,16 +73,86 @@ describe("TRIGGER_DOMAINS dataset", () => {
     }
   });
 
-  it("credit-banks matches the B3 reference exactly (full root -> subdomains map)", () => {
-    expect(getTriggerDomains("credit-banks")).toEqual(B3_CREDIT_BANKS);
+  it("каждый корень добран до планки своего тира", () => {
+    for (const [id] of entries) {
+      const quota = TIER_QUOTA[tierForTrigger(id)];
+      for (const grp of getTriggerDomains(id)) {
+        expect(grp.subdomains.length, `${id}/${grp.root}`).toBeGreaterThanOrEqual(quota);
+      }
+    }
   });
 
-  it("mobile-competitors matches the B3 reference exactly (full root -> subdomains map)", () => {
-    expect(getTriggerDomains("mobile-competitors")).toEqual(B3_MOBILE_COMPETITORS);
+  it("поддомены уникальны, подчинены корню и строго третьего уровня", () => {
+    for (const [id] of entries) {
+      for (const grp of getTriggerDomains(id)) {
+        expect(new Set(grp.subdomains).size, `${id}/${grp.root}`).toBe(
+          grp.subdomains.length,
+        );
+        for (const sub of grp.subdomains) {
+          expect(sub.endsWith(`.${grp.root}`), `${id}/${sub}`).toBe(true);
+          const prefix = sub.slice(0, -`.${grp.root}`.length);
+          expect(prefix, `${id}/${sub}`).not.toContain(".");
+        }
+      }
+    }
   });
 
-  it("used-car-listings matches the B3 reference exactly (full root -> subdomains map)", () => {
-    expect(getTriggerDomains("used-car-listings")).toEqual(B3_USED_CAR_LISTINGS);
+  it("getTriggerDomains возвращает стабильную ссылку между вызовами", () => {
+    expect(getTriggerDomains("credit-banks")).toBe(getTriggerDomains("credit-banks"));
+    // Неизвестный триггер идёт на фолбэк — ссылка обязана быть стабильной и там,
+    // иначе редактор ре-рендерится вхолостую на каждый кадр.
+    expect(getTriggerDomains("нет-такого")).toBe(getTriggerDomains("нет-такого"));
+  });
+
+  it("тиры распределены как 14 deep / 41 medium / 14 shallow", () => {
+    const counts = { shallow: 0, medium: 0, deep: 0 };
+    for (const [id] of entries) counts[tierForTrigger(id)]++;
+    expect(counts).toEqual({ deep: 14, medium: 41, shallow: 14 });
+  });
+
+  it("рукописный слой сохранён целиком и стоит первым", () => {
+    for (const [id, raw] of entries) {
+      const filled = getTriggerDomains(id);
+      raw.forEach((rawGroup, i) => {
+        expect(filled[i].root, `${id}/${rawGroup.root}`).toBe(rawGroup.root);
+        expect(
+          filled[i].subdomains.slice(0, rawGroup.subdomains.length),
+          `${id}/${rawGroup.root}`,
+        ).toEqual(rawGroup.subdomains);
+      });
+    }
+  });
+
+  /**
+   * Эталонные таблицы B3 больше не сверяются через `toEqual`: после добора
+   * полное равенство недостижимо по построению. Проверяем то, что и должно
+   * быть неизменным — состав и порядок корней плюс рукописный префикс каждой
+   * группы. Так самая качественная часть датасета (настоящие поддомены Сбера,
+   * МТС, auto.ru) остаётся под охраной, а добор ей не мешает.
+   */
+  function expectMatchesB3Reference(id: string, reference: DomainGroup[]) {
+    const actual = getTriggerDomains(id);
+    expect(actual.map((g) => g.root), `${id}: состав и порядок корней`).toEqual(
+      reference.map((g) => g.root),
+    );
+    reference.forEach((refGroup, i) => {
+      expect(
+        actual[i].subdomains.slice(0, refGroup.subdomains.length),
+        `${id}/${refGroup.root}: рукописные поддомены`,
+      ).toEqual(refGroup.subdomains);
+    });
+  }
+
+  it("credit-banks keeps its B3 roots and hand-written subdomains", () => {
+    expectMatchesB3Reference("credit-banks", B3_CREDIT_BANKS);
+  });
+
+  it("mobile-competitors keeps its B3 roots and hand-written subdomains", () => {
+    expectMatchesB3Reference("mobile-competitors", B3_MOBILE_COMPETITORS);
+  });
+
+  it("used-car-listings keeps its B3 roots and hand-written subdomains", () => {
+    expectMatchesB3Reference("used-car-listings", B3_USED_CAR_LISTINGS);
   });
 
   it("knownTriggerDomains returns unique roots as {id,label}", () => {

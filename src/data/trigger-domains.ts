@@ -1,4 +1,5 @@
 import type { TriggerId } from "@/types/directions";
+import { fillSubdomains, tierForTrigger } from "./subdomain-fill";
 
 /**
  * Группа доменов: корневой домен + его поддомены (напр. `sberbank.ru` +
@@ -589,8 +590,34 @@ const FALLBACK_DOMAINS: DomainGroup[] = [
   g("site4.ru"),
 ];
 
+/**
+ * Кэш добранных групп, ключ — идентификатор триггера.
+ *
+ * Мемоизация ОБЯЗАТЕЛЬНА, и не ради скорости: `getTriggerDomains`
+ * вызывается из рендера редактора интересов по нескольку раз на кадр
+ * (превью, счётчики, карточки). Без кэша каждый вызов возвращал бы новую
+ * ссылку и рвал мемоизацию на стороне потребителей.
+ */
+const filledCache = new Map<string, DomainGroup[]>();
+
+/**
+ * Домены триггера с добором поддоменов третьего уровня до планки его тира
+ * (см. `subdomain-fill.ts`). Единственная точка применения добора: все
+ * потребители в проекте ходят сюда, `TRIGGER_DOMAINS` остаётся сырыми данными.
+ */
 export function getTriggerDomains(triggerId: TriggerId): DomainGroup[] {
-  return TRIGGER_DOMAINS[triggerId] ?? FALLBACK_DOMAINS;
+  const cached = filledCache.get(triggerId);
+  if (cached) return cached;
+
+  const raw = TRIGGER_DOMAINS[triggerId] ?? FALLBACK_DOMAINS;
+  const tier = tierForTrigger(triggerId);
+  const filled = raw.map((group) => ({
+    root: group.root,
+    subdomains: fillSubdomains(group.root, group.subdomains, tier),
+  }));
+
+  filledCache.set(triggerId, filled);
+  return filled;
 }
 
 /**

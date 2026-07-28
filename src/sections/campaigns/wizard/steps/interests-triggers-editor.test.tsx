@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import {
   InterestsTriggersEditor,
   resolveInterestsForDirection,
@@ -361,9 +361,11 @@ describe("InterestsTriggersEditor — domain-group chip (subdomains + overflow)"
   afterEach(cleanup);
 
   // firstTrigger ("credit-banks") is the finance direction's first trigger —
-  // it has 12 domain groups (> the expanded card's 10-visible cap) and its
-  // first group (sberbank.ru) has 3 subdomains, so it exercises both the
-  // muted "·N" counter/tooltip and the "+N" overflow chip in one fixture.
+  // it has 12 domain groups (> the expanded card's 10-visible cap), so it
+  // exercises both the muted "·N" counter/tooltip and the "+N" overflow chip
+  // in one fixture. credit-banks is a "deep" tier, so getTriggerDomains fills
+  // every group up to the same quota — the "·N" text is no longer unique
+  // page-wide, so the assertion below is scoped to firstDomainGroup's own chip.
   const allGroups = getTriggerDomains(firstTrigger.id);
 
   it("renders the muted ·N subdomain counter on a group chip that has subdomains", () => {
@@ -371,8 +373,11 @@ describe("InterestsTriggersEditor — domain-group chip (subdomains + overflow)"
       initialInterestIds: [firstInterest.id],
       initialTriggerIds: [firstTrigger.id],
     });
+    const chip = screen.getByRole("button", {
+      name: `Поддомены ${firstDomain}`,
+    });
     expect(
-      screen.getByText(`·${firstDomainGroup.subdomains.length}`)
+      within(chip).getByText(`·${firstDomainGroup.subdomains.length}`)
     ).toBeInTheDocument();
   });
 
