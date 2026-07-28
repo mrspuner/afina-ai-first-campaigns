@@ -40,14 +40,28 @@ interface CampaignStepperProps {
   disabled?: boolean;
   /**
    * Изолированная сессия правки шага (Task 12): набор позиций, доступных для
-   * клика/подсвеченных как «пройденные». Колонка правки может пропускать
+   * клика/подсвеченных как «в колонке». Колонка правки может пропускать
    * шаги ПОСЕРЕДИНЕ (например, «Анализ»(4) и «Бюджет»(7) без «Файла»(5)/
    * «Каналов»(6) между ними — правка одного не проходит через другие), так
    * что сплошная проверка `step <= maxStep` тут не подходит. Когда задано,
-   * ЗАМЕНЯЕТ обычную проверку `isVisited` целиком; обычный проход визарда его
-   * не передаёт и остаётся на прежней сплошной логике.
+   * ЗАМЕНЯЕТ обычную проверку `isVisited` целиком (кликабельность + цвет
+   * коннектора); обычный проход визарда его не передаёт и остаётся на
+   * прежней сплошной логике. С Item 2 (финальная полировка) БОЛЬШЕ НЕ решает
+   * галочку/номер в круге — за это отвечает отдельный `completedSteps` ниже:
+   * позиция может быть «в колонке» (кликабельна) и при этом ещё не
+   * «завершена» (номер, не галочка).
    */
   visitedSteps?: Set<number>;
+  /**
+   * Item 2 (финальная полировка изолированной сессии): позиции, чьё значение
+   * НЕ меняется правкой — они несут галочку, как завершённые, даже если
+   * сами не входят в `visitedSteps` (колонку). Позиция, которая ВХОДИТ в
+   * колонку (её обнулила инвалидация), но ещё не пройдена в этой сессии,
+   * сюда не входит и красится номером — ровно обратная связка тому, что
+   * раньше делал один `visitedSteps` (весь столбец = «пройдено»). Без пропа
+   * (обычный визард) поведение прежнее: `isVisited && !isActive`.
+   */
+  completedSteps?: Set<number>;
 }
 
 export function CampaignStepper({
@@ -57,6 +71,7 @@ export function CampaignStepper({
   onStepClick,
   disabled = false,
   visitedSteps,
+  completedSteps,
 }: CampaignStepperProps) {
   return (
     <div className="flex flex-col gap-1">
@@ -65,8 +80,10 @@ export function CampaignStepper({
         const label = STEP_LABELS[id];
         const isActive = step === currentStep;
         const isVisited = visitedSteps ? visitedSteps.has(step) : step <= maxStep;
-        const isCompleted = isVisited && !isActive;
-        const isPending = !isVisited && !isActive;
+        const isCompleted = completedSteps
+          ? completedSteps.has(step) && !isActive
+          : isVisited && !isActive;
+        const isPending = !isCompleted && !isActive;
         const isClickable = isVisited && !isActive && !disabled;
 
         return (

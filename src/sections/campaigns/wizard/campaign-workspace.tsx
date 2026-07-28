@@ -606,6 +606,27 @@ function IsolatedEditSession({
   );
   const maxStep = Math.max(...visitedPositions);
 
+  // Item 2 (финальная полировка): галочка ≠ «в колонке» — раньше степпер
+  // красил ВЕСЬ columnSet как «пройденный» (galочка), из-за чего «Бюджет»,
+  // обнулённый правкой «Каналов», но ещё не открытый в этой сессии, выглядел
+  // завершённым наравне с реально пройденными шагами. Разводим два вопроса:
+  // «кликабельно ли» (visitedPositions выше, не трогаем) и «завершено ли»
+  // (ниже, отдельный набор для CampaignStepper.completedSteps). Шаг ВНЕ
+  // колонки — его значение снапшота не тронуто правкой, значит «завершён»
+  // всегда. Шаг ВНУТРИ колонки — «завершён», только если пользователь уже
+  // прошёл его в ЭТОЙ сессии (его позиция в порядке колонки раньше активной);
+  // сам активный шаг никогда не попадает сюда (совпадает с activeIndex).
+  const completedPositions = new Set<number>(
+    orderedSteps
+      .map((id, idx) => ({ id, position: idx + 1 }))
+      .filter(({ id }) => {
+        if (!columnSet.has(id)) return true;
+        const colIdx = visibleStepIds.indexOf(id);
+        return colIdx !== -1 && colIdx < activeIndex;
+      })
+      .map(({ position }) => position)
+  );
+
   return (
     <div
       className="relative flex flex-1 flex-col overflow-hidden transition-[padding] duration-300"
@@ -622,6 +643,7 @@ function IsolatedEditSession({
           maxStep={maxStep}
           onStepClick={handleStepperClick}
           visitedSteps={visitedPositions}
+          completedSteps={completedPositions}
         />
       </div>
 
