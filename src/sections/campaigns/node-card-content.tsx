@@ -508,7 +508,14 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   }}
                   onPreview={(templateId) => openTemplatePreview(templateId)}
                   onCreate={() => {
-                    if (channel) openTemplateCreate(channel);
+                    // Item 4 (финальная полировка): без openSidebar() вопрос
+                    // намерения утекал в НЕОТКРЫТЫЙ нижний промпт-бар — тот же
+                    // приём, что уже открывает боковую панель для сплиттера
+                    // ниже (handleSplitAiField), теперь и здесь.
+                    if (channel) {
+                      openSidebar();
+                      openTemplateCreate(channel);
+                    }
                   }}
                 />
               );

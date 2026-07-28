@@ -160,7 +160,13 @@ export function WorkflowDescription({
 
   return (
     <TooltipProvider delay={1000}>
-      <div className="flex flex-col gap-3 text-sm leading-relaxed text-foreground">
+      {/* Item 1 (finale-полировка): пилюли (~23.6px) выше строки текста при
+          leading-relaxed (1.625 → 22.75px) — в абзаце с несколькими тегами
+          (напр. перечисление триггеров в «Старте») соседние обёрнутые строки
+          соприкасаются пилюлями. 1.75 подобрано глазом на реальной карточке —
+          даёт видимый зазор, не раздувая текст; трогаем только контейнер
+          описания, не глобальную типографику. */}
+      <div className="flex flex-col gap-3 text-sm leading-[1.75] text-foreground">
         {stages.map((stage) => (
           <div key={stage.id} className="flex flex-col gap-1.5">
             <p>

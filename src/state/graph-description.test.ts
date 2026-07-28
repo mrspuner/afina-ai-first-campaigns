@@ -153,6 +153,90 @@ describe("describeWorkflow", () => {
     });
   });
 
+  // Item 3 (финальная полировка): «Первое касание» должно называть, СКОЛЬКО
+  // каналов выбрано, а не выводить весь список именами в одной пилюле —
+  // «Выбрано [3 канала]: SMS, Email, Звонок. …» — считает пилюля (кликабельна,
+  // ведёт на «Каналы»), имена идут дальше обычным текстом.
+  describe("Первое касание — «Выбрано N каналов» (Item 3)", () => {
+    // Один канал → сплиттера в графе нет (см. "не выдумывает деление на
+    // потоки" выше); два и больше → есть.
+    const graphNoSplit = createTemplate("Возврат", "new", ["sms"]);
+    const graphSplit = createTemplate("Возврат", "new", ["sms", "email"]);
+
+    it("без сплита: «Выбрано N каналов: имена. Каждому контакту…»", () => {
+      const stages = describeWorkflow(graphNoSplit, T, {
+        pending: [],
+        channels: ["sms", "email", "ivr"],
+      });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      expect(segmentsText(touch.body)).toBe(
+        "Выбрано 3 канала: SMS, Email, Звонок. Каждому контакту уходит первое сообщение:",
+      );
+    });
+
+    it("со сплитом: та же вводная фраза, второе предложение — прежняя формулировка деления на потоки", () => {
+      const stages = describeWorkflow(graphSplit, T, {
+        pending: [],
+        channels: ["sms", "email"],
+      });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      expect(segmentsText(touch.body)).toBe(
+        "Выбрано 2 канала: SMS, Email. Аудитория делится на потоки, и каждому уходит своё сообщение:",
+      );
+    });
+
+    it("пилюля несёт ТОЛЬКО счётчик («3 канала») — имена каналов в неё не входят", () => {
+      const stages = describeWorkflow(graphNoSplit, T, {
+        pending: [],
+        channels: ["sms", "email", "ivr"],
+      });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      const tag = touch.body.find((s) => s.kind === "tag")!;
+      expect(tag.tag.label).toBe("3 канала");
+    });
+
+    it("пилюля по-прежнему ведёт на шаг «Каналы» (когда он доступен)", () => {
+      const stages = describeWorkflow(graphNoSplit, T, {
+        pending: [],
+        channels: ["sms", "email"],
+        editableSteps: ["channels"],
+      });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      const tag = touch.body.find((s) => s.kind === "tag")!;
+      expect(tag.tag.target).toEqual({ kind: "wizard-step", step: "channels" });
+    });
+
+    // Русское числительное «канал»/«канала»/«каналов» — те же контрольные
+    // случаи, что и в других местах кодовой базы (1, 2, 5, 11, 21).
+    const CH = ["sms", "email", "push", "ivr"] as const;
+    it.each([
+      [1, "1 канал"],
+      [2, "2 канала"],
+      [5, "5 каналов"],
+      [11, "11 каналов"],
+      [21, "21 канал"],
+    ])("%s канал(ов) → «%s»", (n, expected) => {
+      const channels = Array.from({ length: n }, (_, i) => CH[i % CH.length]);
+      const stages = describeWorkflow(graphNoSplit, T, { pending: [], channels });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      const tag = touch.body.find((s) => s.kind === "tag")!;
+      expect(tag.tag.label).toBe(expected);
+    });
+
+    it("без channels в facts — формулировка не меняется (нет пилюли, нет фразы «Выбрано»)", () => {
+      const stages = describeWorkflow(graphNoSplit, T, { pending: [] });
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      expect(segmentsText(touch.body)).toBe("Каждому контакту уходит первое сообщение:");
+      expect(touch.body.some((s) => s.kind === "tag")).toBe(false);
+    });
+
+    it("без фактов вовсе (hasFacts=false) — формулировка та же, что и раньше", () => {
+      const stages = describeWorkflow(graphNoSplit, T);
+      const touch = stages.find((s) => s.id === "first-touch")!;
+      expect(segmentsText(touch.body)).toBe("Каждому контакту уходит первое сообщение:");
+    });
+  });
+
   describe("Проверка реакции и повтор", () => {
     it("описывает проверку после первого касания", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);

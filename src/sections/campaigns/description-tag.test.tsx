@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 import { DescriptionTagPill } from "./description-tag";
 import type { DescriptionTag } from "@/state/graph-description";
 import { AppStateProvider } from "@/state/app-state-context";
-import { ChatProvider } from "@/state/chat-context";
+import { ChatProvider, useChat } from "@/state/chat-context";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { WaitParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
@@ -144,6 +144,41 @@ describe("DescriptionTagPill", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Приветствие/ }));
     expect(await screen.findByText("Создать новый шаблон")).toBeInTheDocument();
+  });
+});
+
+// Item 4 (финальная полировка): «Создать новый шаблон» из поповера пилюли
+// раньше звало голый `chat.openTemplateCreate(channel)` — вопрос намерения
+// утекал в НЕОТКРЫТЫЙ нижний промпт-бар (chat.mode оставался "collapsed").
+// Тот же сценарий, что уже работает у сплиттера графа (`handleSplitAiField`
+// в node-card-content.tsx: `openSidebar()` перед хендоффом ИИ) — здесь
+// используем ровно тот же `openSidebar()`, зовя его перед `openTemplateCreate`.
+describe("DescriptionTagPill — «Создать новый шаблон» открывает боковую панель (Item 4)", () => {
+  /** Зонд, читающий `chat.mode` — единственный наблюдаемый эффект openSidebar()
+   *  без монтирования самого ChatDrawer. */
+  function ChatModeProbe() {
+    const { mode } = useChat();
+    return <span data-testid="chat-mode">{mode}</span>;
+  }
+
+  it("клик по «Создать новый шаблон» переводит chat.mode в «sidebar»", async () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <TooltipProvider delay={1000}>
+            <DescriptionTagPill
+              tag={{ id: "msg-n1-template", label: "Приветствие", target: { kind: "template", nodeId: "n1" } }}
+              nodeType="sms"
+            />
+          </TooltipProvider>
+          <ChatModeProbe />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    expect(screen.getByTestId("chat-mode").textContent).toBe("collapsed");
+    fireEvent.click(screen.getByRole("button", { name: /Приветствие/ }));
+    fireEvent.click(await screen.findByText("Создать новый шаблон"));
+    expect(screen.getByTestId("chat-mode").textContent).toBe("sidebar");
   });
 });
 

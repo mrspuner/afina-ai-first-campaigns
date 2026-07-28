@@ -100,6 +100,33 @@ describe("CampaignWorkspace — изолированный режим правк
     expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
   });
 
+  // Item 2 (финальная полировка): степпер должен отличать «значение не
+  // меняется» (галочка) от «в колонке правки, но ещё не пройдено» (номер).
+  /** Кружок шага в степпере по подписи — тот же приём, что campaign-stepper.test.tsx. */
+  function stepCircle(label: string): HTMLElement {
+    const labelButton = screen.getByRole("button", { name: label });
+    const row = labelButton.closest("div.flex.items-center") as HTMLElement;
+    const circle = row.querySelector('[class*="rounded-full"]') as HTMLElement;
+    if (!circle) throw new Error(`circle not found for ${label}`);
+    return circle;
+  }
+  function hasCheckmark(label: string): boolean {
+    return stepCircle(label).querySelector("svg") !== null;
+  }
+
+  it("«Бюджет», обнулённый сменой канала, несёт номер (не галочку) — остальные шаги вне колонки несут галочку", () => {
+    renderWorkspace({ editing: { campaignId: "cmp_1", step: "channels" }, snapshot });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
+    // «Каналы» — активный шаг сессии, «Бюджет» попал в колонку правки, но
+    // пользователь его ещё не открывал в ЭТОЙ сессии.
+    expect(hasCheckmark("Бюджет")).toBe(false);
+    expect(screen.getByText("7")).toBeInTheDocument();
+    // Всё остальное — вне колонки, значение снапшота не тронуто правкой.
+    for (const label of ["Сценарий", "Цель", "Интересы", "Режим", "Файл"]) {
+      expect(hasCheckmark(label)).toBe(true);
+    }
+  });
+
   it("слева — «Отмена», а не «Назад»", () => {
     renderWorkspace({ editing: { campaignId: "cmp_1", step: "channels" }, snapshot });
     expect(screen.getByRole("button", { name: "Отмена" })).toBeInTheDocument();

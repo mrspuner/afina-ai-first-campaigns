@@ -553,28 +553,27 @@ export function describeWorkflow(
   });
 
   if (messages.length) {
-    // Каналы первого касания вплетены в существующее предложение (не отдельной
-    // фразой) — иначе список сообщений строкой ниже повторяет то же самое
-    // (review round 1, Finding 2).
-    const channelsTag: DescriptionSegment | null = facts?.channels?.length
+    // Item 3 (финальная полировка): пилюля называет СКОЛЬКО каналов выбрано
+    // («3 канала»), а не перечисляет имена внутри себя — имена идут следом
+    // обычным текстом. Отдельное предложение-вводная («Выбрано …:») перед
+    // существующей фразой про первое касание/деление на потоки — та не
+    // трогается (кроме потери своего собственного «по каналам …»).
+    const channelsCount = facts?.channels?.length ?? 0;
+    const channelsCountTag: DescriptionSegment | null = channelsCount
       ? stepTag(
           "first-touch-channels",
-          facts.channels.map((c) => CHANNEL_LABEL[c]).join(", "),
+          `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
           "channels",
           editableSteps,
         )
       : null;
-    const touchBody: DescriptionSegment[] = channelsTag
-      ? hasSplit
-        ? [t("Аудитория делится на потоки, и каждому уходит своё сообщение по каналам "), channelsTag, t(":")]
-        : [t("Каждому контакту уходит первое сообщение по каналам "), channelsTag, t(":")]
-      : [
-          t(
-            hasSplit
-              ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
-              : "Каждому контакту уходит первое сообщение:",
-          ),
-        ];
+    const channelNames = facts?.channels?.map((c) => CHANNEL_LABEL[c]).join(", ") ?? "";
+    const nextSentence = hasSplit
+      ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
+      : "Каждому контакту уходит первое сообщение:";
+    const touchBody: DescriptionSegment[] = channelsCountTag
+      ? [t("Выбрано "), channelsCountTag, t(`: ${channelNames}. `), t(nextSentence)]
+      : [t(nextSentence)];
     stages.push({
       id: "first-touch",
       heading: "Первое касание.",
