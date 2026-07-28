@@ -224,6 +224,129 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
   });
 });
 
+describe("WorkflowDescription — пилюля шаблона рендерится ВСЕГДА, даже нерезолвнутая (баг: без неё нельзя было сменить шаблон)", () => {
+  function renderWithProviders(node: ReactElement) {
+    return render(
+      <AppStateProvider>
+        <ChatProvider>{node}</ChatProvider>
+      </AppStateProvider>,
+    );
+  }
+
+  it("нерезолвнутый шаблон (label «не выбран») рендерит пилюлю рядом со словом «шаблон»", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "Звонок",
+            text: "Свой сценарий звонка.",
+            templateTag: {
+              id: "msg-n1-template",
+              label: "не выбран",
+              target: { kind: "template", nodeId: "n1" },
+            },
+          },
+        ],
+      },
+    ];
+    renderWithProviders(
+      <WorkflowDescription stages={stages} nodeTypes={new Map([["n1", "ivr"]])} />,
+    );
+    const pill = screen.getByRole("button", { name: "не выбран" });
+    const li = pill.closest("li")!;
+    expect(li.textContent).toBe(
+      "— Звонок, шаблон не выбран: «Свой сценарий звонка.»",
+    );
+  });
+
+  it("email нерезолвнутый: показывает И тему, И пилюлю «не выбран» — информация о теме не теряется", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "Email",
+            subject: "Специальное предложение",
+            text: "Мы подготовили для вас персональное предложение.",
+            templateTag: {
+              id: "msg-n2-template",
+              label: "не выбран",
+              target: { kind: "template", nodeId: "n2" },
+            },
+          },
+        ],
+      },
+    ];
+    renderWithProviders(
+      <WorkflowDescription stages={stages} nodeTypes={new Map([["n2", "email"]])} />,
+    );
+    const pill = screen.getByRole("button", { name: "не выбран" });
+    const li = pill.closest("li")!;
+    expect(li.textContent).toBe(
+      "— Email, тема «Специальное предложение», шаблон не выбран: «Мы подготовили для вас персональное предложение.»",
+    );
+  });
+
+  it("резолвнутый шаблон НЕ дублирует тему, даже если subject тоже задан (защитная проверка)", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "Email",
+            subject: "Специальное предложение",
+            templateName: "Персональный оффер",
+            text: "Текст письма.",
+            templateTag: {
+              id: "msg-n3-template",
+              label: "Персональный оффер",
+              target: { kind: "template", nodeId: "n3" },
+            },
+          },
+        ],
+      },
+    ];
+    renderWithProviders(
+      <WorkflowDescription stages={stages} nodeTypes={new Map([["n3", "email"]])} />,
+    );
+    const pill = screen.getByRole("button", { name: "Персональный оффер" });
+    const li = pill.closest("li")!;
+    expect(li.textContent).not.toContain("тема");
+    expect(li.textContent).toBe("— Email, шаблон Персональный оффер: «Текст письма.»");
+  });
+
+  it("демотированная (none) нерезолвнутая пилюля остаётся видимой как «не выбран», но без клика (§2.12)", () => {
+    const stages: DescriptionStage[] = [
+      {
+        id: "first-touch",
+        heading: "Первое касание.",
+        body: t("Первое сообщение:"),
+        messages: [
+          {
+            channel: "Звонок",
+            text: "Свой сценарий.",
+            templateTag: {
+              id: "msg-n4-template",
+              label: "не выбран",
+              target: { kind: "none", nodeId: "n4" },
+            },
+          },
+        ],
+      },
+    ];
+    render(<WorkflowDescription stages={stages} nodeTypes={new Map([["n4", "ivr"]])} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("не выбран")).toBeInTheDocument();
+  });
+});
+
 describe("WorkflowDescription — пунктуация вплотную к пилюле (fix round 2, Finding 1)", () => {
   it("текстовый сегмент сразу после тега, начинающийся со знака препинания, получает pull-back класс", () => {
     const stages: DescriptionStage[] = [

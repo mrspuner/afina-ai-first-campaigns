@@ -49,8 +49,13 @@ export const NODE_FIELD_EDITABILITY: Record<
     "Шаблон": { editability: "manual", paramKey: "body", control: "template" },
   },
   ivr: {
-    // «Сценарий» — это текст для проговаривания (выбор текста + ИИ-пункт).
-    "Текст": { editability: "manual", paramKey: "scenario", control: "combo", optionsKey: "ivrScenario" },
+    // Fix (parity с sms/email/push): раньше «Текст» был свободным combo
+    // (сценарий/голос жили внутри ноды, без записи в библиотеку) — у канала
+    // не было НИ ОДНОГО библиотечного шаблона, поэтому пилюля названия шаблона
+    // на карточке кампании никогда не резолвилась и не рендерилась вовсе (баг:
+    // «Шаблон» нельзя было сменить). Теперь «Шаблон» — тот же
+    // control:"template", что и у остальных трёх каналов.
+    "Шаблон": { editability: "manual", paramKey: "scenario", control: "template" },
   },
   // Block 7 §3 — «Событие» берётся из общего справочника событий (combo + ИИ).
   wait: {

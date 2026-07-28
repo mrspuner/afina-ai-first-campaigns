@@ -12,7 +12,6 @@ import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import {
   channelForNodeKind,
-  ivrNodePreviewTemplate,
   templateOptionsForKind,
 } from "@/state/node-template-options";
 import { cn } from "@/lib/utils";
@@ -49,7 +48,7 @@ const PARAM_RENDERERS: {
     costRow("push"),
   ],
   ivr: (p) => [
-    { label: "Текст", value: p.scenario || "—" },
+    { label: "Шаблон", value: p.scenario || "—" },
     costRow("ivr"),
   ],
   wait: (p) => [
@@ -532,13 +531,11 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                 );
               }
               const paramKey = meta.paramKey;
-              // IVR — единственное combo-поле с превью. onPreview питает сразу два
-              // «глаза»: у каждого варианта в открытом списке (превью, не выбирая)
-              // и в трейлинге триггера перед шевроном (#6, превью текущего значения).
-              // Прочие combo-поля (sms «Время», condition/wait/success/end) onPreview
-              // не передают — глаза нет.
-              const ivrForPreview =
-                data.params?.kind === "ivr" ? data.params : undefined;
+              // Fix: IVR раньше было единственным combo-полем с превью (глаз у
+              // текущего/каждого варианта, через ivrNodePreviewTemplate) — оно
+              // было единственным каналом без библиотечных шаблонов. Теперь у
+              // IVR тоже control:"template" (см. ветку выше), поэтому ни один
+              // combo-контрол больше не несёт onPreview.
               const combo = (
                 <NodeFieldCombobox
                   key={row.label}
@@ -548,17 +545,6 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
                   isDirty={isDirty}
                   onSelect={(next) => applyFieldValue(paramKey, next)}
                   onAiHandoff={() => handleAiField(row.label)}
-                  onPreview={
-                    ivrForPreview
-                      ? (opt) =>
-                          openTemplatePreview(
-                            ivrNodePreviewTemplate(id, {
-                              ...ivrForPreview,
-                              scenario: opt,
-                            }),
-                          )
-                      : undefined
-                  }
                 />
               );
               return combo;

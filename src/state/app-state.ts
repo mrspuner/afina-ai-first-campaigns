@@ -18,6 +18,7 @@ import {
   isStreamingCampaign,
 } from "./artifact-metrics";
 import { getEmails } from "@/state/email-directory";
+import { FIELD_PRESETS } from "@/state/field-directory";
 import {
   DEFAULT_DIRECTION_ID,
   businessDirectionFromSurvey,
@@ -148,9 +149,12 @@ export type MessageTemplate = {
 /**
  * Seed templates so the Шаблоны tab + statistics have real data before any
  * launch. Email templates are derived 1:1 from the email directory presets
- * (channel "email"); the sms + push entries are hand-authored samples. Each
- * `content` is the channel's NodeParams member; `usedInCampaigns` starts at 0
- * and is bumped by `campaign_launched` (Task 15).
+ * (channel "email"); the sms + push entries are hand-authored samples. The ivr
+ * entries reuse `FIELD_PRESETS.ivrScenario` verbatim (fix: ivr previously had
+ * NO library templates at all, so its «Шаблон» field could never resolve —
+ * see `channel-nodes.ts`/`node-field-editability.ts`). Each `content` is the
+ * channel's NodeParams member; `usedInCampaigns` starts at 0 and is bumped by
+ * `campaign_launched` (Task 15).
  */
 export const PRESET_TEMPLATES: MessageTemplate[] = [
   ...getEmails().map<MessageTemplate>((e) => ({
@@ -189,6 +193,44 @@ export const PRESET_TEMPLATES: MessageTemplate[] = [
       title: "Давно вас не видели",
       body: "Загляните — у нас есть кое-что для вас.",
       deeplink: "app://offers",
+    },
+    usedInCampaigns: 0,
+  },
+  // Fix: ivr раньше не имело ни одного библиотечного шаблона — «Шаблон» этого
+  // канала не мог резолвиться ни при каких обстоятельствах. Контент — три
+  // готовых сценария справочника `FIELD_PRESETS.ivrScenario`, а не выдуманный
+  // текст (те же сценарии, которыми `template-starters.ts` уже наполняет
+  // черновик нового IVR-шаблона).
+  {
+    id: "tpl_ivr_greeting",
+    channel: "ivr",
+    name: "Звонок — приветствие",
+    content: {
+      kind: "ivr",
+      scenario: FIELD_PRESETS.ivrScenario[0],
+      voiceType: "neutral",
+    },
+    usedInCampaigns: 0,
+  },
+  {
+    id: "tpl_ivr_reminder",
+    channel: "ivr",
+    name: "Звонок — напоминание о брони",
+    content: {
+      kind: "ivr",
+      scenario: FIELD_PRESETS.ivrScenario[1],
+      voiceType: "female",
+    },
+    usedInCampaigns: 0,
+  },
+  {
+    id: "tpl_ivr_approval",
+    channel: "ivr",
+    name: "Звонок — одобрение",
+    content: {
+      kind: "ivr",
+      scenario: FIELD_PRESETS.ivrScenario[2],
+      voiceType: "male",
     },
     usedInCampaigns: 0,
   },

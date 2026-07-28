@@ -1,12 +1,16 @@
 import { test, expect } from "@playwright/test";
 
-// The IVR node's «Текст» field is a combo (scenario/voice live INLINE on the
-// node, not in the templates library). It now carries an eye («Предпросмотр»)
-// next to the field — clicking it opens the SAME TemplatePreviewDrawer used by
-// sms/email/push, rendering the node's CURRENT call script via IvrRenderer.
+// Fix: the IVR node's field used to be «Текст», a free-form combo (scenario/
+// voice lived INLINE on the node, with no library templates to match against —
+// its own eye previewed the node's raw current text via a synthetic wrapper,
+// since there was nothing to look up in the library). IVR now has real library
+// templates and the SAME «Шаблон» select control as sms/email/push — its eye
+// resolves a real template id and opens the SAME TemplatePreviewDrawer,
+// rendering the selected script via IvrRenderer.
 //
 // We seed a draft campaign with a single «ivr» channel; the derived graph puts
-// one IVR comm node on the (editable) canvas with its template scenario.
+// one IVR comm node on the (editable) canvas, seeded to match the library's
+// «Звонок — приветствие» template.
 
 const DRAFT = {
   id: "cmp_ivr_node01",
@@ -41,7 +45,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 15_000 });
 });
 
-test.describe("IVR node preview — eye-icon on the node's «Текст» field", () => {
+test.describe("IVR node preview — eye-icon on the node's «Шаблон» field", () => {
   test("clicking the IVR field eye opens the drawer with the node's call script", async ({
     page,
   }) => {
@@ -50,7 +54,7 @@ test.describe("IVR node preview — eye-icon on the node's «Текст» field"
     const panel = page.getByTestId("node-control-panel");
     await expect(panel).toBeVisible();
 
-    // The eye lives ON the node next to the «Текст» combo (not inside a dropdown).
+    // The eye lives ON the node's «Шаблон» select, before the chevron.
     await panel.getByRole("button", { name: "Предпросмотр" }).click();
 
     const drawer = page.getByTestId("template-preview-drawer");
@@ -58,8 +62,11 @@ test.describe("IVR node preview — eye-icon on the node's «Текст» field"
     // Channel-scoped header + the IvrRenderer «Скрипт звонка» panel.
     await expect(drawer).toContainText("Шаблон · Звонок");
     await expect(drawer).toContainText("Скрипт звонка");
-    // The node's current scenario (template default) + its voice meta.
-    await expect(drawer).toContainText("Персональное предложение");
+    // The node's current scenario (seeded to match the library's «Звонок —
+    // приветствие» template) + its voice meta.
+    await expect(drawer).toContainText(
+      "Приветствие → проверка интереса → перевод на оператора",
+    );
     await expect(drawer).toContainText("Нейтральный");
 
     // Close affordance dismisses the drawer.

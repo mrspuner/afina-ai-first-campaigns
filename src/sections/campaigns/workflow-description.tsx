@@ -85,15 +85,30 @@ function punctuationPullBack(
 
 /**
  * Текстовый «хвостик» после названия канала, когда за него можно уцепиться
- * строкой: тема письма без резолвнутого шаблона. Резолвнутый шаблон рендерится
- * пилюлей (`message.templateTag`), не строкой — им ведает JSX ниже, поэтому
- * здесь для него `null`.
+ * строкой: legacy-путь БЕЗ тега (вызвавший не передал факты — `withTags=false`
+ * в `describeWorkflow`, `message.templateTag` не создаётся вовсе). С тегом
+ * (обычный путь карточки кампании) шаблон/«не выбран» всегда несёт пилюля —
+ * этой веткой не ведает, см. `subjectQualifier` + JSX ниже.
  */
 function qualifierText(message: DescriptionMessage): string | null {
   if (message.templateTag) return null;
   if (message.templateName) return `, шаблон «${message.templateName}»`;
   if (message.subject) return `, тема «${message.subject}»`;
   return null;
+}
+
+/**
+ * Тема письма ПЕРЕД пилюлей шаблона — только когда шаблон email не резолвлен
+ * (иначе имя шаблона уже несёт всю нужную информацию, дублировать тему незачем
+ * — спека §3). Не путать с `qualifierText`: тот — целиком альтернатива пилюле
+ * (работает только когда её нет); это — довесок ПЕРЕД пилюлей, которая есть
+ * всегда, когда факты переданы (fix: пилюля больше не пропадает, если текущий
+ * текст ноды не совпал с пресетом).
+ */
+function subjectQualifier(message: DescriptionMessage): string | null {
+  return !message.templateName && message.subject
+    ? `, тема «${message.subject}»`
+    : null;
 }
 
 interface WorkflowDescriptionProps {
@@ -179,6 +194,7 @@ export function WorkflowDescription({
                     — <span className="font-medium">{message.channel}</span>
                     {message.templateTag ? (
                       <>
+                        {subjectQualifier(message)}
                         {", шаблон "}
                         <DescriptionTagPill
                           tag={message.templateTag}
