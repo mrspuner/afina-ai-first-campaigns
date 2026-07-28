@@ -1,8 +1,18 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
 import { dismissIntro } from "./helpers/seed-intro";
+import { forceOfflineAi } from "./helpers/force-offline-ai";
 
 test.beforeEach(async ({ page }) => {
+  // Тесты этого файла ждут КОНКРЕТНЫЕ офлайн-реплики regex-пути («Готово,
+  // обновил ноду»), но офлайн-путь до сих пор не пинили — на машине с
+  // настроенным ключом (`.env.local`) они гонятся с асинхронной пробой
+  // доступности реального оркестратора, и та иногда успевает резолвиться до
+  // Enter. Тогда отвечает живой ИИ («Изменил задержку на 2 часа») — ответ
+  // верный по существу, но не тот, что проверяет тест. Гонка предсуществующая
+  // (см. force-offline-ai.ts); набор падающих тестов от прогона к прогону
+  // менялся, а с утяжелением приложения проба стала выигрывать чаще.
+  await forceOfflineAi(page);
   await dismissIntro(page);
 });
 

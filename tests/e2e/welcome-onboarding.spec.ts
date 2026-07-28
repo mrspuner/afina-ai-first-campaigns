@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { dismissIntroOverlay } from "./helpers/seed-intro";
+import { forceOfflineAi } from "./helpers/force-offline-ai";
 
 async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
   await page.keyboard.press("Control+Shift+KeyE");
@@ -13,6 +14,12 @@ async function applyPreset(page: Page, key: "empty" | "mid" | "full") {
 // away, so we keep e2e coverage that a new user can get past it and reach the
 // welcome onboarding chat.
 async function openWelcome(page: Page) {
+  // Пин офлайн regex-пути ДО навигации: без этого free-form/чиповые сабмиты
+  // гоняются с асинхронной пробой доступности реального AI-провайдера — на
+  // машине с настроенным ключом (`.env.local`) проба может резолвиться в
+  // true до сабмита, и тест получит ответ реального оркестратора вместо
+  // ожидаемой офлайн-реплики (см. force-offline-ai.ts).
+  await forceOfflineAi(page);
   await page.goto("/");
   await dismissIntroOverlay(page);
 }
