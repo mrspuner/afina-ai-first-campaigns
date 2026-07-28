@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   templateOptionsForKind,
   channelForNodeKind,
+  templateParamKeyForKind,
   ivrNodePreviewTemplate,
 } from "./node-template-options";
 import { PRESET_TEMPLATES } from "./app-state";
@@ -32,6 +33,17 @@ describe("node-template-options", () => {
 
   it("non-communication kinds yield no template options", () => {
     expect(templateOptionsForKind(PRESET_TEMPLATES, "wait")).toEqual([]);
+  });
+
+  // Fix: ivr used to have no entry here at all — its node field couldn't match
+  // against the template library, so the "Шаблон" control had nothing to
+  // resolve against (matches sms "text" / email+push "body").
+  it("maps every communication kind to its matching param key, including ivr", () => {
+    expect(templateParamKeyForKind("sms")).toBe("text");
+    expect(templateParamKeyForKind("email")).toBe("body");
+    expect(templateParamKeyForKind("push")).toBe("body");
+    expect(templateParamKeyForKind("ivr")).toBe("scenario");
+    expect(templateParamKeyForKind("wait")).toBeUndefined();
   });
 
   describe("ivrNodePreviewTemplate", () => {

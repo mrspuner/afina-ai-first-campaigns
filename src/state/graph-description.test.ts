@@ -4,11 +4,30 @@ import {
   segmentsText,
   type CampaignFacts,
   type DescriptionSegment,
+  type DescribableGraph,
 } from "./graph-description";
 import { createTemplate } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
+import type { NodeParams } from "@/types/workflow";
 
 const T = PRESET_TEMPLATES;
+
+/** Однонодовый граф для точечных тестов на резолв шаблона коммуникации — без
+ *  scoring/wait, которые describeWorkflow не требует для строки «Первого
+ *  касания». */
+function commGraph(params: NodeParams): DescribableGraph {
+  return {
+    nodes: [
+      {
+        id: "n1",
+        type: "workflowNode",
+        position: { x: 0, y: 0 },
+        data: { label: "Comm", nodeType: params.kind, params },
+      },
+    ],
+    edges: [],
+  };
+}
 
 describe("describeWorkflow", () => {
   describe("Старт", () => {
@@ -99,12 +118,15 @@ describe("describeWorkflow", () => {
       expect(sms.templateName).toBe("SMS — напоминание");
       expect(sms.text).toBe("Ваше предложение ждёт. Подробности на сайте.");
 
-      // Текст письма не совпадает ни с одним пресетом справочника → шаблон не
-      // резолвится, и по спеке для email показываем тему.
+      // Fix: письмо теперь ТОЖЕ засеяно текстом реального пресета справочника
+      // (раньше — «Мы подготовили для вас персональное предложение.», которого
+      // нет ни в одном письме `email-directory.ts` → шаблон никогда не
+      // резолвился, и пилюля просто не рисовалась — баг, который чинит этот
+      // тред). Email резолвится наравне с SMS/Push.
       const email = touch.messages!.find((m) => m.channel === "Email")!;
-      expect(email.templateName).toBeUndefined();
-      expect(email.subject).toBe("Специальное предложение");
-      expect(email.text).toBe("Мы подготовили для вас персональное предложение.");
+      expect(email.templateName).toBe("Персональный оффер");
+      expect(email.subject).toBeUndefined();
+      expect(email.text).toContain("персональное предложение");
     });
 
     it("упоминает деление на потоки, когда в графе есть сплиттер", () => {
@@ -427,5 +449,65 @@ describe("describeWorkflow — теги", () => {
   it("идентификаторы тегов уникальны — годятся как React-ключи", () => {
     const ids = allTags(describeWorkflow(graph, templates, facts)).map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("describeWorkflow — пилюля шаблона рендерится ВСЕГДА (баг: аффорданс «сменить шаблон» пропадал, если текущий текст ноды случайно не совпал с пресетом библиотеки)", () => {
+  const editableFacts: CampaignFacts = { pending: [], graphEditable: true };
+
+  it("email с телом, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран» — и не теряет тему", () => {
+    const graph = commGraph({
+      kind: "email",
+      subject: "Индивидуальная тема",
+      body: "Совершенно нестандартный текст письма, которого нет в справочнике.",
+      sender: "noreply@brand.com",
+    });
+    const stages = describeWorkflow(graph, T, editableFacts);
+    const message = stages.find((s) => s.id === "first-touch")!.messages![0];
+    expect(message.templateName).toBeUndefined();
+    expect(message.subject).toBe("Индивидуальная тема");
+    expect(message.templateTag).toBeDefined();
+    expect(message.templateTag!.label).toBe("не выбран");
+    expect(message.templateTag!.target).toEqual({ kind: "template", nodeId: "n1" });
+  });
+
+  it("ivr со сценарием, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран»", () => {
+    const graph = commGraph({
+      kind: "ivr",
+      scenario: "Совершенно свой сценарий звонка вне библиотеки.",
+      voiceType: "neutral",
+    });
+    const stages = describeWorkflow(graph, T, editableFacts);
+    const message = stages.find((s) => s.id === "first-touch")!.messages![0];
+    expect(message.templateName).toBeUndefined();
+    expect(message.templateTag?.label).toBe("не выбран");
+    expect(message.templateTag?.target).toEqual({ kind: "template", nodeId: "n1" });
+  });
+
+  it("резолвнутый шаблон по-прежнему несёт своё имя пилюлей — регресс не тронут", () => {
+    const smsTemplate = T.find((tpl) => tpl.id === "tpl_sms_reminder")!;
+    const graph = commGraph(smsTemplate.content);
+    const stages = describeWorkflow(graph, T, editableFacts);
+    const message = stages.find((s) => s.id === "first-touch")!.messages![0];
+    expect(message.templateTag?.label).toBe("SMS — напоминание");
+  });
+
+  it("graphEditable=false демотирует нерезолвнутый тег в носитель значения (§2.12) — «не выбран» остаётся видимым, но не кликабельным", () => {
+    const graph = commGraph({ kind: "ivr", scenario: "Свой сценарий.", voiceType: "neutral" });
+    const stages = describeWorkflow(graph, T, { pending: [], graphEditable: false });
+    const message = stages.find((s) => s.id === "first-touch")!.messages![0];
+    expect(message.templateTag?.target.kind).toBe("none");
+    expect(message.templateTag?.label).toBe("не выбран");
+  });
+
+  it("без фактов (withTags=false) шаблон-тег по-прежнему не создаётся — обратная совместимость Task 3", () => {
+    const graph = commGraph({
+      kind: "ivr",
+      scenario: "Свой сценарий вне библиотеки.",
+      voiceType: "neutral",
+    });
+    const stages = describeWorkflow(graph, T);
+    const message = stages.find((s) => s.id === "first-touch")!.messages![0];
+    expect(message.templateTag).toBeUndefined();
   });
 });

@@ -3,8 +3,11 @@ import {
   CHANNEL_NODE_MAP,
   buildChannelBlock,
   buildCommUnit,
+  channelTemplateParams,
   type Channel,
 } from "./channel-nodes";
+import { PRESET_TEMPLATES } from "./app-state";
+import { templateOptionsForKind, templateParamKeyForKind } from "./node-template-options";
 
 describe("CHANNEL_NODE_MAP", () => {
   it("covers all 4 channels", () => {
@@ -20,6 +23,28 @@ describe("CHANNEL_NODE_MAP", () => {
     const channels: Channel[] = ["sms", "email", "push", "ivr"];
     for (const ch of channels) {
       expect(CHANNEL_NODE_MAP[ch].defaultParams.kind).toBe(ch);
+    }
+  });
+});
+
+describe("channelTemplateParams — fix: every channel resolves against the seeded library, not just sms/push", () => {
+  // Bug: a freshly built campaign (wizard, `useTemplateParams: true`) only let
+  // the user CHANGE a channel's template when its seeded text happened to match
+  // a PRESET_TEMPLATES entry — true for sms/push by construction, but email's
+  // seeded body matched no email in `email-directory.ts`, and ivr had no
+  // library templates to match at all. This is the single choke point both the
+  // wizard and `buildCommUnit`/`buildChannelBlock` go through, so fixing it here
+  // fixes every entry point at once.
+  it("every channel's seeded template params match a real PRESET_TEMPLATES entry", () => {
+    const channels: Channel[] = ["sms", "email", "push", "ivr"];
+    for (const ch of channels) {
+      const params = channelTemplateParams(ch);
+      const key = templateParamKeyForKind(ch)!;
+      const bound = (params as unknown as Record<string, unknown>)[key];
+      const match = templateOptionsForKind(PRESET_TEMPLATES, ch).find(
+        (t) => (t.content as unknown as Record<string, unknown>)[key] === bound,
+      );
+      expect(match, `channel "${ch}" should resolve to a library template`).toBeDefined();
     }
   });
 });

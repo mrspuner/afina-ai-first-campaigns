@@ -70,6 +70,15 @@ describe("NODE_FIELD_EDITABILITY", () => {
     expect(getFieldMeta("push", "Заголовок")).toBeUndefined();
   });
 
+  it("fix: ivr gets the same «Шаблон» template control as sms/email/push — parity (bug: template couldn't be changed unless the node's current text happened to match a library preset)", () => {
+    const tpl = getFieldMeta("ivr", "Шаблон");
+    expect(tpl?.control).toBe("template");
+    expect(tpl?.editability).toBe("manual");
+    expect(tpl?.paramKey).toBe("scenario");
+    // The old free-form «Текст» combo is gone.
+    expect(getFieldMeta("ivr", "Текст")).toBeUndefined();
+  });
+
   it("«Шаблон» field is manual but carries no combo optionsKey", () => {
     const m = getFieldMeta("sms", "Шаблон");
     expect(m?.editability).toBe("manual");
@@ -85,9 +94,9 @@ describe("NODE_FIELD_EDITABILITY", () => {
   });
 
   it("gives former-manual fields a combo control with an optionsKey", () => {
-    const combo = getFieldMeta("ivr", "Текст");
+    const combo = getFieldMeta("end", "Причина");
     expect(combo?.control).toBe("combo");
-    expect(combo?.optionsKey).toBe("ivrScenario");
+    expect(combo?.optionsKey).toBe("endReason");
     expect(getFieldMeta("success", "Цель")?.control).toBe("combo");
   });
 
