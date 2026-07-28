@@ -3,18 +3,19 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pluralRu } from "@/lib/plural-ru";
 
 interface DropZoneProps {
   accept: string;
-  file: File | null;
+  /**
+   * Displayed file. Widened past `File` to `{ name; rowCount }` because the
+   * «Файл» step seeds this with `BaseFile` snapshots on revisit/hydration —
+   * a real `File` only ever arrives inside `onFile`, never as this prop.
+   */
+  file: { name: string; rowCount: number } | null;
   onFile: (file: File) => void;
   disabled?: boolean;
   className?: string;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function DropZone({ accept, file, onFile, disabled, className }: DropZoneProps) {
@@ -63,7 +64,10 @@ export function DropZone({ accept, file, onFile, disabled, className }: DropZone
             <Upload className="h-5 w-5 text-primary" />
           </div>
           <p className="text-sm font-medium text-foreground">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+          <p className="text-xs text-muted-foreground">
+            ~{file.rowCount.toLocaleString("ru-RU")}{" "}
+            {pluralRu(file.rowCount, ["строка", "строки", "строк"])}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
             Нажмите чтобы заменить
           </p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeStepTransition } from "./wizard-navigation";
+import { computeStepTransition, invalidatedBy, resetFieldsFor } from "./wizard-navigation";
 
 describe("computeStepTransition", () => {
   it("advances one step on a normal submit", () => {
@@ -50,5 +50,34 @@ describe("computeStepTransition", () => {
         intentChanged: true,
       })
     ).toEqual({ step: 2, resetData: true });
+  });
+});
+
+describe("STEP_INVALIDATES", () => {
+  it("смена каналов обнуляет бюджет", () => {
+    expect(invalidatedBy("channels")).toEqual(["budget"]);
+  });
+
+  it("смена базы и режима анализа обнуляет бюджет", () => {
+    expect(invalidatedBy("file")).toEqual(["budget"]);
+    expect(invalidatedBy("analysis")).toEqual(["budget"]);
+  });
+
+  it("смена сценария обнуляет только бюджет — интересы и база от него не зависят", () => {
+    expect(invalidatedBy("scenario")).toEqual(["budget"]);
+  });
+
+  it("интересы и бюджет не обнуляют ничего", () => {
+    expect(invalidatedBy("interests")).toEqual([]);
+    expect(invalidatedBy("budget")).toEqual([]);
+  });
+
+  it("сброс бюджета возвращает поля шага к значениям по умолчанию", () => {
+    expect(resetFieldsFor(["budget"])).toEqual({
+      budget: null,
+      budgetMode: undefined,
+      dailyBudget: undefined,
+      maxDailyBudget: undefined,
+    });
   });
 });

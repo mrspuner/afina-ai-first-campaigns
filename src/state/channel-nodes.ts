@@ -169,7 +169,7 @@ function makeEdge(source: string, target: string, label?: string): WorkflowEdge 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
 const STEP = 210;
-const CHANNEL_Y_SPACING = 80;
+export const CHANNEL_Y_SPACING = 80;
 
 // ── buildChannelBlock ─────────────────────────────────────────────────────────
 

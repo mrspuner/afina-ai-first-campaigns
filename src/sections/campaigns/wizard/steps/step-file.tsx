@@ -6,7 +6,7 @@ import { DropZone } from "@/components/ui/drop-zone";
 import { HashingLoader } from "@/components/ui/hashing-loader";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
-import { StepData, StepProps } from "@/types/campaign";
+import { BaseFile, StepData, StepProps } from "@/types/campaign";
 import { useScreenHints } from "@/hooks/use-screen-hints";
 import { FILE_SCREEN_HINTS } from "./screen-hints";
 import { getScenario } from "@/data/scenarios";
@@ -18,13 +18,24 @@ export function simulateRowCount(f: File): number {
 }
 
 /** Total simulated rows across every uploaded base. */
-function totalRows(files: File[]): number {
-  return files.reduce((sum, f) => sum + simulateRowCount(f), 0);
+function totalRows(files: BaseFile[]): number {
+  return files.reduce((sum, f) => sum + f.rowCount, 0);
 }
 
 /** Pure continue-gate for the Файл step: at least one base is required. */
-export function canContinueFromFiles(files: File[]): boolean {
+export function canContinueFromFiles(files: BaseFile[]): boolean {
   return files.length > 0;
+}
+
+/**
+ * Набор баз не изменился — сравнение ПО ЗНАЧЕНИЮ (имя + число строк), а не по
+ * ссылке: после перехода на `BaseFile` объекты пересоздаются при каждой
+ * гидрации снапшота, и сравнение по ссылке всегда давало бы «изменился»,
+ * запуская лишнее хеширование на каждом входе в шаг.
+ */
+export function sameFileSet(a: readonly BaseFile[], b: readonly BaseFile[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((f, i) => f.name === b[i].name && f.rowCount === b[i].rowCount);
 }
 
 /** Per-source copy for the upload step. */
@@ -78,12 +89,19 @@ function ScenarioMatchNotice({ scenarioId }: { scenarioId: string | null }) {
   );
 }
 
-export function StepFile({ data, onNext, onBack, active }: StepProps) {
+export function StepFile({
+  data,
+  onNext,
+  onBack,
+  active,
+  onValueChange,
+  footerOverride,
+}: StepProps) {
   useScreenHints(active ? FILE_SCREEN_HINTS : null);
   // One or more bases (Block 4b). Seeded from the wizard's `files`, so revisits
   // keep the uploaded set and skip re-hashing unless the user changes it.
   const seededFiles = data.files;
-  const [files, setFiles] = useState<File[]>(seededFiles);
+  const [files, setFiles] = useState<BaseFile[]>(seededFiles);
   // Whether an empty "add another base" slot is visible. Open by default when
   // nothing is uploaded yet; the «Загрузить ещё одну базу» button reopens it.
   const [showAddSlot, setShowAddSlot] = useState(seededFiles.length === 0);
@@ -92,21 +110,34 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
 
   const { title, subtitle } = fileCopy(data.sourceType);
 
+  // DropZone hands back a raw browser `File` only inside its upload handler —
+  // convert it immediately to the lightweight, serializable shape used everywhere else.
+  const toBase = (f: File): BaseFile => ({ name: f.name, rowCount: simulateRowCount(f) });
+
+  // `onValueChange` уведомляет РОДИТЕЛЯ (изолированную сессию правки) — вызывать
+  // его нужно из обработчика события напрямую, а не изнутри функционального
+  // апдейтера `setFiles`: апдейтер выполняется React во время рендера ЭТОГО
+  // компонента, и setState другого компонента оттуда — ошибка "Cannot update a
+  // component while rendering a different component" (тот же баг, что был в
+  // step-channels.tsx, проверено вживую в браузере).
   function addFile(f: File) {
-    setFiles((prev) => [...prev, f]);
+    const next = [...files, toBase(f)];
+    setFiles(next);
+    onValueChange?.({ files: next });
     setShowAddSlot(false);
   }
 
   function replaceAt(index: number, f: File) {
-    setFiles((prev) => prev.map((x, i) => (i === index ? f : x)));
+    const next = files.map((x, i) => (i === index ? toBase(f) : x));
+    setFiles(next);
+    onValueChange?.({ files: next });
   }
 
   function removeAt(index: number) {
-    setFiles((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      if (next.length === 0) setShowAddSlot(true);
-      return next;
-    });
+    const next = files.filter((_, i) => i !== index);
+    setFiles(next);
+    if (next.length === 0) setShowAddSlot(true);
+    onValueChange?.({ files: next });
   }
 
   function emit(rowCount: number) {
@@ -116,9 +147,7 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
 
   // The uploaded set is unchanged from what we seeded — same files, same order —
   // so a previously-computed row count can be reused instead of re-hashing.
-  const unchanged =
-    files.length === seededFiles.length &&
-    files.every((f, i) => f === seededFiles[i]);
+  const unchanged = sameFileSet(files, seededFiles);
 
   function handleContinue() {
     if (files.length === 0) return;
@@ -194,12 +223,15 @@ export function StepFile({ data, onNext, onBack, active }: StepProps) {
           </p>
         </div>
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={handleContinue}
-          continueLabel="Далее"
-          continueDisabled={!canContinue || isHashing}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={handleContinue}
+            continueLabel={footerOverride?.continueLabel ?? "Далее"}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue || isHashing}
+          />
+        )}
       </div>
     </StepContent>
   );

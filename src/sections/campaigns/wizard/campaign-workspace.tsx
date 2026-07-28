@@ -1,20 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { CampaignStepper } from "@/sections/campaigns/wizard/campaign-stepper";
 import { useAppDispatch } from "@/state/app-state-context";
-import { StepData, initialStepData } from "@/types/campaign";
+import { StepData, initialStepData, type Channel } from "@/types/campaign";
 import { Step1Scenario } from "@/sections/campaigns/wizard/steps/step-1-scenario";
 import { StepIntent } from "@/sections/campaigns/wizard/steps/step-intent";
 import { Step2Interests } from "@/sections/campaigns/wizard/steps/step-2-interests";
 import { StepAnalysis } from "@/sections/campaigns/wizard/steps/step-analysis";
-import { StepFile } from "@/sections/campaigns/wizard/steps/step-file";
+import { StepFile, sameFileSet } from "@/sections/campaigns/wizard/steps/step-file";
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
-import { computeStepTransition } from "@/sections/campaigns/wizard/wizard-navigation";
-import { stepsForIntent } from "@/sections/campaigns/wizard/wizard-steps";
+import {
+  computeStepTransition,
+  invalidatedBy,
+  resetFieldsFor,
+} from "@/sections/campaigns/wizard/wizard-navigation";
+import { stepsForIntent, type WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 
 /** Fallback audience base when no file row-count is known (mirrors estimator). */
 const FALLBACK_BASE = 10_000;
@@ -48,6 +52,15 @@ function WorkspaceInner({
   const [currentStep, setCurrentStep] = useState(startStep);
   const [maxStep, setMaxStep] = useState(startStep);
   const [animatingStep, setAnimatingStep] = useState<number | null>(startStep);
+  // prefers-reduced-motion: та же конвенция, что и StepContent — вход шага
+  // выключается целиком (initial совпадает с animate, кадров нет). Раньше
+  // этот `motion.div` не читал `useReducedMotion()` вовсе, из-за чего
+  // визуальный харнесс (эмулирующий reduced-motion ИМЕННО чтобы убрать
+  // анимационный джиттер) всё равно ловил шаг 5/7 в СЛУЧАЙНОЙ точке
+  // 350-мс въезда — высота/позиция контента внутри `justify-center` плыла
+  // на десятки px между прогонами. Гейт на reduceMotion делает первый рендер
+  // (обычный старт ИЛИ seeded resume на произвольный шаг) детерминированным.
+  const reduceMotion = useReducedMotion();
   const [stepData, setStepData] = useState<StepData>(
     initialStepDataOverride
       ? initialStepDataOverride
@@ -113,22 +126,33 @@ function WorkspaceInner({
         intentChanged,
       });
 
-      // Changing scenario invalidates everything downstream (interests,
-      // triggers, segments, file, budget) — reset those fields and rewind
-      // progress to the step right after the scenario picker. `next` is
-      // anchored to the scenario step (not `currentStep`), so picking a new
-      // scenario after scrolling back to the rendered step-1 panel lands on
-      // step 2 instead of overshooting. `setMaxStep(next)` collapses any
-      // phantom steps that were reached under the old scenario.
+      // Changing scenario still rewinds progress to the step right after the
+      // scenario picker (`next` is anchored to the scenario step, not
+      // `currentStep`, so re-picking after scrolling back to the rendered
+      // step-1 panel lands on step 2 instead of overshooting), but it no
+      // longer wipes everything downstream: interests/triggers/base/channels
+      // don't depend on the scenario (the interests catalogue is keyed off
+      // the account's business direction), only the budget does. See
+      // `STEP_INVALIDATES` in wizard-navigation.ts for the full dependency
+      // table.
       //
-      // Changing the intent likewise reshapes the tail of the step list
-      // (interests / analysis / file / channels differ per intent). When only
-      // the intent changed (scenario takes priority), reset downstream data but
-      // keep scenario + the new intent, then rewind to the step right after
-      // the intent picker.
+      // Changing the intent still reshapes the tail of the step list itself
+      // (interests / analysis / file / channels differ per intent), so its
+      // full downstream reset is unchanged. When only the intent changed
+      // (scenario takes priority), reset downstream data but keep scenario +
+      // the new intent, then rewind to the step right after the intent
+      // picker.
       if (resetData) {
         if (scenarioChanged) {
-          setStepData({ ...initialStepData, ...partial });
+          // Сценарий больше НЕ стирает интересы, триггеры, базу и каналы: они
+          // от него не зависят (каталог интересов определяется направлением
+          // бизнеса аккаунта). Обнуляется только то, что перечислено в
+          // STEP_INVALIDATES — бюджет.
+          setStepData((prev) => ({
+            ...prev,
+            ...partial,
+            ...resetFieldsFor(invalidatedBy("scenario")),
+          }));
         } else {
           // intentChanged: preserve scenario, apply the new intent, clear the
           // rest (interests/file/fileRowCount/apiKey/channels/budget/…).
@@ -177,19 +201,35 @@ function WorkspaceInner({
   // fallback (stream). `proceed` is a no-op: open-campaign progress now lives
   // in the campaign card (sub-track D), so there is no step-7 to advance to —
   // the reducer routes the view after the signal/campaign is created.
-  const handleLaunchFromBudget = useCallback(() => {
-    if (!onLaunchRequested) {
-      handleNext({});
-      return;
-    }
-    onLaunchRequested({
-      scenarioId: stepData.scenario ?? "",
-      cost: stepData.budget ?? 0,
-      count: stepData.fileRowCount ?? FALLBACK_BASE,
-      stepData,
-      proceed: () => {},
-    });
-  }, [handleNext, onLaunchRequested, stepData]);
+  //
+  // Fix round 2 (Task 12): StepBudget's own footer calls `onNext(partial)`
+  // exactly like every other step — the wrapper below used to be
+  // `() => handleLaunchFromBudget()`, silently DROPPING that partial. `cost`/
+  // `stepData` were then built from the OUTER `stepData` state, which still
+  // held whatever the user had BEFORE submitting Budget (`null` on a fresh
+  // wizard run), so `campaign_created_from_wizard` snapshot a campaign whose
+  // `budget`/`wizardData.budget` never carried the amount the user actually
+  // picked. `stepData` also won't have re-rendered with `partial` yet at this
+  // point in the same tick (unlike `handleNext`, which is never the very last
+  // call before a snapshot is taken) — so `merged` below, not bare `stepData`,
+  // is what `cost`/`stepData` in the LaunchRequest must read.
+  const handleLaunchFromBudget = useCallback(
+    (partial: Partial<StepData>) => {
+      const merged = { ...stepData, ...partial };
+      if (!onLaunchRequested) {
+        handleNext(partial);
+        return;
+      }
+      onLaunchRequested({
+        scenarioId: merged.scenario ?? "",
+        cost: merged.budget ?? 0,
+        count: merged.fileRowCount ?? FALLBACK_BASE,
+        stepData: merged,
+        proceed: () => {},
+      });
+    },
+    [handleNext, onLaunchRequested, stepData]
+  );
 
   // The intent-gated step sequence. The numeric currentStep/maxStep are
   // 1-based INDICES into this list; the id at step N is steps[N-1].
@@ -219,7 +259,7 @@ function WorkspaceInner({
           <StepBudget
             {...props}
             onBack={onBack}
-            onNext={() => handleLaunchFromBudget()}
+            onNext={handleLaunchFromBudget}
           />
         );
       default: return null;
@@ -257,7 +297,11 @@ function WorkspaceInner({
           <motion.div
             key={step}
             ref={(el) => { stepRefs.current[step] = el; }}
-            initial={step === animatingStep ? { y: 60, opacity: 0 } : false}
+            initial={
+              !reduceMotion && step === animatingStep
+                ? { y: 60, opacity: 0 }
+                : false
+            }
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
             className="flex min-h-screen shrink-0 flex-col items-center justify-center px-8 pb-promptbar pt-10"
@@ -271,17 +315,378 @@ function WorkspaceInner({
   );
 }
 
+/** Каналы совпадают по составу И порядку — `toggleChannel` держит канонический
+ *  порядок CHANNELS, так что сравнение по индексу корректно определяет «то же
+ *  значение». */
+function channelsEqual(a: Channel[], b: Channel[]): boolean {
+  return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
+/**
+ * Отличается ли живое значение шага (переданное через `onValueChange`) от
+ * снапшота кампании — единственный вопрос, который решает, каскадирует ли
+ * правка (см. `STEP_INVALIDATES` в wizard-navigation.ts). Только шаги,
+ * которые вообще зовут `onValueChange` (scenario/analysis/file/channels),
+ * когда-либо доходят сюда с непустым `partial`.
+ */
+function stepValueDiffers(
+  step: WizardStepId,
+  partial: Partial<StepData>,
+  snapshot: StepData
+): boolean {
+  switch (step) {
+    case "scenario":
+      return partial.scenario !== undefined && partial.scenario !== snapshot.scenario;
+    case "analysis":
+      return (
+        partial.analysisMode !== undefined &&
+        partial.analysisMode !== snapshot.analysisMode
+      );
+    case "file":
+      return partial.files !== undefined && !sameFileSet(partial.files, snapshot.files);
+    case "channels":
+      return (
+        partial.channels !== undefined && !channelsEqual(partial.channels, snapshot.channels)
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * Изолированная сессия точечной правки одного шага с карточки (Task 12).
+ *
+ * Колонка начинается с ОДНОГО запрошенного шага и растёт РОВНО на те шаги,
+ * которые правка обнулила (`invalidatedBy`/`resetFieldsFor` из Task 10) — та
+ * же таблица зависимостей, что обслуживает обычный проход визарда, здесь
+ * читается ещё раз, а не задублирована. «Далее» перемещает пользователя
+ * ВНУТРИ сессии (правит только ЛОКАЛЬНЫЕ накопленные правки — `edits`, см.
+ * `deriveStepData` ниже) и не пишет наружу ничего; «Применить и вернуться»
+ * коммитит ОДИН раз, на основной кнопке последнего шага сессии. «Отмена»
+ * возвращает на карточку без коммита.
+ *
+ * Почему это важно конкретно: если бы каждое «Далее» писало наружу, то
+ * пользователь, сменивший каналы и бросивший сессию на середине, оставил бы
+ * кампанию с новыми каналами и `budget: null` — черновик, который нельзя
+ * запустить. Коммит один раз означает, что отмена ничего не меняет.
+ */
+function IsolatedEditSession({
+  editing,
+  snapshot,
+  onCommit,
+  onCancel,
+}: {
+  editing: { campaignId: string; step: WizardStepId };
+  snapshot: StepData;
+  onCommit?: (stepData: StepData) => void;
+  onCancel?: () => void;
+}) {
+  // «Отмена» рендерится ВСЕГДА (левая кнопка футера показывается только когда
+  // `onBack` truthy) — коллбек опционален для вызывающего кода/тестов, но
+  // сама кнопка не должна пропадать только потому, что его не передали.
+  const handleCancel = onCancel ?? (() => {});
+  // Явные правки пользователя — ТОЛЬКО то, что реально пришло через onNext
+  // конкретного шага (клик по его собственной кнопке). Снапшот НИКОГДА не
+  // мутируется напрямую, и обнулённые каскадом поля НЕ запоминаются как
+  // «сброшено навсегда» — маска (resetFieldsFor) выводится заново на каждый
+  // рендер из ЖИВОГО pendingResets (см. `deriveStepData` ниже), а не
+  // применяется один раз и не переживает свою причину.
+  //
+  // Fix round 1 (Task 12): раньше маска накатывалась ДЕСТРУКТИВНО на клике
+  // «Далее» и оставалась в состоянии сессии навсегда — стоило пользователю
+  // вернуться на «Каналы» и восстановить исходный набор (тот же, что в
+  // снапшоте), «Далее» уже необратимо занулило бюджет, и коммит уходил с
+  // `budget: undefined` при НЕИЗМЕНИВШИХСЯ каналах — карточка показывала
+  // ₽14 580 (фолбэк-оценку) вместо настоящих ₽526 973, вторая цифра «правды»
+  // (граф/ЗАПУСК) при этом расходилась. Теперь маска — производная величина:
+  // как только живой выбор снова совпал со снапшотом, `pendingResets`
+  // пустеет, и обнулять уже нечего — снапшотное значение просвечивает само.
+  const [edits, setEdits] = useState<Partial<StepData>>({});
+  const [activeStepId, setActiveStepId] = useState<WizardStepId>(editing.step);
+  const [animatingStep, setAnimatingStep] = useState<WizardStepId | null>(editing.step);
+  // prefers-reduced-motion: см. комментарий у одноимённого хука в
+  // `WorkspaceInner` — тот же гейт нужен и здесь, у изолированной сессии
+  // правки свой собственный `motion.div` со входом шага.
+  const reduceMotion = useReducedMotion();
+  // Живое, реактивное «что обнулилось» — обновляется по каждому onValueChange
+  // активного шага (см. handleValueChange). НЕ хранит историю: как только
+  // очередной live-выбор снова совпадает со снапшотом, обнулять нечего, и
+  // предыдущая инвалидация не «залипает».
+  const [pendingResets, setPendingResets] = useState<WizardStepId[]>([]);
+
+  // Единственное место, где снапшот, накопленные явные правки и ТЕКУЩАЯ маска
+  // сходятся в одно значение — что для рендера, что (плюс свежий partial
+  // поверх) для коммита. Порядок спреда решает: `resetFieldsFor` идёт ПОСЛЕ
+  // `withEdits` — протухшая правка обнулённого поля не переживает маску;
+  // при коммите свежий `partial` активного шага спредится ПОСЛЕ маски (в
+  // handleIsolatedNext) — явная правка ВСЕГДА побеждает маску, даже если шаг
+  // формально всё ещё числится обнулённым.
+  //
+  // `resets` по умолчанию читает состояние `pendingResets` (рендер), но
+  // `handleIsolatedNext` (Item 2, финальное ревью) передаёт СВЕЖЕ вычисленное
+  // значение явно — на коммите с шага, синхронно зовущего и onValueChange, и
+  // onNext (сценарий), состояние ещё не успело перерендериться.
+  function deriveStepData(
+    withEdits: Partial<StepData>,
+    resets: WizardStepId[] = pendingResets,
+  ): StepData {
+    return { ...snapshot, ...withEdits, ...resetFieldsFor(resets) };
+  }
+
+  const effectiveStepData = deriveStepData(edits);
+
+  const orderedSteps = stepsForIntent(effectiveStepData.intent);
+  const columnSet = new Set<WizardStepId>([editing.step, ...pendingResets]);
+  const visibleStepIds = orderedSteps.filter((id) => columnSet.has(id));
+  const activeIndex = visibleStepIds.indexOf(activeStepId);
+  const isLastInColumn = activeIndex === visibleStepIds.length - 1;
+  const continueLabel =
+    pendingResets.length > 0 && !isLastInColumn ? "Далее" : "Применить и вернуться";
+
+  const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingScroll = useRef<{ step: WizardStepId; behavior: ScrollBehavior } | null>(null);
+
+  function scrollToStep(step: WizardStepId, behavior: ScrollBehavior = "smooth") {
+    stepRefs.current[step]?.scrollIntoView({ behavior, block: "start" });
+  }
+
+  useEffect(() => {
+    if (!pendingScroll.current) return;
+    const { step, behavior } = pendingScroll.current;
+    pendingScroll.current = null;
+    scrollToStep(step, behavior);
+  });
+
+  function handleValueChange(stepId: WizardStepId, partial: Partial<StepData>) {
+    const differs = stepValueDiffers(stepId, partial, snapshot);
+    setPendingResets(differs ? invalidatedBy(stepId) : []);
+  }
+
+  function handleIsolatedNext(partial: Partial<StepData>) {
+    const nextEdits = { ...edits, ...partial };
+
+    // Свежий каскад для ЭТОГО коммита — не читаем `continueLabel`/
+    // `pendingResets` напрямую из состояния для решения о ветке. Большинство
+    // шагов (каналы/файл/режим) зовут `onValueChange` на живом взаимодействии
+    // и `onNext` ПОЗЖЕ, отдельным кликом по футеру — к этому моменту
+    // `pendingResets` уже успел перерендериться и корректен. Но «Сценарий»
+    // (Item 2, финальное ревью) зовёт `onValueChange` и `onNext` ОДНИМ
+    // синхронным кликом — диалог подтверждения сам вызывает оба одно за
+    // другим, — и React ещё не перерендерил `pendingResets` к этому вызову:
+    // состояние несёт значение с ПРЕДЫДУЩЕГО рендера (для свежей сессии —
+    // пустое), из-за чего `STEP_INVALIDATES.scenario = ["budget"]` был мёртв
+    // в изолированной сессии. Пересчитываем каскад заново из `partial`, но
+    // ТОЛЬКО когда коммитит сам `editing.step` — шаги, добавленные в колонку
+    // ЧУЖИМ каскадом (например, «Бюджет» после смены каналов), сами
+    // `onValueChange` не зовут, и для них состояние остаётся источником
+    // истины (иначе пересчёт для «Бюджета» ошибочно даст пустой каскад и
+    // выбросит сам «Бюджет» из колонки на середине коммита).
+    const resets =
+      activeStepId === editing.step
+        ? stepValueDiffers(activeStepId, partial, snapshot)
+          ? invalidatedBy(activeStepId)
+          : []
+        : pendingResets;
+    setPendingResets(resets);
+
+    const freshStepData = deriveStepData(nextEdits, resets);
+    const freshColumnSet = new Set<WizardStepId>([editing.step, ...resets]);
+    const freshVisible = stepsForIntent(freshStepData.intent).filter((id) =>
+      freshColumnSet.has(id),
+    );
+    const freshIndex = freshVisible.indexOf(activeStepId);
+    const isLastFresh = freshIndex === freshVisible.length - 1;
+
+    if (resets.length > 0 && !isLastFresh) {
+      setEdits(nextEdits);
+      const next = freshVisible[freshIndex + 1] ?? activeStepId;
+      setAnimatingStep(next);
+      setActiveStepId(next);
+      pendingScroll.current = { step: next, behavior: "smooth" };
+      return;
+    }
+    setEdits(nextEdits);
+    // `partial` спредится ПОСЛЕДНИМ: если активный шаг сам входит в
+    // resets (штатно — «Бюджет» коммитит именно так, будучи обнулённым
+    // до этого клика), его СВЕЖЕЕ значение обязано победить маску, которую
+    // deriveStepData иначе наложила бы поверх.
+    onCommit?.({ ...freshStepData, ...partial });
+  }
+
+  function handleStepperClick(step: number) {
+    const id = orderedSteps[step - 1];
+    if (!id || !columnSet.has(id)) return;
+    setAnimatingStep(null);
+    setActiveStepId(id);
+    pendingScroll.current = { step: id, behavior: "instant" };
+  }
+
+  function renderIsolatedStep(id: WizardStepId) {
+    const isActive = id === activeStepId;
+    const footerOverride = {
+      continueLabel,
+      backLabel: "Отмена",
+      hidden: !isActive,
+    };
+    switch (id) {
+      case "scenario":
+        // «Сценарий» автоприменяет выбор и футера не имеет — `editing` включает
+        // подтверждающий диалог смены сценария (Task 13): смена на ДРУГОЙ
+        // сценарий здесь пересобирает граф кампании с нуля на коммите.
+        return (
+          <Step1Scenario
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onValueChange={(p) => handleValueChange("scenario", p)}
+            editing
+          />
+        );
+      case "interests":
+        return (
+          <Step2Interests
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            footerOverride={footerOverride}
+          />
+        );
+      case "analysis":
+        return (
+          <StepAnalysis
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("analysis", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "file":
+        return (
+          <StepFile
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("file", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "channels":
+        return (
+          <StepChannels
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            onValueChange={(p) => handleValueChange("channels", p)}
+            footerOverride={footerOverride}
+          />
+        );
+      case "budget":
+        return (
+          <StepBudget
+            data={effectiveStepData}
+            active={isActive}
+            onNext={handleIsolatedNext}
+            onBack={handleCancel}
+            footerOverride={footerOverride}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
+  const currentStep = orderedSteps.indexOf(activeStepId) + 1;
+  const visitedPositions = new Set(
+    visibleStepIds.map((id) => orderedSteps.indexOf(id) + 1)
+  );
+  const maxStep = Math.max(...visitedPositions);
+
+  return (
+    <div
+      className="relative flex flex-1 flex-col overflow-hidden transition-[padding] duration-300"
+      style={{ paddingRight: "var(--chat-sidebar-width, 0px)" }}
+    >
+      <div
+        className="absolute top-6 z-10 transition-[right] duration-300"
+        style={{ right: "calc(1.5rem + var(--chat-sidebar-width, 0px))" }}
+      >
+        {/* Полный список шагов — кликабельны только попавшие в колонку правки. */}
+        <CampaignStepper
+          steps={orderedSteps}
+          currentStep={currentStep}
+          maxStep={maxStep}
+          onStepClick={handleStepperClick}
+          visitedSteps={visitedPositions}
+        />
+      </div>
+
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {visibleStepIds.map((id) => (
+          <motion.div
+            key={id}
+            ref={(el) => { stepRefs.current[id] = el; }}
+            initial={
+              !reduceMotion && id === animatingStep
+                ? { y: 60, opacity: 0 }
+                : false
+            }
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="flex min-h-screen shrink-0 flex-col items-center justify-center px-8 pb-promptbar pt-10"
+          >
+            {renderIsolatedStep(id)}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CampaignWorkspace({
   onLaunchRequested,
   initialScenario,
   initialStepDataOverride,
   initialStep,
+  editing,
+  onCommit,
+  onCancel,
 }: {
   onLaunchRequested?: (req: LaunchRequest) => void;
   initialScenario?: { id: string; name: string };
   initialStepDataOverride?: StepData;
   initialStep?: number;
+  /** Точечная правка с карточки: колонка начинается с одного шага и дорастает
+   *  ровно на те шаги, которые обнулила правка. */
+  editing?: { campaignId: string; step: WizardStepId };
+  /** Коммит правки — вызывается ОДИН раз, на основной кнопке последнего шага
+   *  сессии. Промежуточные «Далее» наружу ничего не пишут: брошенная на
+   *  полпути правка не должна оставить черновик с обнулённым бюджетом. */
+  onCommit?: (stepData: StepData) => void;
+  /** «Отмена» — возврат на карточку без коммита (не «Назад»: у изолированной
+   *  сессии нет предыдущего шага визарда, есть только выход). */
+  onCancel?: () => void;
 } = {}) {
+  if (editing) {
+    // Изолированная правка гидрируется снапшотом кампании
+    // (initialStepDataOverride); без него редактировать нечего — вызывающий
+    // код (rebuildViewFromAddress / guided-campaign-section.tsx) уже не
+    // должен сюда доходить в этом случае, но явный guard лучше падения на
+    // undefined-обращениях внутри.
+    if (!initialStepDataOverride) return null;
+    return (
+      <IsolatedEditSession
+        editing={editing}
+        snapshot={initialStepDataOverride}
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />
+    );
+  }
   return (
     <WorkspaceInner
       onLaunchRequested={onLaunchRequested}

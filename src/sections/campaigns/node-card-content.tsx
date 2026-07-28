@@ -181,13 +181,11 @@ export function ScoringRow({
   const { removeChip } = usePromptChips();
 
   const editable = !readOnly;
-  // Mounted either inside the workflow canvas (graph node card) OR inline in
-  // the campaign card's «Сценарий кампании» node-block (A2.1) — both view
-  // kinds carry the same `{ id, name }` campaign shape.
+  // Mounted only inside the workflow canvas (graph node card) — the campaign
+  // card's own node-block was removed (Task 6, тег на карточке несёт то же
+  // значение текстом).
   const campaignId =
-    state.view.kind === "workflow" || state.view.kind === "campaign"
-      ? state.view.campaign.id
-      : undefined;
+    state.view.kind === "workflow" ? state.view.campaign.id : undefined;
   const canEdit = editable && campaignId !== undefined;
 
   const files = params.files ?? [];

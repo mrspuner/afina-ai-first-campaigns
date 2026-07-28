@@ -32,7 +32,10 @@ import { cn } from "@/lib/utils";
  * - CommandInput — одновременно поиск по справочнику и поле ручного ввода.
  * - Список готовых значений (пресеты + введённые в сессии).
  * - «Использовать „{ввод}“» — когда введённый текст не совпал с готовым.
- * - Разделитель + «Сформировать с помощью ИИ» (иконка-маскот).
+ * - Разделитель + «Сформировать с помощью ИИ» (иконка-маскот) — ТОЛЬКО когда
+ *   вызывающий передал `onAiHandoff` (round 1, Finding 2): аффорданс без
+ *   рабочего адресата не рендерится вовсе, а не молча ничего не делает по
+ *   клику.
  */
 export function NodeFieldCombobox({
   label,
@@ -49,8 +52,17 @@ export function NodeFieldCombobox({
   isDirty: boolean;
   /** Применяет выбранное/введённое значение к ноде. */
   onSelect: (next: string) => void;
-  /** Передаёт поле ассистенту (тег + шаблон в PromptBar/дровер). */
-  onAiHandoff: () => void;
+  /**
+   * Передаёт поле ассистенту (тег + шаблон в PromptBar/дровер). Опционален —
+   * его ОТСУТСТВИЕ и есть сигнал «здесь передать некуда» (round 1, Finding 2):
+   * на карточке кампании нет сайдбара ИИ-редактирования поля (это функция
+   * канвасной ноды), поэтому вызывающий с карточки просто не передаёт колбэк,
+   * а не передаёт заглушку `() => {}`. Пункт «Сформировать с помощью ИИ» в
+   * списке рендерится ТОЛЬКО когда колбэк есть — иначе это была кнопка,
+   * которая ничего не делает, что для этого продукта хуже, чем отсутствие
+   * аффорданса вовсе.
+   */
+  onAiHandoff?: () => void;
   /**
    * Когда задан — включает предпросмотр (только IVR):
    *  - «глаз» у каждого варианта в открытом списке (превью, не выбирая вариант);
@@ -200,19 +212,23 @@ export function NodeFieldCombobox({
                 </CommandItem>
               </CommandGroup>
             )}
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                value="__ai__"
-                onSelect={() => {
-                  onAiHandoff();
-                  setOpen(false);
-                }}
-              >
-                <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
-                <span>Сформировать с помощью ИИ</span>
-              </CommandItem>
-            </CommandGroup>
+            {onAiHandoff && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem
+                    value="__ai__"
+                    onSelect={() => {
+                      onAiHandoff();
+                      setOpen(false);
+                    }}
+                  >
+                    <Image src="/mascot-icon.svg" width={14} height={14} alt="" aria-hidden />
+                    <span>Сформировать с помощью ИИ</span>
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

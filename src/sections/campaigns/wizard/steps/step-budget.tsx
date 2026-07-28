@@ -150,7 +150,13 @@ function RadioDot({ active }: { active: boolean }) {
   );
 }
 
-export function StepBudget({ data, onNext, onBack, active }: StepProps) {
+export function StepBudget({
+  data,
+  onNext,
+  onBack,
+  active,
+  footerOverride,
+}: StepProps) {
   useScreenHints(active ? BUDGET_SCREEN_HINTS : null);
   const forecastInput: BudgetForecastInput = {
     scenarioId: data.scenario,
@@ -446,12 +452,15 @@ export function StepBudget({ data, onNext, onBack, active }: StepProps) {
           </div>
         )}
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={proceed}
-          continueLabel="Далее"
-          continueDisabled={!canContinue}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={proceed}
+            continueLabel={footerOverride?.continueLabel ?? "Далее"}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue}
+          />
+        )}
       </div>
 
     </StepContent>

@@ -15,7 +15,11 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
-import { describeWorkflow, firstTouchCommunicationNodes } from "@/state/graph-description";
+import {
+  describeWorkflow,
+  type CampaignFacts,
+  type DescriptionTag,
+} from "@/state/graph-description";
 import { resolveDomainStatus } from "@/lib/domain-add";
 import { copyCachedGraph } from "./workflow-graph-cache";
 import {
@@ -29,8 +33,6 @@ import { useCampaignGraphApplier } from "./use-campaign-graph-applier";
 import { createTemplate } from "@/state/workflow-templates";
 import { CampaignStatsBlock } from "./campaign-stats-block";
 import { CampaignArtifactsBlock } from "./campaign-artifacts-block";
-import { CampaignScenarioNodeBlock } from "./campaign-scenario-node-block";
-import { CampaignCommunicationNodeBlock } from "./campaign-communication-node-block";
 import { StatusBadge } from "./status-badge";
 import { campaignCadenceLabel } from "./campaign-cadence";
 import { getScenario } from "@/data/scenarios";
@@ -44,6 +46,9 @@ import { groupCommunicationLines } from "./communication-breakdown";
 import { campaignBaseRows } from "./campaign-metrics";
 import { formatRubPlain } from "@/lib/format-rub";
 import { scoringLineDisplay, FALLBACK_BASE } from "./campaign-payment-screen";
+import { stepsForIntent } from "./wizard/wizard-steps";
+import type { AnalysisMode } from "@/types/campaign";
+import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -109,23 +114,77 @@ export function CampaignScreen() {
     : null;
   // Описание собирается из ТОГО ЖЕ launchGraph, что и мини-превью, поэтому
   // текст и миниатюра не могут разойтись (в т.ч. после ручных правок графа).
-  // Судьба доменов: статус приходит из реестра (`ownDomains`), домены — из
-  // `triggerConfig.added`; только "pending" всплывает в описании (Часть B).
-  const pendingDomains = campaign
+  // Все домены триггеров кампании со статусами — и для фразы о модерации, и
+  // для поповера тега: одобренные и отклонённые сегодня не видны нигде, хотя
+  // именно они решают итоговый состав аудитории.
+  const campaignDomains = campaign
     ? [
         ...new Set(
-          Object.values(campaign.triggerConfig ?? {})
-            .flatMap((delta) => delta.added)
-            .filter(
-              (domain) =>
-                resolveDomainStatus(domain, accountSettings.ownDomains) === "pending",
-            ),
+          Object.values(campaign.triggerConfig ?? {}).flatMap((delta) => delta.added),
         ),
-      ]
+      ].map((domain) => ({
+        domain,
+        status: resolveDomainStatus(domain, accountSettings.ownDomains),
+      }))
     : [];
+
+  // Режим анализа выводится ИЗ sourceType, а не из снапшота: снапшот удаляется
+  // при запуске, а тег обязан продолжать нести значение (§2.3 спеки).
+  const analysisMode: AnalysisMode | undefined =
+    campaign?.sourceType === "stream"
+      ? "stream"
+      : campaign?.sourceType === "new"
+        ? "once"
+        : undefined;
+
+  // Пустой список = правка недоступна: запущенная кампания или потерянный
+  // снапшот. Тогда шаговые теги рендерятся носителями значений без клика.
+  const editableSteps =
+    campaign?.status === "draft" && campaign.wizardData
+      ? stepsForIntent(campaign.wizardData.intent)
+      : [];
+
+  // Отдельный от editableSteps сигнал: «можно ли править граф» требует только
+  // статуса draft — снапшот визарда тут ни при чём. Сидовые черновики без
+  // wizardData тоже правятся (так разрешал снятый нодо-блок через
+  // readOnly={status !== "draft"}), поэтому гейтить шаблон/паузу на
+  // editableSteps было бы неверно — увело бы их в read-only для сидовых
+  // черновиков наравне с запущенными кампаниями.
+  const graphEditable = campaign?.status === "draft";
+
+  const facts: CampaignFacts = {
+    pending: campaignDomains.filter((d) => d.status === "pending").map((d) => d.domain),
+    domains: campaignDomains,
+    baseRows: campaign ? campaignBaseRows(campaign) : undefined,
+    triggers: campaign?.triggers,
+    channels: campaign?.channels,
+    budget: campaign?.budget,
+    analysisMode,
+    scenarioName: campaign?.scenario?.name,
+    editableSteps,
+    graphEditable,
+  };
+
   const descriptionStages = launchGraph
-    ? describeWorkflow(launchGraph, templates, { pending: pendingDomains })
+    ? describeWorkflow(launchGraph, templates, facts)
     : [];
+
+  // nodeId → nodeType — раскрашивает пилюли тегов template/node-fields под цвет
+  // узла графа (тот же NODE_STYLES/NODE_ICON, что раньше несли снятые нодо-
+  // блоки). Тег сам по себе типа ноды не хранит (Task 5) — лукап строится
+  // здесь, где launchGraph уже под рукой, и передаётся вниз в WorkflowDescription.
+  const nodeTypes = new Map<string, WorkflowNodeType>(
+    (launchGraph?.nodes ?? []).map((n) => [n.id, n.data.nodeType]),
+  );
+  // nodeId → params — содержимое поповера паузы (Task 8): пилюля `node-fields`
+  // получает WaitParams этим же лукапом, а не читает кэш графа сама (см.
+  // description-tag.tsx). Ноды без params (не comm/wait-ноды) не попадают в
+  // карту — .filter отсеивает их, а не молча кладёт undefined в значение.
+  const nodeParams = new Map<string, NodeParams>(
+    (launchGraph?.nodes ?? [])
+      .filter((n) => n.data.params !== undefined)
+      .map((n) => [n.id, n.data.params as NodeParams]),
+  );
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -190,6 +249,21 @@ export function CampaignScreen() {
     });
   }
 
+  // Клик по пилюле в описании: только цель wizard-step уводит с карточки — в
+  // изолированный режим правки одного шага (Task 11). Поповерные цели
+  // (шаблон/поля ноды/домены) обрабатываются внутри самой пилюли (Task 7–8),
+  // сюда доходят только wizard-step клики; «носители значений» (target:
+  // "none" — запущенная кампания или шаг вне визарда её intent) клика вообще
+  // не поднимают — resolveVisual/DescriptionTagPill не делает их кнопкой.
+  function handleTagActivate(tag: DescriptionTag) {
+    if (tag.target.kind !== "wizard-step" || !campaignId) return;
+    dispatch({
+      type: "campaign_step_edit_requested",
+      campaignId,
+      step: tag.target.step,
+    });
+  }
+
   // ИИ-иконка у «Сценарий кампании» (spec §2): кладёт тег «Логика кампании» в
   // промпт-бар и запускает правку СТРУКТУРЫ графа через тот же ИИ-движок, что в
   // графе. Фокус на бар следует автоматически — ChipEditableInput фокусируется
@@ -237,12 +311,6 @@ export function CampaignScreen() {
     });
   }
 
-  // Нодо-блоки каналов под «Первым касанием» (A2.1) — по тем же нодам, что
-  // несут строки текста описания (общий обход в graph-description.ts), так
-  // текст и блоки не расходятся. Ретрай-повтор той же ноды в этот список не
-  // попадает — это отдельный проход графа, у него своих блоков нет.
-  const firstTouchNodes = launchGraph ? firstTouchCommunicationNodes(launchGraph) : [];
-
   // Блок «Запуск» (A2.3, только draft): прогноз касаний → платежи → «К
   // оплате». Считаем ТЕМИ ЖЕ модулями и по ТЕМ ЖЕ входам (launchGraph,
   // audienceSize), что и экран оплаты (campaign-payment-screen.tsx) —
@@ -288,11 +356,9 @@ export function CampaignScreen() {
       meta={metaDate}
       secondaryActions={secondaryActions}
     >
-      {/* Сценарий кампании — описание, нодо-блок «Старта» (артефакты: база /
-          интересы-триггеры или файл сигнала) и мини-граф про одно и то же,
-          поэтому живут в одном блоке: текст этапа «Старт» → нодо-блок (правка
-          артефактов, без ИИ, через per-stage слот WorkflowDescription) →
-          остальные этапы → кликабельная миниатюра, открывающая полный граф
+      {/* Сценарий кампании — описание и мини-граф про одно и то же, поэтому
+          живут в одном блоке: текст (значения параметров — кликабельные
+          пилюли, Task 4–6) → кликабельная миниатюра, открывающая полный граф
           (правка логики — там, инлайн-«Изменить» на карточке снят). */}
       <CardSection
         label="Сценарий кампании"
@@ -313,32 +379,10 @@ export function CampaignScreen() {
         <div className="flex flex-col gap-5">
           <WorkflowDescription
             stages={descriptionStages}
-            // Нодо-блок этапа «Старт» (A2.1) — скоринг (new/stream) или сигнал
-            // (own), стилизован под соответствующую ноду графа. Правка
-            // артефактов (база / интересы-триггеры) — прямо здесь, без ИИ;
-            // read-only после запуска. «Первое касание» несёт один нодо-блок
-            // на каждую sms/email/push/ivr ноду первого прохода — показывает
-            // текущий шаблон и открывает СУЩЕСТВУЮЩИЙ редактор шаблона (выбор
-            // другого шаблона — вне рамок этой задачи).
-            stageSlots={{
-              start: (
-                <CampaignScenarioNodeBlock
-                  campaign={campaign}
-                  readOnly={status !== "draft"}
-                />
-              ),
-              "first-touch": firstTouchNodes.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {firstTouchNodes.map((node) => (
-                    <CampaignCommunicationNodeBlock
-                      key={node.id}
-                      node={node}
-                      readOnly={status !== "draft"}
-                    />
-                  ))}
-                </div>
-              ) : undefined,
-            }}
+            nodeTypes={nodeTypes}
+            nodeParams={nodeParams}
+            domains={facts.domains}
+            onTagActivate={handleTagActivate}
           />
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">

@@ -3,10 +3,11 @@ import type { StructuralOp } from "./structural-commands";
 import type { CampaignSort } from "./parse-campaign-filter";
 import type { Survey, SurveyStatus } from "@/types/survey";
 import { EMPTY_SURVEY, DEMO_SURVEY } from "@/types/survey";
-import type { StepData, Channel, SourceType } from "@/types/campaign";
+import type { StepData, WizardSnapshot, Channel, SourceType } from "@/types/campaign";
 import type { TriggerDelta } from "@/lib/trigger-edit-parser";
 import type { NodeParams, WorkflowNode, WorkflowEdge, CampaignFile } from "@/types/workflow";
 import type { SuggestionItem } from "@/state/suggestion-registry/types";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import { defaultCampaignName } from "./scenario-display";
 import {
   estimateArtifactCount,
@@ -101,6 +102,13 @@ export type Campaign = {
    */
   templateIds?: string[];
   scenario?: { id: string; name: string };
+  /**
+   * Слепок ответов визарда. Нужен ТОЛЬКО для гидрации визарда при точечной
+   * правке с карточки — значения для тегов описания берутся с полей самой
+   * кампании, поэтому удаление снапшота при запуске ничего в тексте не рушит.
+   * Отсутствует у запущенных кампаний и у сидовых пресетов.
+   */
+  wizardData?: WizardSnapshot;
 };
 
 /**
@@ -201,7 +209,16 @@ export type ArtifactOrigin = "campaign" | "artifacts";
 export type View =
   | { kind: "welcome" }
   | { kind: "survey" }
-  | { kind: "guided-campaign"; initialScenario?: { id: string; name: string } }
+  | {
+      kind: "guided-campaign";
+      initialScenario?: { id: string; name: string };
+      /**
+       * Точечная правка одного шага визарда, открытая кликом по пилюле в
+       * описании карточки. Взаимоисключающе с `initialScenario` — обычный вход
+       * в визард никогда не задаёт `editing`.
+       */
+      editing?: { campaignId: string; step: WizardStepId };
+    }
   | { kind: "workflow"; campaign: { id: string; name: string }; launched: boolean }
   | { kind: "campaign-payment"; campaign: { id: string; name: string } }
   | { kind: "campaign"; campaign: { id: string; name: string } }
@@ -214,7 +231,14 @@ export type View =
 // full View from this address + current campaigns[].
 export type ViewAddress =
   | { kind: "welcome" }
-  | { kind: "guided-campaign"; scenarioId?: string; scenarioName?: string }
+  | {
+      kind: "guided-campaign";
+      scenarioId?: string;
+      scenarioName?: string;
+      /** Точечная правка шага — см. `View["guided-campaign"].editing`. */
+      campaignId?: string;
+      step?: WizardStepId;
+    }
   | { kind: "workflow"; campaignId: string }
   | { kind: "campaign-payment"; campaignId: string }
   | { kind: "campaign"; campaignId: string }
@@ -333,6 +357,27 @@ export type Action =
   | { type: "campaign_file_removed"; campaignId: string; index: number }
   | { type: "campaign_scoring_set"; id: string; interests: string[]; triggers: string[]; triggerConfig?: Record<string, TriggerDelta> }
   | { type: "campaign_saved_draft"; id: string }
+  // Точечная правка одного шага визарда с карточки (клик по пилюле-тегу в
+  // описании). Открывает guided-campaign в режиме editing без гейта анкеты —
+  // сама кампания уже прошла её при создании.
+  | { type: "campaign_step_edit_requested"; campaignId: string; step: WizardStepId }
+  // Коммит изолированной сессии правки (Task 12) — вызывается ОДИН раз, на
+  // «Применить и вернуться» последнего шага сессии. `stepData` — уже
+  // смерженный локальный снапшот сессии, а не голый partial: промежуточные
+  // «Далее» наружу ничего не пишут (см. IsolatedEditSession), поэтому здесь
+  // всегда есть ровно один финальный вызов.
+  // `scenarioName` — тот же приём, что у `campaign_created_from_wizard`:
+  // имя сценария резолвится на стороне вызова (guided-campaign-section.tsx
+  // уже держит `SCENARIO_NAMES`), реducer его не ищет. Нужен, когда правка
+  // меняет `stepData.scenario` (Task 13) — иначе `campaign.scenario`
+  // (id+name, читает карточка/канвас-хэдер/резолв signalType) остался бы
+  // указывать на СТАРЫЙ сценарий, хотя граф уже пересобран под новый.
+  | {
+      type: "campaign_wizard_edit_applied";
+      campaignId: string;
+      stepData: StepData;
+      scenarioName?: string;
+    }
   | { type: "campaign_created"; campaign: Campaign }
   | { type: "campaign_status_changed"; id: string; status: CampaignStatus; timestamp: string }
   | { type: "campaign_duplicated"; id: string; newId?: string }
@@ -460,6 +505,34 @@ export const initialState: AppState = {
   screenHintsOwner: null,
 };
 
+/**
+ * Проекция ответов визарда в поля кампании. Общая для создания
+ * (`campaign_created_from_wizard`) и для коммита правки с карточки
+ * (`campaign_wizard_edit_applied`) — иначе две ветки неизбежно разъехались бы
+ * в том, какие поля переносятся.
+ *
+ * `id`, `name`, `createdAt`, `status`, `phase` и `scenario` сюда НЕ входят: они
+ * зависят от того, создаётся кампания или правится, и решаются на стороне
+ * вызова.
+ */
+export function projectStepDataOntoCampaign(sd: StepData): Partial<Campaign> {
+  return {
+    sourceType: sd.sourceType,
+    channels: sd.channels,
+    interests: sd.interests,
+    triggers: sd.triggers,
+    triggerConfig:
+      Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
+    // `StepData.files` уже несёт число строк по каждому файлу — распределять
+    // суммарный `fileRowCount` по файлам больше не нужно.
+    files: sd.files.length ? sd.files.map((f) => ({ ...f })) : undefined,
+    budget: sd.budget ?? undefined,
+    dailyBudget: sd.dailyBudget,
+    maxDailyBudget: sd.maxDailyBudget,
+    wizardData: structuredClone(sd),
+  };
+}
+
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "start_campaign_flow":
@@ -525,36 +598,12 @@ export function appReducer(state: AppState, action: Action): AppState {
       const scenarioId = sd.scenario ?? "";
       const n =
         state.campaigns.filter((c) => c.scenario?.id === scenarioId).length + 1;
-      // StepData.files are raw browser `File[]`; Campaign.files is the
-      // lightweight `{ name; rowCount }[]` snapshot. The upload step computes
-      // only the SUMMARY row count (sd.fileRowCount), so distribute it across
-      // the files evenly, with the remainder landing on the first file.
-      const totalRows = sd.fileRowCount ?? 0;
-      const files = sd.files.length
-        ? sd.files.map((f, i) => ({
-            name: f.name,
-            rowCount:
-              i === 0
-                ? totalRows -
-                  Math.floor(totalRows / sd.files.length) * (sd.files.length - 1)
-                : Math.floor(totalRows / sd.files.length),
-          }))
-        : undefined;
       const newCampaign: Campaign = {
+        ...projectStepDataOntoCampaign(sd),
         id: `cmp_${nanoid(6)}`,
         name: defaultCampaignName(action.scenarioName, n),
         status: "draft",
         createdAt: new Date().toISOString(),
-        sourceType: sd.sourceType,
-        channels: sd.channels,
-        interests: sd.interests,
-        triggers: sd.triggers,
-        triggerConfig:
-          Object.keys(sd.triggerConfig).length > 0 ? sd.triggerConfig : undefined,
-        files,
-        budget: sd.budget ?? undefined,
-        dailyBudget: sd.dailyBudget,
-        maxDailyBudget: sd.maxDailyBudget,
         // new drafts collect signals pre-launch — start in the scoring phase so
         // the campaign card shows collection progress and gates «Запустить».
         // stream/own launch immediately, so they carry no pre-launch phase.
@@ -685,6 +734,49 @@ export function appReducer(state: AppState, action: Action): AppState {
       // не меняется. Экшен сохраняем как точку синхронизации/возможный хук.
       return state;
 
+    case "campaign_step_edit_requested":
+      // Диспатчится из клика по пилюле в описании карточки — кампания уже
+      // отрендерена там из реального состояния, так что дополнительная
+      // проверка существования/снапшота здесь не нужна (в отличие от
+      // rebuildViewFromAddress, который восстанавливает адрес «вслепую»).
+      return {
+        ...state,
+        view: {
+          kind: "guided-campaign",
+          editing: { campaignId: action.campaignId, step: action.step },
+        },
+        activeSection: null,
+      };
+
+    case "campaign_wizard_edit_applied": {
+      // Проекция та же, что и у создания кампании (projectStepDataOntoCampaign) —
+      // id/name/createdAt/status/phase ею намеренно не переносятся: правка
+      // одного шага их не касается. `scenario` — исключение (Task 13): если
+      // правка сменила сценарий, id+name кампании обязаны последовать за
+      // ним, иначе карточка/канвас-хэдер продолжили бы показывать СТАРЫЙ
+      // сценарий, хотя граф уже пересобран под новый (guided-campaign-section.tsx).
+      // Не изменившийся сценарий — `c.scenario` не трогаем вовсе.
+      return {
+        ...state,
+        campaigns: state.campaigns.map((c) => {
+          if (c.id !== action.campaignId) return c;
+          const scenarioId = action.stepData.scenario;
+          const scenario =
+            scenarioId && scenarioId !== c.scenario?.id
+              ? { id: scenarioId, name: action.scenarioName ?? c.scenario?.name ?? "" }
+              : c.scenario;
+          return { ...c, ...projectStepDataOntoCampaign(action.stepData), scenario };
+        }),
+        // Финал правки — та же карточка, что и финал визарда.
+        view: (() => {
+          const c = state.campaigns.find((cc) => cc.id === action.campaignId);
+          return c
+            ? { kind: "campaign" as const, campaign: { id: c.id, name: c.name } }
+            : state.view;
+        })(),
+      };
+    }
+
     case "campaign_created":
       return {
         ...state,
@@ -708,6 +800,11 @@ export function appReducer(state: AppState, action: Action): AppState {
             // overwrite launchedAt. Fresh launch (from draft) sets launchedAt.
             next.pausedAt = undefined;
             if (!c.launchedAt) next.launchedAt = action.timestamp;
+            // Кампания стала активной — снапшот визарда больше не нужен (и
+            // не должен) существовать: карточка читает свои же поля, а не
+            // снапшот, так что удаление ничего не рушит и убирает второй
+            // источник правды.
+            next.wizardData = undefined;
           }
           if (action.status === "paused") {
             next.pausedAt = action.timestamp ?? new Date().toISOString();
@@ -746,6 +843,9 @@ export function appReducer(state: AppState, action: Action): AppState {
         files: original.files ? original.files.map((f) => ({ ...f })) : undefined,
         templateIds: original.templateIds ? [...original.templateIds] : undefined,
         scenario: original.scenario ? { ...original.scenario } : undefined,
+        // Копия остаётся правимой независимо от оригинала — глубокая копия,
+        // не общая ссылка.
+        wizardData: original.wizardData ? structuredClone(original.wizardData) : undefined,
       };
       return {
         ...state,
@@ -1172,6 +1272,11 @@ export function appReducer(state: AppState, action: Action): AppState {
                 budget: action.budget > 0 ? action.budget : cc.budget,
                 dailyBudget: action.dailyBudget ?? cc.dailyBudget,
                 templateIds: incomingIds.length > 0 ? incomingIds : cc.templateIds,
+                // Тот же переход в "active", что и у campaign_status_changed —
+                // снапшот визарда снимается здесь тоже, иначе кампания,
+                // запущенная с экрана оплаты, осталась бы с редактируемым
+                // (и бессмысленным) снапшотом.
+                wizardData: undefined,
               }
             : cc
         ),
@@ -1367,11 +1472,25 @@ export function appReducer(state: AppState, action: Action): AppState {
   }
 }
 
-function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View {
+export function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View {
   switch (addr.kind) {
     case "welcome":
       return { kind: "welcome" };
-    case "guided-campaign":
+    case "guided-campaign": {
+      if (addr.campaignId && addr.step) {
+        const c = campaigns.find((cc) => cc.id === addr.campaignId);
+        // Открываем правку, только если кампания жива и у неё есть снапшот
+        // визарда (его нет у запущенных кампаний — он удаляется при
+        // переходе в "active"). Иначе деградируем в обычный вход в визард
+        // создания, а не в пустой/сломанный экран.
+        if (c?.wizardData) {
+          return {
+            kind: "guided-campaign",
+            editing: { campaignId: c.id, step: addr.step },
+          };
+        }
+        return { kind: "guided-campaign" };
+      }
       return {
         kind: "guided-campaign",
         initialScenario:
@@ -1379,6 +1498,7 @@ function rebuildViewFromAddress(addr: ViewAddress, campaigns: Campaign[]): View 
             ? { id: addr.scenarioId, name: addr.scenarioName }
             : undefined,
       };
+    }
     case "workflow": {
       const c = campaigns.find((cc) => cc.id === addr.campaignId);
       // If the campaign no longer exists, fall back to campaign list rather than
@@ -1428,6 +1548,8 @@ export function viewToAddress(view: View): ViewAddress {
         kind: "guided-campaign",
         scenarioId: view.initialScenario?.id,
         scenarioName: view.initialScenario?.name,
+        campaignId: view.editing?.campaignId,
+        step: view.editing?.step,
       };
     case "workflow":
       return { kind: "workflow", campaignId: view.campaign.id };

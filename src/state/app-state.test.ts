@@ -302,6 +302,50 @@ describe("appReducer — campaign_saved_draft", () => {
   });
 });
 
+describe("appReducer — campaign_wizard_edit_applied, смена сценария (Task 13)", () => {
+  it("updates campaign.scenario (id+name) when stepData.scenario changed", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [
+        makeCampaign({
+          id: "cmp_A",
+          scenario: { id: "old-id", name: "Старый" },
+          wizardData: makeStepData({ scenario: "old-id" }),
+        }),
+      ],
+    };
+    const next = appReducer(state, {
+      type: "campaign_wizard_edit_applied",
+      campaignId: "cmp_A",
+      stepData: makeStepData({ scenario: "new-id" }),
+      scenarioName: "Новый",
+    });
+    expect(next.campaigns[0].scenario).toEqual({ id: "new-id", name: "Новый" });
+  });
+
+  it("leaves campaign.scenario untouched when stepData.scenario is unchanged", () => {
+    const state: AppState = {
+      ...initialState,
+      campaigns: [
+        makeCampaign({
+          id: "cmp_A",
+          scenario: { id: "same-id", name: "Тот же" },
+          wizardData: makeStepData({ scenario: "same-id" }),
+        }),
+      ],
+    };
+    const next = appReducer(state, {
+      type: "campaign_wizard_edit_applied",
+      campaignId: "cmp_A",
+      // Каналы поменялись, сценарий — нет; scenarioName нарочно не передан,
+      // как и делает вызывающий код (guided-campaign-section.tsx), когда
+      // сценарий не менялся — не должно всё равно перезаписать имя.
+      stepData: makeStepData({ scenario: "same-id", channels: ["email"] }),
+    });
+    expect(next.campaigns[0].scenario).toEqual({ id: "same-id", name: "Тот же" });
+  });
+});
+
 describe("appReducer — workflow node selection + AI cycle", () => {
   it("workflow_node_selected stores id and label", () => {
     const next = appReducer(initialState, {
@@ -538,6 +582,27 @@ describe("appReducer — launched campaign screen", () => {
     const updated = next.campaigns.find((x) => x.id === "cmp_A");
     // Zero-budget launches keep the previously-stored value.
     expect(updated?.budget).toBe(999);
+  });
+
+  it("campaign_launched (payment-screen path) also drops the wizard snapshot", () => {
+    // Two paths land a campaign in "active": campaign_status_changed AND this
+    // one, fired from the payment screen. Both must drop wizardData, or a
+    // campaign launched from payment would keep an editable (and stale) snapshot.
+    const c = makeCampaign({
+      id: "cmp_A",
+      name: "C",
+      status: "draft",
+      wizardData: makeStepData(),
+    });
+    const state: AppState = { ...initialState, campaigns: [c] };
+    const next = appReducer(state, {
+      type: "campaign_launched",
+      id: "cmp_A",
+      timestamp: "2026-05-20T00:00:00.000Z",
+      budget: 500,
+    });
+    const updated = next.campaigns.find((x) => x.id === "cmp_A");
+    expect(updated?.wizardData).toBeUndefined();
   });
 
   it("open_workflow switches the view to a launched workflow", () => {
@@ -1521,6 +1586,22 @@ describe("ViewAddress — campaign-payment round-trip", () => {
       address: { kind: "campaign-payment", campaignId: "cmp_missing" },
     });
     expect(next.view).toEqual({ kind: "section", name: "Кампании" });
+  });
+});
+
+describe("campaign_step_edit_requested — вход в визард с карточки", () => {
+  it("campaign_step_edit_requested открывает визард на нужном шаге", () => {
+    const draftCampaign = makeCampaign({ wizardData: makeStepData() });
+    const stateWithDraft: AppState = { ...initialState, campaigns: [draftCampaign] };
+    const next = appReducer(stateWithDraft, {
+      type: "campaign_step_edit_requested",
+      campaignId: "cmp_1",
+      step: "interests",
+    });
+    expect(next.view).toEqual({
+      kind: "guided-campaign",
+      editing: { campaignId: "cmp_1", step: "interests" },
+    });
   });
 });
 

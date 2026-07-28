@@ -1,8 +1,16 @@
 import { isCommunicationNode, type NodeParams, type WorkflowEdge, type WorkflowNode } from "@/types/workflow";
 import { pluralRu } from "@/lib/plural-ru";
+import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
-import { channelForNodeKind, templateOptionsForKind } from "./node-template-options";
+import {
+  channelForNodeKind,
+  templateOptionsForKind,
+  templateParamKeyForKind,
+} from "./node-template-options";
 import type { MessageTemplate } from "./app-state";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
+import type { DomainStatus } from "@/types/account-settings";
+import type { Channel, AnalysisMode } from "@/types/campaign";
 
 /**
  * Детерминированное описание workflow-графа человеческим текстом.
@@ -24,15 +32,63 @@ export interface DescriptionMessage {
   subject?: string;
   /** Текст сообщения, взятый из params ноды. */
   text: string;
+  /** Название шаблона как тег — раскрывает поповер выбора шаблона у пилюли. */
+  templateTag?: DescriptionTag;
 }
 
 export type DescriptionStageId = "start" | "first-touch" | "check" | "retry" | "outcome";
+
+/**
+ * Кусок текста описания. Значения параметров кампании выносятся в теги-пилюли,
+ * поэтому тело этапа больше не строка — оно чередует текст и теги.
+ */
+export type DescriptionSegment =
+  | { kind: "text"; text: string }
+  | { kind: "tag"; tag: DescriptionTag };
+
+/**
+ * Куда ведёт клик по тегу. Единственная цель, уводящая с карточки, — шаг
+ * визарда; остальные раскрываются поповером у самой пилюли. `none` — значение
+ * без цели: кампания запущена (или граф больше не правится), либо такого шага
+ * в её визарде не существует. `step`/`nodeId` на `none` — не цель клика (клика
+ * нет), а ЛИЧНОСТЬ демотированного тега: только по ней пилюля узнаёт, чью
+ * иконку показать (STEP_ICON/NODE_ICON) — без неё все демотированные пилюли
+ * стали бы одинаковыми серыми табличками (fix round 2, Finding 2).
+ */
+export type TagTarget =
+  | { kind: "wizard-step"; step: WizardStepId }
+  | { kind: "template"; nodeId: string }
+  | { kind: "node-fields"; nodeId: string }
+  | { kind: "domains" }
+  | { kind: "none"; step?: WizardStepId; nodeId?: string };
+
+/** Значение параметра, вынесенное в кликабельную пилюлю внутри текста. */
+export interface DescriptionTag {
+  /** Уникален в пределах описания — используется как React-ключ. */
+  id: string;
+  label: string;
+  target: TagTarget;
+  /** Раскрывается по наведению: остаток схлопнутого перечисления. */
+  hoverList?: string[];
+}
+
+/** Короткий конструктор текстового сегмента — читаемость сборки описания. */
+const t = (text: string): DescriptionSegment => ({ kind: "text", text });
+
+/** Плоский текст сегментов — для тестов, тултипов и заголовков. */
+export function segmentsText(segments: DescriptionSegment[]): string {
+  return segments
+    .map((s) => (s.kind === "text" ? s.text : s.tag.label))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export interface DescriptionStage {
   id: DescriptionStageId;
   /** Жирный подзаголовок этапа, вместе с точкой: «Первое касание.» */
   heading: string;
-  body: string;
+  body: DescriptionSegment[];
   /** Строки коммуникаций — только у первого касания. */
   messages?: DescriptionMessage[];
 }
@@ -44,10 +100,8 @@ export interface DescribableGraph {
 
 // ── Обход графа ──────────────────────────────────────────────────────────────
 
-/** Обход графа, общий для текстового описания И нодо-блоков коммуникаций
- *  (A2.1 — «Первое касание» карточки кампании): порядок нод, коммуникационные
- *  ноды и множество «первого прохода» (до повтора) вычисляются один раз, чтобы
- *  оба потребителя не могли разойтись в том, что считается первым касанием. */
+/** Обход графа для текстового описания: порядок нод, коммуникационные ноды и
+ *  множество «первого прохода» (до повтора) вычисляются один раз. */
 interface GraphTraversal {
   ordered: WorkflowNode[];
   commNodes: WorkflowNode[];
@@ -77,35 +131,6 @@ function traverseGraph(graph: DescribableGraph): GraphTraversal {
   const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
 
   return { ordered, commNodes, retryWaits, isFirstPass };
-}
-
-/**
- * Коммуникационные ноды (sms/email/push/ivr) «первого прохода» — те же, что
- * несут строки текста под «Первым касанием» (см. `describeWorkflow`), а НЕ
- * ноды повторного блока за задержкой. Экспортирована для карточки кампании
- * (A2.1): нодо-блоки каналов под «Первым касанием» рендерятся по этому же
- * набору, поэтому текст и блоки не могут разойтись.
- *
- * Дедуп — по тому же ключу `канал|текст`, что и `describeWorkflow` (см.
- * `communicationDedupKey`): сегментированный сценарий (Апсейл/Удержание — N
- * одинаковых comm-юнитов) даёт РОВНО один блок на канал, а не N визуально
- * идентичных блоков. Ноды, у которых ключ не резолвится (пустой текст),
- * дедупу не подлежат — рендерятся все как есть.
- */
-export function firstTouchCommunicationNodes(graph: DescribableGraph): WorkflowNode[] {
-  if (!graph.nodes.length) return [];
-  const { commNodes, isFirstPass } = traverseGraph(graph);
-  const seen = new Set<string>();
-  const result: WorkflowNode[] = [];
-  for (const node of commNodes.filter(isFirstPass)) {
-    const key = communicationDedupKey(node);
-    if (key) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-    }
-    result.push(node);
-  }
-  return result;
 }
 
 /** Множество нод, достижимых из `seeds` по рёбрам (сами seeds включены). */
@@ -150,17 +175,6 @@ function orderNodes(graph: DescribableGraph, adjacency: Map<string, string[]>): 
 
 // ── Коммуникации → строка описания ───────────────────────────────────────────
 
-/**
- * Поле params, по которому нода привязывается к шаблону библиотеки — тот же
- * ключ, что использует селект «Шаблон» в карточке ноды
- * (`NODE_FIELD_EDITABILITY`), поэтому имя шаблона в тексте и выбор в UI сходятся.
- */
-const TEMPLATE_MATCH_KEY: Partial<Record<NodeParams["kind"], string>> = {
-  sms: "text",
-  email: "body",
-  push: "body",
-};
-
 /** Цитируемый текст коммуникационной ноды. */
 function messageText(params: NodeParams): string {
   switch (params.kind) {
@@ -174,10 +188,10 @@ function messageText(params: NodeParams): string {
 
 /**
  * Ключ дедупа коммуникационной ноды — `канал|текст`, единственный источник
- * истины и для схлопывания строк текста (`describeWorkflow`), и для
- * схлопывания нодо-блоков (`firstTouchCommunicationNodes`): пока оба берут
- * ключ отсюда, текст описания и блоки карточки не могут разойтись. `null` —
- * канал не резолвится (не comm-нода) или текст пуст (дедупу не подлежит).
+ * истины для схлопывания строк текста (`describeWorkflow`): сегментированный
+ * сценарий (Апсейл/Удержание — N одинаковых comm-юнитов) даёт РОВНО одну
+ * строку на канал, а не N визуально идентичных строк. `null` — канал не
+ * резолвится (не comm-нода) или текст пуст (дедупу не подлежит).
  */
 function communicationDedupKey(node: WorkflowNode): string | null {
   const params = node.data.params;
@@ -192,6 +206,8 @@ function communicationDedupKey(node: WorkflowNode): string | null {
 function describeMessage(
   node: WorkflowNode,
   templates: MessageTemplate[],
+  withTags: boolean,
+  graphEditable: boolean,
 ): DescriptionMessage | null {
   const params = node.data.params;
   if (!params) return null;
@@ -201,7 +217,7 @@ function describeMessage(
   const text = messageText(params).trim();
   if (!text) return null;
 
-  const matchKey = TEMPLATE_MATCH_KEY[params.kind];
+  const matchKey = templateParamKeyForKind(params.kind);
   const bound = matchKey ? (params as unknown as Record<string, unknown>)[matchKey] : undefined;
   const templateName = matchKey
     ? templateOptionsForKind(templates, params.kind).find(
@@ -217,15 +233,51 @@ function describeMessage(
       ? { subject: params.subject }
       : {}),
     text,
+    // Тег появляется только в режиме тегов (вызвавший передал факты) — без
+    // фактов описание остаётся чистым текстом (Task 4). Цель — только пока
+    // граф ещё правится (§2.12): после запуска шаблон остаётся пилюлей со
+    // значением, но клика не даёт — `none`, не отдельная read-only ветка.
+    // `nodeId` переносится на `none` тоже — не как цель (клика нет), а чтобы
+    // `WorkflowDescription` могло резолвить nodeType→NODE_ICON и после демоции
+    // (fix round 2, Finding 2).
+    ...(withTags && templateName
+      ? {
+          templateTag: {
+            id: `msg-${node.id}-template`,
+            label: templateName,
+            target: graphEditable
+              ? { kind: "template", nodeId: node.id }
+              : { kind: "none", nodeId: node.id },
+          },
+        }
+      : {}),
   };
 }
 
 // ── Формулировки ─────────────────────────────────────────────────────────────
 
-/** «2 дня» / «12 часов» / «до наступления события» — из WaitParams. */
+/**
+ * «2 дня» / «12 часов» / «5 недель» / «до наступления события» — из WaitParams.
+ *
+ * Крупнейшая точная единица (неделя → день → час) — ЗЕРКАЛИТ алгоритм
+ * `splitDuration` (wait-fields.tsx): та же лестница 168 → 24 → 1, тот же выбор
+ * «крупнейшая единица, на которую число делится без остатка». До поповера
+ * паузы (Task 8) эта фраза и поле `WaitFields` жили на разных экранах и
+ * никогда не оказывались на глазах одновременно; поповер показывает их
+ * рядом, поэтому расхождение форматов (здесь — только дни/часы, там — ещё и
+ * недели) стало видимым багом (round 1, Finding 1): 840 часов читались как
+ * «35 дней» у пилюли и «5 недель» у поля в один и тот же момент. Числа
+ * (168/24) НЕ вынесены в общий модуль с `wait-fields.tsx` намеренно — правка
+ * ограничена этим файлом (см. фикс-раунд 1), поэтому здесь отдельная, но
+ * алгоритмически идентичная лестница.
+ */
 function waitPhrase(params: Extract<NodeParams, { kind: "wait" }>): string {
   if (params.mode === "until_event") return "до наступления события";
   const hours = params.durationHours ?? 0;
+  if (hours >= 168 && hours % 168 === 0) {
+    const weeks = hours / 168;
+    return `${weeks} ${pluralRu(weeks, ["неделя", "недели", "недель"])}`;
+  }
   if (hours >= 24 && hours % 24 === 0) {
     const days = hours / 24;
     return `${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
@@ -236,30 +288,114 @@ function waitPhrase(params: Extract<NodeParams, { kind: "wait" }>): string {
 // ── Сборка описания ──────────────────────────────────────────────────────────
 
 /**
- * Pending-domain input for the `start` stage — the moderation "fate" line
- * (Task 11). Statuses live in the account registry (`ownDomains`) and are
- * resolved by the CALLER against `Campaign.triggerConfig`; this function
- * stays a pure graph→text transform and never reads state itself.
+ * Факты кампании, которые описание вплетает в текст тегами.
+ *
+ * `describeWorkflow` остаётся ЧИСТОЙ функцией от графа: состояние она не
+ * читает, всё приходит сюда от вызывающего (`CampaignScreen`). Поле `pending`
+ * — прежний `DomainStatuses`, сохранено ради обратной совместимости вызова.
  */
-export interface DomainStatuses {
+export interface CampaignFacts {
+  /** Домены на модерации — управляет выводом фразы о модерации. */
   pending: string[];
+  /** Все домены триггеров со статусами — содержимое поповера доменов. */
+  domains?: { domain: string; status: DomainStatus }[];
+  baseRows?: number;
+  triggers?: string[];
+  channels?: Channel[];
+  budget?: number;
+  /** Отсутствует у собственной базы — шага «Режим» в её визарде нет. */
+  analysisMode?: AnalysisMode;
+  scenarioName?: string;
+  /**
+   * Шаги, на которые тег имеет право увести. Пустой список = кампания
+   * запущена: теги рендерятся как носители значений без клика. Это и есть
+   * механизм read-only, отдельной ветки рендера не требуется.
+   */
+  editableSteps?: WizardStepId[];
+  /**
+   * Кампания ещё правится: граф можно менять. Отдельный сигнал от
+   * `editableSteps` — тот требует снапшота визарда, а правка графа нужна и
+   * сидовым черновикам без снапшота (так же, как её разрешал снятый
+   * нодо-блок через readOnly={status !== "draft"}).
+   */
+  graphEditable?: boolean;
+}
+
+/**
+ * Сегмент-тег со значением параметра, ведущий на шаг визарда.
+ *
+ * Если шаг недоступен (кампания запущена — `editableSteps` пуст; либо шага в
+ * визарде этой цели нет — например «Режим» у собственной базы), цель
+ * становится `none`: пилюля рендерится без клика, но значение показывает.
+ * Отдельной ветки read-only-рендера поэтому не требуется. `step` переносится
+ * на `none` и там же — не как цель клика (клика нет), а чтобы пилюля не
+ * потеряла свою иконку при демоции (fix round 2, Finding 2).
+ */
+function stepTag(
+  id: string,
+  label: string,
+  step: WizardStepId,
+  editableSteps: WizardStepId[] | undefined,
+  hoverList?: string[],
+): DescriptionSegment {
+  const editable = editableSteps?.includes(step) ?? false;
+  return {
+    kind: "tag",
+    tag: {
+      id,
+      label,
+      target: editable ? { kind: "wizard-step", step } : { kind: "none", step },
+      ...(hoverList ? { hoverList } : {}),
+    },
+  };
+}
+
+/**
+ * Склеивает соседние текстовые сегменты в один. Фразы собираются по кускам
+ * (одни условные, другие нет), но соседние `text`+`text` должны читаться ОДНИМ
+ * сегментом — это ровно то, что фиксирует тест на точный шов фразы о
+ * модерации. Теги не трогает и порядок не меняет.
+ */
+function mergeTextSegments(segments: DescriptionSegment[]): DescriptionSegment[] {
+  const merged: DescriptionSegment[] = [];
+  for (const seg of segments) {
+    const last = merged[merged.length - 1];
+    if (seg.kind === "text" && last?.kind === "text") {
+      merged[merged.length - 1] = { kind: "text", text: last.text + seg.text };
+    } else {
+      merged.push(seg);
+    }
+  }
+  return merged;
 }
 
 export function describeWorkflow(
   graph: DescribableGraph,
   templates: MessageTemplate[],
-  domainStatuses?: DomainStatuses,
+  facts?: CampaignFacts,
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
   const { ordered, commNodes, retryWaits, isFirstPass } = traverseGraph(graph);
+
+  // Без фактов описание остаётся ровно тем, что производил Task 3 — чистым
+  // текстом. Теги, не привязанные к конкретному полю CampaignFacts (шаблон
+  // сообщения, пауза повтора — они читаются из графа, а не из facts),
+  // включаются этим единственным флагом.
+  const hasFacts = facts !== undefined;
+  const editableSteps = facts?.editableSteps;
+  // Отдельный от editableSteps сигнал (§2.12): шаблон/пауза — цели на граф,
+  // не на визард, и остаются кликабельными весь черновик, даже без снапшота
+  // (сидовые кампании). Отсутствие поля трактуем как «нет» — небезопасный
+  // дефолт был бы молча кликабельным.
+  const graphEditable = facts?.graphEditable ?? false;
 
   // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
   // канал (дедуп по каналу и тексту, а не по ноде).
   const messages: DescriptionMessage[] = [];
   const seenMessages = new Set<string>();
   for (const node of commNodes.filter(isFirstPass)) {
-    const message = describeMessage(node, templates);
+    const message = describeMessage(node, templates, hasFacts, graphEditable);
     if (!message) continue;
     // Не может быть null здесь: describeMessage вернул сообщение только если
     // канал резолвится и текст непуст — ровно условия communicationDedupKey.
@@ -281,24 +417,161 @@ export function describeWorkflow(
   const startBody = hasScoring
     ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
     : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
+
+  // Сценарий (личность кампании) читается первым из фактов — прежде чем
+  // читатель встретит детали, которые он иначе не может контекстуализировать
+  // (review round 1, Finding 2).
+  const scenarioSegments: DescriptionSegment[] = facts?.scenarioName !== undefined
+    ? [
+        t(" Сценарий — "),
+        stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps),
+        t("."),
+      ]
+    : [];
+
+  // База и триггеры — ОДНО предложение, а не два: «В работу идёт база на N
+  // строк по триггерам X, Y и ещё Z» (review round 1, Finding 2). Единственное
+  // / множественное число «по триггеру»/«по триггерам» зависит от того, один
+  // триггер или несколько — раньше было захардкожено в множественном числе
+  // (Finding 1: «Работает по триггерам Ипотека» на одном триггере — баг).
+  const triggersList = facts?.triggers ?? [];
+  const hasBase = facts?.baseRows !== undefined;
+  const hasTriggers = triggersList.length > 0;
+
+  /** Перечисление тегов триггеров: первые два именем, остаток — схлопка. */
+  const triggerTagList = (): DescriptionSegment[] => {
+    const [first, second, ...rest] = triggersList;
+    const segs: DescriptionSegment[] = [stepTag("start-trigger-0", first, "interests", editableSteps)];
+    if (second) {
+      segs.push(
+        t(rest.length ? ", " : " и "),
+        stepTag("start-trigger-1", second, "interests", editableSteps),
+      );
+    }
+    if (rest.length) {
+      segs.push(
+        t(" и "),
+        stepTag(
+          "start-triggers-more",
+          `ещё ${rest.length} ${pluralRu(rest.length, ["триггеру", "триггерам", "триггерам"])}`,
+          "interests",
+          editableSteps,
+          rest,
+        ),
+      );
+    }
+    return segs;
+  };
+
+  const baseTriggerSegments: DescriptionSegment[] = [];
+  if (hasBase || hasTriggers) {
+    const triggerWord = triggersList.length === 1 ? " по триггеру " : " по триггерам ";
+    if (hasBase) {
+      baseTriggerSegments.push(
+        t(" В работу идёт база на "),
+        stepTag(
+          "start-base",
+          `${facts!.baseRows!.toLocaleString("ru-RU")} строк`,
+          "file",
+          editableSteps,
+        ),
+      );
+      if (hasTriggers) baseTriggerSegments.push(t(triggerWord), ...triggerTagList());
+      baseTriggerSegments.push(t("."));
+    } else {
+      // Триггеры без известного числа строк — своя формулировка (нет «базы,
+      // на которую» ссылаться).
+      baseTriggerSegments.push(t(` Отбор идёт${triggerWord}`), ...triggerTagList(), t("."));
+    }
+  }
+
+  // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
+  // не приходит вовсе, и тег не появляется.
+  const modeSegments: DescriptionSegment[] = facts?.analysisMode !== undefined
+    ? [
+        t(" Режим анализа — "),
+        stepTag(
+          "start-mode",
+          facts.analysisMode === "once" ? "разовый" : "потоковый",
+          "analysis",
+          editableSteps,
+        ),
+        t("."),
+      ]
+    : [];
+
+  // Бюджет переехал сюда из «Итога» (review round 1, Finding 2) — там он был
+  // спайкой на конце предложения о конверсии, к которой отношения не имеет;
+  // здесь он читается как факт запуска, наравне с базой и режимом. Id
+  // `outcome-budget` СТАРШЕ переезда и оставлен как есть — Task 5/6 может
+  // ссылаться на него по имени.
+  const budgetSegments: DescriptionSegment[] = facts?.budget !== undefined
+    ? [
+        t(" На кампанию заложено "),
+        stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps),
+        t("."),
+      ]
+    : [];
+
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
-  // есть pending-домены — граф + статусы решают, LLM тут ни при чём.
-  const pendingDomains = domainStatuses?.pending ?? [];
+  // есть pending-домены — граф + статусы решают, LLM тут ни при чём. Домены —
+  // тег с целью на поповер модерации, а не сырой текст. Остаётся последней.
+  const pendingDomains = facts?.pending ?? [];
+  const domainSegments: DescriptionSegment[] = pendingDomains.length
+    ? [
+        t(" Домены "),
+        {
+          kind: "tag",
+          tag: {
+            id: "start-domains",
+            label: pendingDomains.join(", "),
+            target: { kind: "domains" },
+          },
+        },
+        t(" отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании."),
+      ]
+    : [];
+
   stages.push({
     id: "start",
     heading: "Старт.",
-    body: pendingDomains.length
-      ? `${startBody} Домены ${pendingDomains.join(", ")} отправлены на модерацию — в кампанию войдут только одобренные; не прошедшие проверку не подключаются, отклонённые удаляются из кампании.`
-      : startBody,
+    body: mergeTextSegments([
+      t(startBody),
+      ...scenarioSegments,
+      ...baseTriggerSegments,
+      ...modeSegments,
+      ...budgetSegments,
+      ...domainSegments,
+    ]),
   });
 
   if (messages.length) {
+    // Каналы первого касания вплетены в существующее предложение (не отдельной
+    // фразой) — иначе список сообщений строкой ниже повторяет то же самое
+    // (review round 1, Finding 2).
+    const channelsTag: DescriptionSegment | null = facts?.channels?.length
+      ? stepTag(
+          "first-touch-channels",
+          facts.channels.map((c) => CHANNEL_LABEL[c]).join(", "),
+          "channels",
+          editableSteps,
+        )
+      : null;
+    const touchBody: DescriptionSegment[] = channelsTag
+      ? hasSplit
+        ? [t("Аудитория делится на потоки, и каждому уходит своё сообщение по каналам "), channelsTag, t(":")]
+        : [t("Каждому контакту уходит первое сообщение по каналам "), channelsTag, t(":")]
+      : [
+          t(
+            hasSplit
+              ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
+              : "Каждому контакту уходит первое сообщение:",
+          ),
+        ];
     stages.push({
       id: "first-touch",
       heading: "Первое касание.",
-      body: hasSplit
-        ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
-        : "Каждому контакту уходит первое сообщение:",
+      body: mergeTextSegments(touchBody),
       messages,
     });
   }
@@ -307,30 +580,62 @@ export function describeWorkflow(
     stages.push({
       id: "check",
       heading: "Проверка реакции.",
-      body: multiChannel
-        ? "После рассылки система смотрит, кто отреагировал по любому из каналов. Отреагировавшие уходят к результату как успех."
-        : "После рассылки система смотрит, кто отреагировал. Отреагировавшие уходят к результату как успех.",
+      body: [
+        t(
+          multiChannel
+            ? "После рассылки система смотрит, кто отреагировал по любому из каналов. Отреагировавшие уходят к результату как успех."
+            : "После рассылки система смотрит, кто отреагировал. Отреагировавшие уходят к результату как успех.",
+        ),
+      ],
     });
   }
 
   if (hasRetry) {
+    const retryPrefix = "Тем, кто не отреагировал, кампания выжидает ";
+    const retrySuffix = multiChannel
+      ? " и повторяет ту же серию сообщений по тем же каналам."
+      : " и повторяет то же сообщение.";
     stages.push({
       id: "retry",
       heading: "Пауза и повтор.",
-      body: multiChannel
-        ? `Тем, кто не отреагировал, кампания выжидает ${waitPhrase(retryParams)} и повторяет ту же серию сообщений по тем же каналам.`
-        : `Тем, кто не отреагировал, кампания выжидает ${waitPhrase(retryParams)} и повторяет то же сообщение.`,
+      // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
+      // правится (§2.12: после запуска — та же демоция в `none`, что и у
+      // шаблона, с тем же переносом nodeId ради иконки — fix round 2,
+      // Finding 2). Без фактов (hasFacts=false) остаётся прежним единым
+      // текстом Task 3.
+      body: hasFacts
+        ? mergeTextSegments([
+            t(retryPrefix),
+            {
+              kind: "tag",
+              tag: {
+                id: "retry-wait",
+                label: waitPhrase(retryParams),
+                target: graphEditable
+                  ? { kind: "node-fields", nodeId: retryWaits[0].id }
+                  : { kind: "none", nodeId: retryWaits[0].id },
+              },
+            },
+            t(retrySuffix),
+          ])
+        : [t(`${retryPrefix}${waitPhrase(retryParams)}${retrySuffix}`)],
     });
   }
 
+  // «Итог» — снова только про исход конверсии (review round 1, Finding 2:
+  // бюджет переехал в «Старт», сюда его больше не сплавляем).
   stages.push({
     id: "outcome",
     heading: "Итог.",
-    body: !messages.length
-      ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
-      : hasRetry
-        ? "После повтора — финальная проверка: отреагировавшие засчитываются в успех, остальные завершают путь без конверсии."
-        : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
+    body: [
+      t(
+        !messages.length
+          ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
+          : hasRetry
+            ? "После повтора — финальная проверка: отреагировавшие засчитываются в успех, остальные завершают путь без конверсии."
+            : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
+      ),
+    ],
   });
 
   return stages;

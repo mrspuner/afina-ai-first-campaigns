@@ -76,4 +76,71 @@ describe("campaign_created_from_wizard", () => {
     });
     expect(next.campaigns[0].phase).toBeUndefined();
   });
+
+  // Task 1 moved StepData.files to BaseFile (each entry already carries its
+  // own rowCount). Campaign.files must carry that per-file rowCount straight
+  // through, NOT redistribute a wizard-level total across the files evenly —
+  // Task 2's snapshot round-trip depends on this mapping being an identity.
+  it("carries each file's own rowCount through to Campaign.files, not a redistributed total", () => {
+    const next = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: {
+        ...initialStepData,
+        scenario: "registration",
+        sourceType: "new",
+        channels: ["sms"],
+        files: [
+          { name: "base-1.csv", rowCount: 12_000 },
+          { name: "base-2.csv", rowCount: 3_000 },
+        ],
+        fileRowCount: 15_000,
+      },
+      scenarioName: "Регистрация",
+    });
+    expect(next.campaigns[0].files).toEqual([
+      { name: "base-1.csv", rowCount: 12_000 },
+      { name: "base-2.csv", rowCount: 3_000 },
+    ]);
+  });
+
+  it("создание из визарда кладёт снапшот на кампанию", () => {
+    const state = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "s1", channels: ["sms"], budget: 5000 },
+      scenarioName: "Тестовый",
+    });
+    const created = state.campaigns.at(-1)!;
+    expect(created.wizardData).toBeDefined();
+    expect(created.wizardData!.channels).toEqual(["sms"]);
+    expect(created.wizardData!.budget).toBe(5000);
+  });
+
+  it("запуск кампании удаляет снапшот — двух источников правды не остаётся", () => {
+    const created = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "s1" },
+      scenarioName: "Тестовый",
+    });
+    const id = created.campaigns.at(-1)!.id;
+    const launched = appReducer(created, {
+      type: "campaign_status_changed",
+      id,
+      status: "active",
+      timestamp: "2026-07-27T10:00:00.000Z",
+    });
+    expect(launched.campaigns.find((c) => c.id === id)!.wizardData).toBeUndefined();
+  });
+
+  it("дубль черновика уносит снапшот — копия остаётся правимой", () => {
+    const created = appReducer(initialState, {
+      type: "campaign_created_from_wizard",
+      stepData: { ...initialStepData, scenario: "s1", channels: ["email"] },
+      scenarioName: "Тестовый",
+    });
+    const id = created.campaigns.at(-1)!.id;
+    const dup = appReducer(created, { type: "campaign_duplicated", id, newId: "cmp_copy" });
+    expect(dup.campaigns.find((c) => c.id === "cmp_copy")!.wizardData?.channels).toEqual([
+      "email",
+    ]);
+  });
 });

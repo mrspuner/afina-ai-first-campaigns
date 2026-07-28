@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { CampaignScreen } from "./campaign-screen";
 import {
   AppStateProvider,
@@ -8,16 +8,16 @@ import {
 } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
-import { TemplatePreviewDrawer } from "./template-preview-drawer";
-import { EmailEditorPanel } from "./email-editor-panel";
-import { PRESET_TEMPLATES } from "@/state/app-state";
-import type { Campaign, Preset } from "@/state/app-state";
+import type { Campaign, MessageTemplate, Preset } from "@/state/app-state";
+import { initialStepData } from "@/types/campaign";
+import { getCachedGraph, setCachedGraph } from "./workflow-graph-cache";
+import { getScenario } from "@/data/scenarios";
 import { createTemplate } from "@/state/workflow-templates";
-import { setCachedGraph } from "./workflow-graph-cache";
-import type { Channel } from "@/types/campaign";
 
 // WorkflowMiniPreview pulls in @xyflow/react, which touches ResizeObserver on
 // mount — absent in jsdom. Provide a minimal no-op shim so the screen renders.
+// Тот же шим кормит cmdk (Command внутри поповера тега шаблона, Task 7) —
+// jsdom не несёт ни ResizeObserver, ни scrollIntoView.
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === "undefined") {
     globalThis.ResizeObserver = class {
@@ -25,6 +25,21 @@ beforeAll(() => {
       unobserve() {}
       disconnect() {}
     } as unknown as typeof ResizeObserver;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).scrollIntoView ??= () => {};
+  // @xyflow/system's updateNodeInternals reads `new DOMMatrixReadOnly(transform).m22`
+  // (zoom) off a scheduled requestAnimationFrame callback — jsdom has neither.
+  // Surfaces only when a test awaits past that rAF tick (Task 7's popover test
+  // does, via findBy*) while WorkflowMiniPreview is mounted with a graph that
+  // just got a cache write; a bare stub is enough since no test here asserts on
+  // the mini-preview's computed zoom/transform.
+  if (typeof globalThis.DOMMatrixReadOnly === "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).DOMMatrixReadOnly = class {
+      m22 = 1;
+      constructor() {}
+    };
   }
 });
 
@@ -42,10 +57,20 @@ function baseCampaign(partial: Partial<Campaign>): Campaign {
   };
 }
 
-/** Seeds the given campaign into real app state and opens its card view. */
-function Harness({ campaign }: { campaign: Campaign }) {
+/** Seeds the given campaign (+ optional extra library templates) into real
+ *  app state and opens its card view. */
+function Harness({
+  campaign,
+  extraTemplates,
+}: {
+  campaign: Campaign;
+  extraTemplates?: MessageTemplate[];
+}) {
   const dispatch = useAppDispatch();
   useEffect(() => {
+    for (const template of extraTemplates ?? []) {
+      dispatch({ type: "template_added", template });
+    }
     const preset: Preset = {
       key: "full",
       label: "test",
@@ -54,39 +79,21 @@ function Harness({ campaign }: { campaign: Campaign }) {
     };
     dispatch({ type: "preset_applied", preset });
     dispatch({ type: "campaign_opened", id: campaign.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign, dispatch]);
   return <CampaignScreen />;
 }
 
-function renderCampaign(campaign: Campaign) {
+function renderCampaign(campaign: Campaign, extraTemplates?: MessageTemplate[]) {
   return render(
     <AppStateProvider>
       {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
           mirror the real app tree, where PromptChipsProvider wraps the screen.
-          ChatProvider — коммуникационные нодо-блоки (CampaignCommunicationNodeBlock)
-          открывают дровер редактора шаблона через useChat(), как и в page.tsx. */}
+          ChatProvider — WorkflowNodeComponent's expanded node card (graph
+          canvas) reads useChat() too; mirrors the real app tree. */}
       <PromptChipsProvider>
         <ChatProvider>
-          <Harness campaign={campaign} />
-        </ChatProvider>
-      </PromptChipsProvider>
-    </AppStateProvider>,
-  );
-}
-
-/** Same tree as `renderCampaign` plus `TemplatePreviewDrawer` (the drawer ALL
- *  comm node-blocks open post-fix) and `EmailEditorPanel` (mirrors page.tsx's
- *  composition; kept mounted so tests can assert it stays CLOSED — proof the
- *  email block no longer routes there) — needed to assert the click actually
- *  opens the EXISTING drawer, not just flips chat-context state. */
-function renderCampaignWithDrawers(campaign: Campaign) {
-  return render(
-    <AppStateProvider>
-      <PromptChipsProvider>
-        <ChatProvider>
-          <Harness campaign={campaign} />
-          <TemplatePreviewDrawer />
-          <EmailEditorPanel />
+          <Harness campaign={campaign} extraTemplates={extraTemplates} />
         </ChatProvider>
       </PromptChipsProvider>
     </AppStateProvider>,
@@ -155,241 +162,249 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
-
-  it("ставит нодо-блок «Старта» под текстом «Старт.», ДО «Первого касания» — не хвостом после всего описания", () => {
-    renderCampaign(
-      baseCampaign({ id: "cmp_desc_slot", channels: ["sms"] }),
-    );
-    const start = screen.getByText("Старт.");
-    const block = screen.getByTestId("scenario-node-block");
-    const firstTouch = screen.getByText("Первое касание.");
-
-    // Порядок в документе: «Старт.» → нодо-блок → «Первое касание.».
-    expect(
-      start.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      block.compareDocumentPosition(firstTouch) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
 });
 
-describe("CampaignScreen — нодо-блок «Старт» (A2.1 — скоринг/сигнал)", () => {
-  it("new/stream (черновик): нодо-блок скоринга — «База» с файлами, «Добавить файл» и сводка интересов/триггеров", () => {
-    renderCampaign(
-      baseCampaign({
-        id: "cmp_node_scoring",
-        sourceType: "new",
-        files: [{ name: "base-1.csv", rowCount: 1200 }],
-        interests: ["Кредитование"],
-        triggers: ["Заявка на кредит"],
-      }),
-    );
-    // Scoped to the node-block: the mini-preview graph below ALSO renders a
-    // «Скоринг»/«Сигнал» node label (aria-hidden, but text queries still see
-    // it), so an unscoped getByText would match twice.
-    const block = within(screen.getByTestId("scenario-node-block"));
-    expect(block.getByText("Скоринг")).toBeInTheDocument();
-    expect(block.getByText("base-1.csv")).toBeInTheDocument();
-    expect(block.getByRole("button", { name: "Добавить файл" })).toBeInTheDocument();
-    expect(block.getByText("1 интерес, 1 триггер")).toBeInTheDocument();
+describe("CampaignScreen — CampaignFacts на карточке, нодо-блоки сняты (Task 6)", () => {
+  // Черновик с полными фактами: файлы (→ facts.baseRows), триггер (→
+  // facts.triggers) и снапшот визарда (→ editableSteps непуст — единственное,
+  // что решает кликабельность; значения сами читаются с полей кампании, а
+  // НЕ из wizardData, поэтому снапшот ниже удаляется без потери текста).
+  const draftCampaign = baseCampaign({
+    id: "cmp_facts_draft",
+    files: [{ name: "base-1.csv", rowCount: 1200 }],
+    triggers: ["Ипотека"],
+    wizardData: { ...initialStepData, intent: "signals-comms", sourceType: "new" },
   });
 
-  it("own (черновик): нодо-блок сигнала — файл, без строки «Интересы и триггеры»", () => {
-    renderCampaign(
-      baseCampaign({
-        id: "cmp_node_signal",
-        sourceType: "own",
-        files: [{ name: "crm-export.csv", rowCount: 500 }],
-      }),
-    );
-    const block = within(screen.getByTestId("scenario-node-block"));
-    expect(block.getByText("Сигнал")).toBeInTheDocument();
-    expect(block.getByText("crm-export.csv")).toBeInTheDocument();
-    expect(block.queryByText("Интересы и триггеры")).not.toBeInTheDocument();
-    expect(block.queryByText("Скоринг")).not.toBeInTheDocument();
+  it("описание черновика несёт кликабельные теги значений", () => {
+    renderCampaign(draftCampaign);
+    // Тег «база» (facts.baseRows → «1 200 строк») — сам тег несёт только
+    // число, слово «база» стоит ПЕРЕД ним обычным текстом (см.
+    // graph-description.ts baseTriggerSegments), поэтому имя кнопки — не
+    // полная фраза, а собственный текст пилюли.
+    expect(screen.getByRole("button", { name: /строк/ })).toBeInTheDocument();
   });
 
-  it("запущенная кампания: нодо-блок скоринга read-only — файлы видны, «Добавить файл» и удаление нет", () => {
-    renderCampaign(
-      baseCampaign({
-        id: "cmp_node_readonly",
-        sourceType: "new",
-        status: "active",
-        phase: "communicating",
-        launchedAt: "2026-06-02T00:00:00.000Z",
-        files: [{ name: "base-1.csv", rowCount: 1200 }],
-      }),
-    );
-    const block = within(screen.getByTestId("scenario-node-block"));
-    expect(block.getByText("base-1.csv")).toBeInTheDocument();
-    expect(
-      block.queryByRole("button", { name: "Добавить файл" }),
-    ).not.toBeInTheDocument();
-    expect(
-      block.queryByRole("button", { name: /Удалить файл/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      block.getByRole("button", { name: "Показать интересы и триггеры" }),
-    ).toBeInTheDocument();
-  });
-});
-
-describe("CampaignScreen — нодо-блоки коммуникаций под «Первым касанием» (A2.1)", () => {
-  // «Возврат» — линейный (не сегментированный) шаблон: ровно одна нода на
-  // канал, без дублей от сегментов (в отличие от дефолтного «Апсейл» в
-  // baseCampaign, который сегментирован — см. graph-description.test.ts).
-  const RETURN_SCENARIO = { id: "base-return", name: "Возврат" };
-
-  /**
-   * `channelTemplateParams("email")` (channel-nodes.ts) не совпадает ни с одним
-   * пресетом библиотеки (см. graph-description.test.ts — «шаблон не
-   * резолвится»), в отличие от sms/push, которые нарочно совпадают со своим
-   * пресетом. Чтобы протестировать «резолвнутый шаблон» путь для email — ровно
-   * так же, как sms/push, — патчим email-ноду свежепостроенного графа content'ом
-   * реального пресета и кладём граф в durable-кэш кампании (тот же кэш, что несёт
-   * ручные правки пользователя — CampaignScreen читает именно его).
-   */
-  function seedMatchedEmailGraph(campaignId: string, channels: Channel[]) {
-    const graph = createTemplate("Возврат", "new", channels);
-    const emailTemplate = PRESET_TEMPLATES.find(
-      (t) =>
-        t.channel === "email" &&
-        t.content.kind === "email" &&
-        t.content.emailId === "eml_offer",
-    )!;
-    const nodes = graph.nodes.map((n) =>
-      n.data.nodeType === "email"
-        ? { ...n, data: { ...n.data, params: { ...emailTemplate.content } } }
-        : n,
-    );
-    setCachedGraph(campaignId, { nodes, edges: graph.edges });
-    return emailTemplate;
-  }
-
-  it("рендерит по одному нодо-блоку на каждую первую коммуникацию (sms+email) с текущим шаблоном", () => {
-    const campaignId = "cmp_comm_blocks";
-    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
-    renderCampaign(
-      baseCampaign({
-        id: campaignId,
-        scenario: RETURN_SCENARIO,
-        channels: ["sms", "email"],
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: "Изменить шаблон: SMS — напоминание" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: `Изменить шаблон: ${emailTemplate.name}` }),
-    ).toBeInTheDocument();
-  });
-
-  it("клик по блоку SMS открывает существующий дровер предпросмотра/редактора шаблона", () => {
-    renderCampaignWithDrawers(
-      baseCampaign({
-        id: "cmp_comm_sms_click",
-        scenario: RETURN_SCENARIO,
-        channels: ["sms", "email"],
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Изменить шаблон: SMS — напоминание" }),
-    );
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(within(drawer).getByText("SMS — напоминание")).toBeInTheDocument();
-  });
-
-  // Fix: email раньше открывал EmailEditorPanel — другой дровер, чем графовая
-  // нода (которая с #9bbf9fc резолвит «Шаблон» через control:"template" →
-  // TemplatePreviewDrawer, как sms/push). Теперь блок открывает ТОТ ЖЕ дровер.
-  it("клик по блоку Email открывает TemplatePreviewDrawer — тот же дровер, что и sms/push/граф", () => {
-    const campaignId = "cmp_comm_email_click";
-    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
-    renderCampaignWithDrawers(
-      baseCampaign({
-        id: campaignId,
-        scenario: RETURN_SCENARIO,
-        channels: ["sms", "email"],
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: `Изменить шаблон: ${emailTemplate.name}` }),
-    );
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(within(drawer).getByText(emailTemplate.name)).toBeInTheDocument();
-    expect(screen.queryByTestId("email-editor-panel")).not.toBeInTheDocument();
-  });
-
-  it("показывает нодо-блок IVR (сценарий звонка) и открывает предпросмотр по клику", () => {
-    renderCampaignWithDrawers(
-      baseCampaign({
-        id: "cmp_comm_ivr",
-        scenario: RETURN_SCENARIO,
-        channels: ["ivr"],
-      }),
-    );
-    const trigger = screen.getByRole("button", {
-      name: "Изменить шаблон: Персональное предложение",
+  it("режим анализа выводится из sourceType, а не из снапшота", () => {
+    renderCampaign({
+      ...draftCampaign,
+      id: "cmp_facts_mode",
+      sourceType: "stream",
+      wizardData: undefined,
     });
-    expect(trigger).toBeInTheDocument();
-    fireEvent.click(trigger);
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(within(drawer).getByText("Персональное предложение")).toBeInTheDocument();
+    expect(screen.getByText("потоковый")).toBeInTheDocument();
   });
 
-  it("запущенная кампания: нодо-блоки коммуникаций read-only («Показать шаблон» вместо «Изменить»)", () => {
-    const campaignId = "cmp_comm_readonly";
-    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
-    renderCampaign(
-      baseCampaign({
-        id: campaignId,
-        scenario: RETURN_SCENARIO,
-        channels: ["sms", "email"],
-        status: "active",
-        phase: "communicating",
-        launchedAt: "2026-06-02T00:00:00.000Z",
-      }),
-    );
+  it("у запущенной кампании теги показывают значения, но не кликаются", () => {
+    renderCampaign({
+      ...draftCampaign,
+      id: "cmp_facts_readonly",
+      status: "active",
+      phase: "communicating",
+      launchedAt: "2026-06-02T00:00:00.000Z",
+      wizardData: undefined,
+    });
+    expect(screen.getByText(/строк/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /строк/ })).toBeNull();
+    // Поповерные цели (шаблон, пауза) тоже теряют клик после запуска (§2.12,
+    // Critical fix round 1) — значение остаётся текстом пилюли, но она
+    // больше не button. Раньше пилюля их не гейтила вовсе.
+    expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Показать шаблон: SMS — напоминание" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: `Показать шаблон: ${emailTemplate.name}` }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^Изменить шаблон/ }),
-    ).not.toBeInTheDocument();
+      screen.queryByRole("button", { name: "SMS — напоминание" }),
+    ).toBeNull();
+    expect(screen.getByText("2 дня")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2 дня" })).toBeNull();
   });
 
-  // Fix: read-only меняет только аффорданс блока (Eye/«Показать») — клик
-  // по-прежнему открывает ТОТ ЖЕ TemplatePreviewDrawer, что и до запуска
-  // (правка внутри дровера ограничивается его собственным usedInCampaigns,
-  // не статусом кампании — см. doc-comment CampaignCommunicationNodeBlock).
-  it("запущенная кампания: клик по блоку Email открывает тот же TemplatePreviewDrawer (не EmailEditorPanel)", () => {
-    const campaignId = "cmp_comm_email_readonly";
-    const emailTemplate = seedMatchedEmailGraph(campaignId, ["sms", "email"]);
-    renderCampaignWithDrawers(
-      baseCampaign({
-        id: campaignId,
-        scenario: RETURN_SCENARIO,
-        channels: ["sms", "email"],
-        status: "active",
-        phase: "communicating",
-        launchedAt: "2026-06-02T00:00:00.000Z",
-      }),
-    );
+  it("сидовый черновик без снапшота: шаблон и пауза остаются кликабельными — graphEditable не зависит от editableSteps", () => {
+    // Регресс, который ловит этот тест: гейтить template/node-fields на
+    // editableSteps (наивный фикс) сделало бы их read-only и для СИДОВЫХ
+    // черновиков без wizardData — а граф там правится, ровно как разрешал
+    // снятый нодо-блок через readOnly={status !== "draft"}.
+    renderCampaign({ ...draftCampaign, id: "cmp_facts_seed_draft", wizardData: undefined });
+    expect(
+      screen.getByRole("button", { name: "SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
+    // При этом шаговые теги (нет снапшота — некуда вести) кнопкой не станут:
+    // это разные сигналы, а не один и тот же гейт.
+    expect(screen.queryByRole("button", { name: /строк/ })).toBeNull();
+  });
+
+  it("черновик со снапшотом: база, шаблон и пауза — всё кликабельно", () => {
+    renderCampaign(draftCampaign);
+    expect(screen.getByRole("button", { name: /строк/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "SMS — напоминание" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
+  });
+
+  // Брифовская заготовка утверждала queryByText("Скоринг") === null — неверно:
+  // WorkflowMiniPreview рендерит ТОТ ЖЕ узел «Скоринг» в мини-графе (aria-hidden,
+  // но getByText его всё равно видит — см. старый комментарий в удалённом
+  // node-block-тесте), поэтому такая проверка ловит мини-граф, а не отсутствие
+  // блока. Проверяем напрямую то, что было единственным для нодо-блоков —
+  // их testid и аффорданс «Изменить шаблон».
+  it("нодо-блоки «Старта» и «Первого касания» с карточки сняты", () => {
+    renderCampaign(draftCampaign);
+    expect(screen.queryByTestId("scenario-node-block")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Изменить шаблон/ })).toBeNull();
+  });
+
+  it("клик по кликабельному тегу диспатчит campaign_step_edit_requested и уводит с карточки", () => {
+    renderCampaign(draftCampaign);
+    fireEvent.click(screen.getByRole("button", { name: /строк/ }));
+    // campaign_step_edit_requested меняет view на "guided-campaign" —
+    // CampaignScreen перестаёт видеть кампанию как view.kind==="campaign" и
+    // рендерит null (карточка снята, изолированный шаг визарда открыт).
+    expect(screen.queryByText("Сценарий кампании")).not.toBeInTheDocument();
+  });
+
+  it("красит пилюлю шаблона под цвет sms-узла графа, а не оставляет её нейтральной", () => {
+    renderCampaign(draftCampaign);
+    // «SMS — напоминание» — резолвнутый шаблон дефолтной sms-ноды (Апсейл),
+    // тег target:"template". Без лукапа nodeId→nodeType (Task 5 gap) пилюля
+    // падала на нейтральный серый — Task 6 красит её под NODE_STYLES.sms.
+    const pill = screen.getByRole("button", { name: "SMS — напоминание" });
+    expect(pill.className).not.toContain("border-border");
+  });
+});
+
+describe("CampaignScreen — поповер выбора шаблона у тега названия (Task 7)", () => {
+  const smsExtra: MessageTemplate = {
+    id: "tpl_sms_extra",
+    channel: "sms",
+    name: "SMS — акция",
+    content: {
+      kind: "sms",
+      text: "Специальное предложение только сегодня!",
+      alphaName: "AFINA",
+      scheduledAt: "immediate",
+    },
+    usedInCampaigns: 0,
+  };
+
+  it("выбор другого шаблона в поповере переписывает текст ноды — описание перерисовывается", async () => {
+    // Доказательство того, что редрей реально происходит (а не только
+    // предполагается): дефолтная sms-нода Апсейла резолвит «SMS —
+    // напоминание» (единственный преcет-шаблон канала); дописываем ВТОРОЙ
+    // sms-шаблон в библиотеку, выбираем его в поповере пилюли и проверяем,
+    // что ИМЕННО ЭТА пилюля сама сменила имя — точный признак того, что
+    // workflow_node_field_set дошёл до durable-кэша графа (через headless
+    // useCampaignGraphApplier — mailbox-слот иначе некому обработать, раз
+    // граф-канвас на карточке не смонтирован) и CampaignScreen перерисовал
+    // описание с новой версией кэша.
+    const id = "cmp_template_popover";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }), [smsExtra]);
+
+    fireEvent.click(screen.getByRole("button", { name: "SMS — напоминание" }));
+    fireEvent.click(await screen.findByText("SMS — акция"));
+
+    expect(await screen.findByRole("button", { name: "SMS — акция" })).toBeInTheDocument();
+    // Кэш реально переписан (не только видимость): хотя бы один sms-узел
+    // теперь несёт текст нового шаблона. Апсейл сегментирует коммуникацию на
+    // несколько физически идентичных sms-узлов (max/high/mid × повтор) —
+    // правка бьёт только по ОДНОМУ из них, поэтому «SMS — напоминание»
+    // законно остаётся на месте у остальных дублей (дедуп описания корректно
+    // показывает две разные группы, а не баг).
+    const newText = (smsExtra.content as { text: string }).text;
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "sms" && (n.data.params as { text: string }).text === newText,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("CampaignScreen — поповер паузы у тега длительности (Task 8)", () => {
+  it("правка длительности в поповере паузы переписывает params ноды — описание перерисовывается", async () => {
+    // То же доказательство редрея, что и у поповера шаблона (Task 7) выше, но
+    // для второй цели поповера (node-fields): дефолтная пауза повтора Апсейла
+    // — «2 дня» (durationHours: 48). Меняем её через ВЛОЖЕННЫЙ поповер поля
+    // «Длительность» внутри WaitFields (тот же компонент, что несёт нодо-блок
+    // графа) и проверяем, что ИМЕННО пилюля «2 дня» сама сменила подпись на
+    // «5 дней» — признак того, что workflow_node_field_set дошёл до
+    // durable-кэша через headless useCampaignGraphApplier (граф-канвас на
+    // карточке не смонтирован, иначе слот некому было бы обработать) и
+    // CampaignScreen перерисовал описание с новой версией кэша.
+    const id = "cmp_wait_popover";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "2 дня" }));
     fireEvent.click(
-      screen.getByRole("button", { name: `Показать шаблон: ${emailTemplate.name}` }),
+      await screen.findByRole("button", { name: "Изменить поле «Длительность»" }),
     );
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(within(drawer).getByText(emailTemplate.name)).toBeInTheDocument();
-    expect(screen.queryByTestId("email-editor-panel")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Число"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "дней" }));
+
+    expect(await screen.findByRole("button", { name: "5 дней" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2 дня" })).toBeNull();
+    // Кэш реально переписан (не только видимость).
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "wait" && (n.data.params as { durationHours?: number }).durationHours === 120,
+      ),
+    ).toBe(true);
   });
 
-  it("кампания без коммуникаций не рендерит нодо-блоков каналов", () => {
-    renderCampaign(baseCampaign({ id: "cmp_comm_none", channels: [] }));
-    expect(screen.queryByText(/^Изменить шаблон/)).not.toBeInTheDocument();
+  // fix round 1, Finding 1 — live repro reproduced as a test: `waitPhrase`
+  // (пилюля, graph-description.ts) раньше форматировала только дни/часы, а
+  // `splitDuration` (поле «Длительность» внутри ЭТОГО ЖЕ ещё открытого
+  // поповера, wait-fields.tsx) уже предпочитало недели — 840ч читались как
+  // «35 дней» у пилюли и «5 недель» у поля ОДНОВРЕМЕННО, на одном экране.
+  // Фикстура (5 недель через юнит «недель») — ровно то же действие, которым
+  // ревьюер воспроизвёл баг в браузере; она бы упала на предыдущей версии
+  // `waitPhrase` (нет ветки недель → «35 дней»).
+  it("недельная длительность паузы: пилюля и поле внутри того же поповера согласованы (fix round 1, Finding 1)", async () => {
+    const id = "cmp_wait_weeks_agree";
+    renderCampaign(baseCampaign({ id, channels: ["sms"] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "2 дня" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Длительность»" }),
+    );
+    fireEvent.change(screen.getByLabelText("Число"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "недель" }));
+
+    // Пилюля (waitPhrase) и строка поля (splitDuration) внутри ещё открытого
+    // поповера — ОБЕ читают «5 недель», не «35 дней» ни в одной из них.
+    expect(await screen.findByRole("button", { name: "5 недель" })).toBeInTheDocument();
+    expect(screen.getAllByText("5 недель").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/35 дней/)).not.toBeInTheDocument();
+    expect(
+      getCachedGraph(id)!.nodes.some(
+        (n) => n.data.params?.kind === "wait" && (n.data.params as { durationHours?: number }).durationHours === 840,
+      ),
+    ).toBe(true);
+  });
+
+  it("недельная длительность, заданная заранее в кэше (без правки через UI) — тоже согласована", async () => {
+    // Дополняет тест выше вторым путём попадания в это состояние: не правка
+    // через UI, а уже сохранённая неделя-кратная длительность (напр. правка
+    // из прошлой сессии) — пилюля должна читать её так же, как поле.
+    const id = "cmp_wait_weeks_seeded";
+    const campaign = baseCampaign({ id, channels: ["sms"] });
+    const signalType = getScenario(campaign.scenario!.id)!.signalType;
+    const template = createTemplate(signalType, campaign.sourceType, campaign.channels ?? []);
+    const waitNode = template.nodes.find((n) => n.data.nodeType === "wait")!;
+    setCachedGraph(id, {
+      nodes: template.nodes.map((n) =>
+        n.id === waitNode.id
+          ? { ...n, data: { ...n.data, params: { kind: "wait" as const, mode: "duration" as const, durationHours: 840 } } }
+          : n,
+      ),
+      edges: template.edges,
+    });
+
+    renderCampaign(campaign);
+
+    const pill = await screen.findByRole("button", { name: "5 недель" });
+    fireEvent.click(pill);
+    // Поле внутри поповера читает ту же самую строку, что и пилюля рядом с ним.
+    expect(await screen.findAllByText("5 недель")).toHaveLength(2);
+    expect(screen.queryByText(/35 дней/)).not.toBeInTheDocument();
   });
 });
 

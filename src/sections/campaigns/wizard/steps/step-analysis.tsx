@@ -34,9 +34,20 @@ function RadioDot({ active }: { active: boolean }) {
   );
 }
 
-export function StepAnalysis({ data, onNext, onBack }: StepProps) {
+export function StepAnalysis({
+  data,
+  onNext,
+  onBack,
+  onValueChange,
+  footerOverride,
+}: StepProps) {
   const [mode, setMode] = useState<AnalysisMode>(() => data.analysisMode);
   const canContinue = canContinueFromAnalysis(mode);
+
+  function selectMode(next: AnalysisMode) {
+    setMode(next);
+    onValueChange?.({ analysisMode: next });
+  }
 
   return (
     <StepContent
@@ -51,7 +62,7 @@ export function StepAnalysis({ data, onNext, onBack }: StepProps) {
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setMode(opt.value)}
+                onClick={() => selectMode(opt.value)}
                 aria-pressed={active}
                 className={cn(
                   "relative flex h-[120px] flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-colors",
@@ -69,12 +80,15 @@ export function StepAnalysis({ data, onNext, onBack }: StepProps) {
           })}
         </div>
 
-        <StepFooter
-          onBack={onBack}
-          onContinue={() => onNext({ analysisMode: mode, sourceType: deriveSourceType(data.intent, mode) })}
-          continueLabel="Далее"
-          continueDisabled={!canContinue}
-        />
+        {!footerOverride?.hidden && (
+          <StepFooter
+            onBack={onBack}
+            onContinue={() => onNext({ analysisMode: mode, sourceType: deriveSourceType(data.intent, mode) })}
+            continueLabel={footerOverride?.continueLabel ?? "Далее"}
+            backLabel={footerOverride?.backLabel}
+            continueDisabled={!canContinue}
+          />
+        )}
       </div>
     </StepContent>
   );

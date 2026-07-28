@@ -24,6 +24,16 @@ export type Channel = "sms" | "push" | "email" | "ivr";
 
 export const CHANNELS = ["sms", "push", "email", "ivr"] as const satisfies readonly Channel[];
 
+/**
+ * Лёгкая, сериализуемая модель загруженной базы. Тот же тип, что несёт
+ * `Campaign.files`, — поэтому между визардом и кампанией конверсии нет, а
+ * `StepData` целиком укладывается в снапшот (объекты `File` невосстановимы).
+ */
+export interface BaseFile {
+  name: string;
+  rowCount: number;
+}
+
 export interface StepData {
   scenario: string | null;
   interests: string[];
@@ -46,8 +56,8 @@ export interface StepData {
   /** Selected communication channels. Empty array = degenerate campaign (no comms). */
   channels: Channel[];
   budget: number | null;
-  /** Uploaded base files (one or more). Empty array = no base uploaded yet. */
-  files: File[];
+  /** Загруженные базы (одна или несколько). Пустой массив — база не загружена. */
+  files: BaseFile[];
   /**
    * Approximate total number of rows across ALL uploaded base files.
    * Populated on the upload step (база); downstream steps (budget) read it to
@@ -77,6 +87,15 @@ export interface StepData {
   ownSignalType?: SignalType;
 }
 
+/**
+ * Сериализуемый слепок ответов визарда, хранимый на кампании.
+ *
+ * Совпадает со `StepData` — после перевода `files` на `BaseFile` в нём нет
+ * несериализуемых значений, поэтому параллельного типа не заводим. Псевдоним
+ * существует ради читаемости на стороне `Campaign`.
+ */
+export type WizardSnapshot = StepData;
+
 export const initialStepData: StepData = {
   scenario: null,
   interests: [],
@@ -101,4 +120,29 @@ export interface StepProps {
    * so only the active step publishes its PromptBar hints via `useScreenHints`.
    */
   active?: boolean;
+  /**
+   * Живое уведомление о текущем выборе шага — до нажатия основной кнопки.
+   * Нужно изолированному режиму правки (карточка → визард на одном шаге): он
+   * сравнивает выбор со снапшотом и решает, какие шаги обнулились и как
+   * читается основная кнопка. Обычный проход визарда коллбек не передаёт.
+   * Вызывают только шаги, чьё значение может обнулить что-то ниже: scenario,
+   * analysis, file, channels (см. `STEP_INVALIDATES` в wizard-navigation.ts).
+   */
+  onValueChange?: (partial: Partial<StepData>) => void;
+  /**
+   * Переопределение футера для изолированной сессии правки (Task 12).
+   * Обычный проход визарда этот проп не передаёт — каждый шаг остаётся при
+   * своей обычной подписи кнопки и обычном «Назад».
+   *  - `continueLabel`/`backLabel` переопределяют подписи основной кнопки и
+   *    «Назад» (сессия использует «Далее»/«Применить и вернуться» и «Отмена»
+   *    вместо «Назад» — «Сценарий» решает Task 13, у него футера нет вовсе).
+   *  - `hidden` скрывает футер целиком — так изолированная колонка растёт
+   *    реактивно (шаг становится виден, чтобы показать пересчитанные цифры),
+   *    но действующий футер сессии остаётся только у активного шага.
+   */
+  footerOverride?: {
+    continueLabel?: string;
+    backLabel?: string;
+    hidden?: boolean;
+  };
 }
