@@ -10,6 +10,13 @@ import { ChatProvider } from "@/state/chat-context";
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
 
+// ВНИМАНИЕ (Task 5 → Task 7/8): поле `DescriptionStage.messages` снято — строки
+// коммуникаций живут в `groups[].rows` (`DescriptionCommunication`), а рендерит
+// их таблицей Task 8. Из фикстур ниже `messages:` вычищено механически, чтобы
+// файл собирался и `tsc` снова показывал только предсуществующие ошибки; сами
+// утверждения про строки сообщений оставлены КРАСНЫМИ намеренно — они и есть
+// список того, что Task 8 обязана вернуть уже на таблице.
+
 const STAGES: DescriptionStage[] = [
   {
     id: "start",
@@ -22,18 +29,6 @@ const STAGES: DescriptionStage[] = [
     kind: "touch",
     heading: "Первое касание.",
     body: t("Аудитория делится на потоки, и каждому уходит своё сообщение:"),
-    messages: [
-      {
-        channel: "SMS",
-        templateName: "SMS — напоминание",
-        text: "Ваше предложение ждёт. Подробности на сайте.",
-      },
-      {
-        channel: "Email",
-        subject: "Специальное предложение",
-        text: "Мы подготовили для вас персональное предложение.",
-      },
-    ],
   },
   { id: "outcome", kind: "outcome", heading: "Итог.", body: t("Остальные завершают путь без конверсии.") },
 ];
@@ -182,17 +177,6 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
       kind: "touch",
       heading: "Первое касание.",
       body: t("Первое сообщение:"),
-      messages: [
-        {
-          channel: "SMS",
-          text: "Текст.",
-          templateTag: {
-            id: "msg-n1-template",
-            label: "SMS — шаблон",
-            target: { kind: "template", nodeId: "n1" },
-          },
-        },
-      ],
     },
   ];
 
@@ -223,17 +207,6 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "SMS",
-            text: "Текст.",
-            templateTag: {
-              id: "msg-n1-template",
-              label: "SMS — шаблон",
-              target: { kind: "none", nodeId: "n1" },
-            },
-          },
-        ],
       },
     ];
     render(<WorkflowDescription stages={demoted} nodeTypes={new Map([["n1", "sms"]])} />);
@@ -259,17 +232,6 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "Звонок",
-            text: "Свой сценарий звонка.",
-            templateTag: {
-              id: "msg-n1-template",
-              label: "не выбран",
-              target: { kind: "template", nodeId: "n1" },
-            },
-          },
-        ],
       },
     ];
     renderWithProviders(
@@ -289,18 +251,6 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "Email",
-            subject: "Специальное предложение",
-            text: "Мы подготовили для вас персональное предложение.",
-            templateTag: {
-              id: "msg-n2-template",
-              label: "не выбран",
-              target: { kind: "template", nodeId: "n2" },
-            },
-          },
-        ],
       },
     ];
     renderWithProviders(
@@ -320,19 +270,6 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "Email",
-            subject: "Специальное предложение",
-            templateName: "Персональный оффер",
-            text: "Текст письма.",
-            templateTag: {
-              id: "msg-n3-template",
-              label: "Персональный оффер",
-              target: { kind: "template", nodeId: "n3" },
-            },
-          },
-        ],
       },
     ];
     renderWithProviders(
@@ -351,17 +288,6 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "Звонок",
-            text: "Свой сценарий.",
-            templateTag: {
-              id: "msg-n4-template",
-              label: "не выбран",
-              target: { kind: "none", nodeId: "n4" },
-            },
-          },
-        ],
       },
     ];
     render(<WorkflowDescription stages={stages} nodeTypes={new Map([["n4", "ivr"]])} />);
@@ -455,22 +381,6 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
         kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
-        messages: [
-          {
-            channel: "SMS",
-            text: "Привет!",
-            templateTag: {
-              id: "msg-n1-template",
-              label: "SMS — напоминание",
-              target: { kind: "none" },
-            },
-          },
-          {
-            channel: "Email",
-            text: "Другое письмо.",
-            templateName: "Письмо — акция",
-          },
-        ],
       },
     ];
     render(<WorkflowDescription stages={stages} />);

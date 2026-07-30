@@ -83,6 +83,19 @@ describe("segmentWaves", () => {
     }
   });
 
+  it("из нескольких параллельных пауз waitBefore берёт ПЕРВУЮ по BFS", () => {
+    // Сегментный сценарий открывает волну повтора тремя параллельными паузами
+    // (по одной на сегмент). Выбор между ними не косметический: слой описания
+    // вешает на эту ноду пилюлю длительности, и правка через её поповер
+    // переписывает params ИМЕННО её — адрес правки не должен переезжать.
+    const graph = createTemplate("Апсейл", "new", ["sms"]);
+    const waits = graph.nodes.filter((n) => n.data.nodeType === "wait").map((n) => n.id);
+    expect(waits.length).toBeGreaterThan(1);
+
+    const waves = segmentWaves(graph).steps.filter((s) => s.kind === "wave");
+    expect(waves[1].wave.waitBefore?.id).toBe(waits[0]);
+  });
+
   it("повтор сегментированного сценария помечается repeatsPrevious", () => {
     const { steps } = segmentWaves(createTemplate("Удержание", "new", ["sms", "email"]));
     const waves = steps.filter((s) => s.kind === "wave");
