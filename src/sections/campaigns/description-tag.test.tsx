@@ -409,3 +409,40 @@ describe("DescriptionTagPill — поповер доменов (Task 8)", () => 
     expect(screen.queryByText("На проверке")).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 6 — нейтральная пилюля читается как отдельный элемент на карточке
+// (светлый фон, не тон карточки), значение внутри — жирным. Демоция в `none`
+// не имеет права гасить этот цвет — она снимает только интерактив.
+// ---------------------------------------------------------------------------
+describe("вид пилюли", () => {
+  it("нейтральная пилюля — на светлом фоне, значение жирным", () => {
+    render(<DescriptionTagPill tag={{ id: "t", label: "186 255 строк", target: { kind: "none" } }} />);
+    const pill = screen.getByText("186 255 строк");
+    // `font-semibold` сидит на `PILL_BASE` бокса, а не на текстовом
+    // `<span>{tag.label}</span>` — jsdom не применяет реальный CSS, поэтому
+    // css-наследование веса шрифта родителем на дочерний className не
+    // проецируется; проверяем класс там, где он физически объявлен: на
+    // родителе-боксе (`pill.parentElement` — корневой `<span>` ветки `none`,
+    // см. description-tag.tsx), который непосредственно оборачивает значение.
+    const box = pill.parentElement as HTMLElement;
+    expect(box.className).toContain("font-semibold");
+    expect(box.className).toContain("bg-foreground");
+    expect(box.className).not.toContain("bg-card");
+  });
+
+  it("демоция в none не гасит цвет — тот же фон, что у кликабельной", () => {
+    const { container: live } = render(
+      <DescriptionTagPill tag={{ id: "a", label: "разовый", target: { kind: "wizard-step", step: "analysis" } }} />,
+    );
+    const { container: dead } = render(
+      <DescriptionTagPill tag={{ id: "b", label: "разовый", target: { kind: "none", step: "analysis" } }} />,
+    );
+    // Бокс пилюли — узел с pill-геометрией (`rounded-md`): `<button>` у
+    // кликабельной цели, `<span>` у демотированной в `none`. `closest` ищет
+    // ВВЕРХ от корня контейнера, поэтому берём сам корень через querySelector.
+    const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-md']") as HTMLElement).className;
+    expect(cls(dead)).toContain("bg-foreground");
+    expect(cls(live)).toContain("bg-foreground");
+  });
+});

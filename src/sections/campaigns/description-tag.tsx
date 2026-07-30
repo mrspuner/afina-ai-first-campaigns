@@ -27,10 +27,16 @@ import { DomainStatusBadge } from "@/sections/settings/domains-block";
  * (спека Task 5: «этот деталь легче всего сломать»).
  */
 const PILL_BASE =
-  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 align-baseline text-[0.95em]";
+  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 align-baseline text-[0.95em] font-semibold";
 
-/** Нейтральный вид — тот же, что у карточки, без брендового жёлтого. */
-const NEUTRAL_CLASS = "border-border bg-card text-foreground";
+/**
+ * Тег читается как отдельный элемент, а не как часть карточки: светлая
+ * подложка на тёплой тьме. Демоция в `none` (кампания запущена / шага нет в
+ * визарде) остаётся ЭТИМ ЖЕ классом — она снимает интерактив, а не цвет:
+ * серая read-only-пилюля прятала значение ровно там, где его только и можно
+ * прочитать.
+ */
+const NEUTRAL_CLASS = "border-transparent bg-foreground text-background";
 
 interface ResolvedVisual {
   className: string;
