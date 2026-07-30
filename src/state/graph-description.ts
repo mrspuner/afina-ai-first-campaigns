@@ -2,6 +2,7 @@ import { isCommunicationNode, type NodeParams, type WorkflowEdge, type WorkflowN
 import { pluralRu } from "@/lib/plural-ru";
 import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
+import { orderNodes } from "./graph-waves";
 import {
   channelForNodeKind,
   templateOptionsForKind,
@@ -145,32 +146,6 @@ function reachableFrom(seeds: string[], adjacency: Map<string, string[]>): Set<s
     }
   }
   return seen;
-}
-
-/**
- * Ноды в порядке прохода базы: BFS от корней (нод без входящих рёбер) по
- * порядку рёбер. Недостижимые ноды дописываются в исходном порядке — обход не
- * теряет узлы даже на изувеченном вручную графе.
- */
-function orderNodes(graph: DescribableGraph, adjacency: Map<string, string[]>): WorkflowNode[] {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const hasIncoming = new Set(graph.edges.map((e) => e.target));
-  const roots = graph.nodes.filter((n) => !hasIncoming.has(n.id)).map((n) => n.id);
-
-  const ordered: WorkflowNode[] = [];
-  const seen = new Set<string>();
-  const queue = roots.length ? [...roots] : graph.nodes.slice(0, 1).map((n) => n.id);
-
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const node = byId.get(id);
-    if (node) ordered.push(node);
-    queue.push(...(adjacency.get(id) ?? []));
-  }
-  for (const node of graph.nodes) if (!seen.has(node.id)) ordered.push(node);
-  return ordered;
 }
 
 // ── Коммуникации → строка описания ───────────────────────────────────────────
