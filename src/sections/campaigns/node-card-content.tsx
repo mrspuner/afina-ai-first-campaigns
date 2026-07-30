@@ -539,7 +539,7 @@ export function NodeCardBody({ id, data }: NodeCardBodyProps) {
               }
               const paramKey = meta.paramKey;
               // Fix: IVR раньше было единственным combo-полем с превью (глаз у
-              // текущего/каждого варианта, через ivrNodePreviewTemplate) — оно
+              // текущего/каждого варианта, через nodePreviewTemplate) — оно
               // было единственным каналом без библиотечных шаблонов. Теперь у
               // IVR тоже control:"template" (см. ветку выше), поэтому ни один
               // combo-контрол больше не несёт onPreview.
