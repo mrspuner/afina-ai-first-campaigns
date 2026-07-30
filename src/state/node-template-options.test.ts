@@ -3,10 +3,9 @@ import {
   templateOptionsForKind,
   channelForNodeKind,
   templateParamKeyForKind,
-  ivrNodePreviewTemplate,
+  nodePreviewTemplate,
 } from "./node-template-options";
 import { PRESET_TEMPLATES } from "./app-state";
-import type { IvrParams } from "@/types/workflow";
 
 describe("node-template-options", () => {
   it("maps communication node kind → channel", () => {
@@ -45,33 +44,42 @@ describe("node-template-options", () => {
     expect(templateParamKeyForKind("ivr")).toBe("scenario");
     expect(templateParamKeyForKind("wait")).toBeUndefined();
   });
+});
 
-  describe("ivrNodePreviewTemplate", () => {
-    const params: IvrParams = {
-      kind: "ivr",
-      scenario: "Приветствие → перевод на оператора",
-      voiceType: "female",
-    };
-
-    it("wraps the node's ivr params in an ivr-channel MessageTemplate", () => {
-      const tpl = ivrNodePreviewTemplate("comm_ivr", params);
-      expect(tpl.channel).toBe("ivr");
-      expect(tpl.content.kind).toBe("ivr");
-      expect(tpl.content).toMatchObject({
-        kind: "ivr",
-        scenario: params.scenario,
-        voiceType: params.voiceType,
-      });
+describe("nodePreviewTemplate", () => {
+  it("оборачивает params SMS-ноды в шаблон канала sms", () => {
+    const tpl = nodePreviewTemplate("n1", {
+      kind: "sms", text: "Текст", alphaName: "AFINA", scheduledAt: "immediate",
+    })!;
+    expect(tpl.channel).toBe("sms");
+    expect(tpl.content).toEqual({
+      kind: "sms", text: "Текст", alphaName: "AFINA", scheduledAt: "immediate",
     });
+  });
 
-    it("derives a stable, node-scoped id (no library entry required)", () => {
-      expect(ivrNodePreviewTemplate("comm_ivr", params).id).toBe(
-        "ivr_node_preview_comm_ivr",
-      );
-      // Different nodes → different ids, so previews don't collide.
-      expect(ivrNodePreviewTemplate("other", params).id).toBe(
-        "ivr_node_preview_other",
-      );
-    });
+  it("email берёт тему как имя шаблона", () => {
+    const tpl = nodePreviewTemplate("n2", {
+      kind: "email", subject: "Ваше предложение", body: "Тело", sender: "a@b.c",
+    })!;
+    expect(tpl.channel).toBe("email");
+    expect(tpl.name).toBe("Ваше предложение");
+  });
+
+  it("всегда read-only: usedInCampaigns=1 — дровер не даст «Сохранить» в несуществующий id", () => {
+    const tpl = nodePreviewTemplate("n3", {
+      kind: "push", title: "Заголовок", body: "Текст",
+    })!;
+    expect(tpl.usedInCampaigns).toBe(1);
+  });
+
+  it("id стабилен и уникален по ноде", () => {
+    const a = nodePreviewTemplate("n4", { kind: "ivr", scenario: "Возврат", voiceType: "female" })!;
+    const b = nodePreviewTemplate("n5", { kind: "ivr", scenario: "Возврат", voiceType: "female" })!;
+    expect(a.id).not.toBe(b.id);
+    expect(a.id).toBe(nodePreviewTemplate("n4", { kind: "ivr", scenario: "Возврат", voiceType: "female" })!.id);
+  });
+
+  it("не-коммуникационные params не дают шаблона", () => {
+    expect(nodePreviewTemplate("n6", { kind: "wait", mode: "duration", durationHours: 24 })).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import type { Channel } from "@/types/campaign";
-import type { IvrParams, NodeParams, WorkflowNodeType } from "@/types/workflow";
+import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 import type { MessageTemplate } from "./app-state";
 
 /**
@@ -63,32 +63,22 @@ export function templateParamKeyForKind(kind: CommKind): string | undefined {
 }
 
 /**
- * Синтетический `MessageTemplate` для предпросмотра сценария IVR-ноды.
+ * Синтетический `MessageTemplate` из ТЕКУЩИХ params коммуникационной ноды —
+ * предпросмотр, когда шаблон библиотеки не резолвится («не выбран»). Обобщение
+ * снятой `ivrNodePreviewTemplate` на все четыре канала.
  *
- * Было нужно, пока у IVR не было своей библиотеки: поле «Текст» было combo
- * (сценарий/голос жили ВНУТРИ ноды, без записи в библиотеку), и «глаз»
- * предпросмотра оборачивал ТЕКУЩИЕ параметры ноды в шаблон-однодневку, чтобы
- * переиспользовать тот же дровер и `IvrRenderer`, что и sms/email/push.
- *
- * После фикса (IVR получила реальные библиотечные шаблоны и поле «Текст»
- * стало «Шаблон» — тем же control:"template", что у остальных трёх каналов)
- * этот путь в продакшн-коде больше не задействован: «глаз» селекта шаблонов
- * теперь всегда резолвит id из библиотеки, как и у sms/email/push (см.
- * `node-card-content.tsx`, ветка `control === "template"`). Функция оставлена
- * экспортированной и покрытой тестом — небольшая самодостаточная утилита,
- * которую нет смысла удалять по одной лишь догадке, что она больше никогда не
- * понадобится (например, узлу с сценарием вне библиотеки, если такой сценарий
- * снова появится).
+ * `usedInCampaigns: 1` — не факт об использовании, а способ сказать дроверу
+ * «только просмотр»: у синтетического шаблона нет записи в библиотеке, и
+ * «Сохранить» ушло бы в `template_content_updated` с несуществующим id, молча
+ * потеряв правку.
  */
-export function ivrNodePreviewTemplate(
-  nodeId: string,
-  params: IvrParams
-): MessageTemplate {
-  return {
-    id: `ivr_node_preview_${nodeId}`,
-    channel: "ivr",
-    name: "Сценарий звонка",
-    content: { kind: "ivr", scenario: params.scenario, voiceType: params.voiceType },
-    usedInCampaigns: 0,
-  };
+export function nodePreviewTemplate(nodeId: string, params: NodeParams): MessageTemplate | null {
+  const channel = channelForNodeKind(params.kind);
+  if (!channel) return null;
+  const name =
+    params.kind === "email" ? params.subject || "Письмо"
+    : params.kind === "push" ? params.title || "Push"
+    : params.kind === "ivr" ? "Сценарий звонка"
+    : "SMS";
+  return { id: `node_preview_${nodeId}`, channel, name, content: params, usedInCampaigns: 1 };
 }
