@@ -109,11 +109,16 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
 
   it("описывает цепочку текстом по launchGraph", () => {
     renderCampaign(baseCampaign({ id: "cmp_desc_text", channels: ["sms"] }));
-    expect(screen.getByText("Старт.")).toBeInTheDocument();
-    expect(screen.getByText("Первое касание.")).toBeInTheDocument();
-    // Текст SMS-ноды шаблона попадает в описание дословно.
+    // Заголовки этапов больше не строка с точкой — это отдельный <p> с текстом
+    // ИЗ ГРАФА («Скоринг базы» — есть нода скоринга у sourceType:"new») и
+    // номер шага рядом (Task 4/5).
+    expect(screen.getByText("Скоринг базы")).toBeInTheDocument();
+    expect(screen.getByText("Первое касание")).toBeInTheDocument();
+    // Текст SMS-ноды шаблона попадает в описание дословно. Апсейл несёт
+    // повторную волну (Task 5) с той же серией — тот же текст легально
+    // встречается дважды («Первое касание» + «Пауза и повтор»).
     expect(
-      screen.getByText(/Ваше предложение ждёт\. Подробности на сайте\./),
+      screen.getAllByText(/Ваше предложение ждёт\. Подробности на сайте\./)[0],
     ).toBeInTheDocument();
   });
 
@@ -145,7 +150,9 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
       baseCampaign({ id: "cmp_desc_order", channels: ["sms"] }),
     );
     const section = screen.getByText("Сценарий кампании").closest("section")!;
-    const description = screen.getByText("Старт.");
+    // Заголовок первого этапа («Скоринг базы» — новая разметка, Task 4/5)
+    // как якорь текста описания.
+    const description = screen.getByText("Скоринг базы");
     const graph = container.querySelector(".react-flow")!;
 
     expect(section.contains(description)).toBe(true);
@@ -158,8 +165,8 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
 
   it("кампания без коммуникаций не выдумывает касаний", () => {
     renderCampaign(baseCampaign({ id: "cmp_desc_nocomm", channels: [] }));
-    expect(screen.getByText("Старт.")).toBeInTheDocument();
-    expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
+    expect(screen.getByText("Скоринг базы")).toBeInTheDocument();
+    expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
 });
@@ -209,7 +216,10 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     // Поповерные цели (шаблон, пауза) тоже теряют клик после запуска (§2.12,
     // Critical fix round 1) — значение остаётся текстом пилюли, но она
     // больше не button. Раньше пилюля их не гейтила вовсе.
-    expect(screen.getByText("SMS — напоминание")).toBeInTheDocument();
+    // Апсейл несёт повторную волну (Task 5) — та же пилюля названия шаблона
+    // легально встречается дважды (Первое касание + Пауза и повтор), поэтому
+    // getAllByText/[0] вместо единственного getByText.
+    expect(screen.getAllByText("SMS — напоминание")[0]).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "SMS — напоминание" }),
     ).toBeNull();
@@ -223,8 +233,11 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     // черновиков без wizardData — а граф там правится, ровно как разрешал
     // снятый нодо-блок через readOnly={status !== "draft"}.
     renderCampaign({ ...draftCampaign, id: "cmp_facts_seed_draft", wizardData: undefined });
+    // Апсейл несёт повторную волну (Task 5) — пилюля названия шаблона легально
+    // встречается дважды («Первое касание» + «Пауза и повтор»), поэтому берём
+    // первую вместо единственной getByRole.
     expect(
-      screen.getByRole("button", { name: "SMS — напоминание" }),
+      screen.getAllByRole("button", { name: "SMS — напоминание" })[0],
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
     // При этом шаговые теги (нет снапшота — некуда вести) кнопкой не станут:
@@ -235,8 +248,11 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
   it("черновик со снапшотом: база, шаблон и пауза — всё кликабельно", () => {
     renderCampaign(draftCampaign);
     expect(screen.getByRole("button", { name: /строк/ })).toBeInTheDocument();
+    // Апсейл несёт повторную волну (Task 5) — пилюля названия шаблона легально
+    // встречается дважды («Первое касание» + «Пауза и повтор»), поэтому берём
+    // первую вместо единственной getByRole.
     expect(
-      screen.getByRole("button", { name: "SMS — напоминание" }),
+      screen.getAllByRole("button", { name: "SMS — напоминание" })[0],
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2 дня" })).toBeInTheDocument();
   });
@@ -267,7 +283,10 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     // «SMS — напоминание» — резолвнутый шаблон дефолтной sms-ноды (Апсейл),
     // тег target:"template". Без лукапа nodeId→nodeType (Task 5 gap) пилюля
     // падала на нейтральный серый — Task 6 красит её под NODE_STYLES.sms.
-    const pill = screen.getByRole("button", { name: "SMS — напоминание" });
+    // Апсейл несёт повторную волну (Task 5) — та же пилюля легально встречается
+    // дважды («Первое касание» + «Пауза и повтор»); обеим по одному nodeId
+    // sms-типа, поэтому первой из getAllByRole достаточно для проверки цвета.
+    const pill = screen.getAllByRole("button", { name: "SMS — напоминание" })[0];
     expect(pill.className).not.toContain("border-border");
   });
 });
@@ -299,7 +318,10 @@ describe("CampaignScreen — поповер выбора шаблона у те�
     const id = "cmp_template_popover";
     renderCampaign(baseCampaign({ id, channels: ["sms"] }), [smsExtra]);
 
-    fireEvent.click(screen.getByRole("button", { name: "SMS — напоминание" }));
+    // Апсейл несёт повторную волну (Task 5) — та же пилюля легально встречается
+    // дважды («Первое касание» + «Пауза и повтор»); правим именно первую
+    // (touch-1), она же — «единственный пресет-шаблон канала» из комментария выше.
+    fireEvent.click(screen.getAllByRole("button", { name: "SMS — напоминание" })[0]);
     fireEvent.click(await screen.findByText("SMS — акция"));
 
     expect(await screen.findByRole("button", { name: "SMS — акция" })).toBeInTheDocument();

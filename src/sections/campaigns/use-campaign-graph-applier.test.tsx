@@ -308,7 +308,7 @@ describe("useCampaignGraphApplier — CampaignScreen re-renders off the edited c
   it("a card rebuild edit rebuilds the description and resolves the bubble", () => {
     const id = "cmp_screen";
     // Seed the durable cache with the full template so the card's initial
-    // description shows «Первое касание.» + the SMS template text.
+    // description shows «Первое касание» + the SMS template text.
     setCachedGraph(id, templateGraph());
 
     let api: ScreenApi | undefined;
@@ -332,9 +332,13 @@ describe("useCampaignGraphApplier — CampaignScreen re-renders off the edited c
     act(() => api!.dispatch({ type: "campaign_opened", id }));
 
     // Baseline: full template → first-touch stage + SMS text are present.
-    expect(screen.getByText("Первое касание.")).toBeInTheDocument();
+    // Заголовок этапа больше не строка с точкой — отдельный <p> без неё
+    // (Task 4/5 разметка).
+    expect(screen.getByText("Первое касание")).toBeInTheDocument();
+    // Апсейл несёт повторную волну (Task 5) с той же серией — тот же текст
+    // легально встречается дважды («Первое касание» + «Пауза и повтор»).
     expect(
-      screen.getByText(/Ваше предложение ждёт\. Подробности на сайте\./),
+      screen.getAllByText(/Ваше предложение ждёт\. Подробности на сайте\./)[0],
     ).toBeInTheDocument();
 
     // Submit a rebuild to a minimal signal→success graph (no communications).
@@ -358,7 +362,7 @@ describe("useCampaignGraphApplier — CampaignScreen re-renders off the edited c
 
     // Description rebuilt off the new graph: first-touch + SMS text gone, the
     // no-communications outcome copy present instead.
-    expect(screen.queryByText("Первое касание.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Ваше предложение ждёт\. Подробности на сайте\./),
     ).not.toBeInTheDocument();
