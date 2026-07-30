@@ -37,7 +37,13 @@ export interface DescriptionMessage {
   templateTag?: DescriptionTag;
 }
 
-export type DescriptionStageId = "start" | "first-touch" | "check" | "retry" | "outcome";
+/**
+ * Категория этапа — грубее, чем `DescriptionStage.id` (тот остаётся строкой:
+ * следующая задача сможет штамповать составные id для повторяющихся волн).
+ * `"fork"` пока не производится — зарезервирован под развилки следующей
+ * задачей (`graph-waves.ts` уже умеет их находить).
+ */
+export type DescriptionStageKind = "start" | "touch" | "fork" | "check" | "retry" | "outcome";
 
 /**
  * Кусок текста описания. Значения параметров кампании выносятся в теги-пилюли,
@@ -85,11 +91,21 @@ export function segmentsText(segments: DescriptionSegment[]): string {
     .trim();
 }
 
+/** Пункт «подпись — значение» в шапке этапа старта. */
+export interface DescriptionSetting {
+  id: string;
+  label: string;
+  value: DescriptionSegment[];
+}
+
 export interface DescriptionStage {
-  id: DescriptionStageId;
-  /** Жирный подзаголовок этапа, вместе с точкой: «Первое касание.» */
+  id: string;
+  kind: DescriptionStageKind;
+  /** Заголовок БЕЗ точки — номер шага добавляет рендер. */
   heading: string;
   body: DescriptionSegment[];
+  /** Факты кампании списком «подпись — значение» — пока только у старта. */
+  settings?: DescriptionSetting[];
   /** Строки коммуникаций — только у первого касания. */
   messages?: DescriptionMessage[];
 }
@@ -396,26 +412,12 @@ export function describeWorkflow(
 
   const stages: DescriptionStage[] = [];
 
+  // Заголовок этапа читается ИЗ ГРАФА (есть нода скоринга — «Скоринг базы»),
+  // а не из сценария/типа базы, как раньше заголовок «Старт.» был константой.
   const startBody = hasScoring
-    ? "Загруженная база попадает в кампанию и проходит скоринг: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
+    ? "Загруженная база проходит скоринг: остаются те, кто проявляет намерение, с разбивкой по уровням склонности."
     : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
 
-  // Сценарий (личность кампании) читается первым из фактов — прежде чем
-  // читатель встретит детали, которые он иначе не может контекстуализировать
-  // (review round 1, Finding 2).
-  const scenarioSegments: DescriptionSegment[] = facts?.scenarioName !== undefined
-    ? [
-        t(" Сценарий — "),
-        stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps),
-        t("."),
-      ]
-    : [];
-
-  // База и триггеры — ОДНО предложение, а не два: «В работу идёт база на N
-  // строк по триггерам X, Y и ещё Z» (review round 1, Finding 2). Единственное
-  // / множественное число «по триггеру»/«по триггерам» зависит от того, один
-  // триггер или несколько — раньше было захардкожено в множественном числе
-  // (Finding 1: «Работает по триггерам Ипотека» на одном триггере — баг).
   const triggersList = facts?.triggers ?? [];
   const hasBase = facts?.baseRows !== undefined;
   const hasTriggers = triggersList.length > 0;
@@ -445,59 +447,72 @@ export function describeWorkflow(
     return segs;
   };
 
-  const baseTriggerSegments: DescriptionSegment[] = [];
-  if (hasBase || hasTriggers) {
-    const triggerWord = triggersList.length === 1 ? " по триггеру " : " по триггерам ";
-    if (hasBase) {
-      baseTriggerSegments.push(
-        t(" В работу идёт база на "),
+  // Факты кампании — раньше вплетались инлайн в одно длинное предложение
+  // старта, теперь каждый факт — свой пункт «подпись — значение» (Task 4).
+  // Порядок фиксирован: База, Сценарий, Триггеры, Режим, Бюджет. Id тегов
+  // внутри значений не меняются — на них ссылаются существующие клики/тесты.
+  const settings: DescriptionSetting[] = [];
+
+  if (hasBase) {
+    settings.push({
+      id: "start-base",
+      label: "База",
+      value: [
         stepTag(
           "start-base",
           `${facts!.baseRows!.toLocaleString("ru-RU")} строк`,
           "file",
           editableSteps,
         ),
-      );
-      if (hasTriggers) baseTriggerSegments.push(t(triggerWord), ...triggerTagList());
-      baseTriggerSegments.push(t("."));
-    } else {
-      // Триггеры без известного числа строк — своя формулировка (нет «базы,
-      // на которую» ссылаться).
-      baseTriggerSegments.push(t(` Отбор идёт${triggerWord}`), ...triggerTagList(), t("."));
-    }
+      ],
+    });
+  }
+
+  if (facts?.scenarioName !== undefined) {
+    settings.push({
+      id: "start-scenario",
+      label: "Сценарий",
+      value: [stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps)],
+    });
+  }
+
+  if (hasTriggers) {
+    settings.push({ id: "start-triggers", label: "Триггеры", value: triggerTagList() });
   }
 
   // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
-  // не приходит вовсе, и тег не появляется.
-  const modeSegments: DescriptionSegment[] = facts?.analysisMode !== undefined
-    ? [
-        t(" Режим анализа — "),
+  // не приходит вовсе, и пункт не появляется.
+  if (facts?.analysisMode !== undefined) {
+    settings.push({
+      id: "start-mode",
+      label: "Режим",
+      value: [
         stepTag(
           "start-mode",
           facts.analysisMode === "once" ? "разовый" : "потоковый",
           "analysis",
           editableSteps,
         ),
-        t("."),
-      ]
-    : [];
+      ],
+    });
+  }
 
   // Бюджет переехал сюда из «Итога» (review round 1, Finding 2) — там он был
-  // спайкой на конце предложения о конверсии, к которой отношения не имеет;
-  // здесь он читается как факт запуска, наравне с базой и режимом. Id
-  // `outcome-budget` СТАРШЕ переезда и оставлен как есть — Task 5/6 может
-  // ссылаться на него по имени.
-  const budgetSegments: DescriptionSegment[] = facts?.budget !== undefined
-    ? [
-        t(" На кампанию заложено "),
-        stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps),
-        t("."),
-      ]
-    : [];
+  // спайкой на конце предложения о конверсии, к которой отношения не имеет.
+  // Id `outcome-budget` СТАРШЕ переезда и оставлен как есть по историческим
+  // причинам — на него ссылаются существующие тесты/клики.
+  if (facts?.budget !== undefined) {
+    settings.push({
+      id: "start-budget",
+      label: "Бюджет",
+      value: [stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps)],
+    });
+  }
 
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
   // есть pending-домены — граф + статусы решают, LLM тут ни при чём. Домены —
-  // тег с целью на поповер модерации, а не сырой текст. Остаётся последней.
+  // тег с целью на поповер модерации, а не сырой текст. Остаётся предложением
+  // ТЕЛА (не пунктом списка) — это судьба, а не настройка кампании.
   const pendingDomains = facts?.pending ?? [];
   const domainSegments: DescriptionSegment[] = pendingDomains.length
     ? [
@@ -516,15 +531,10 @@ export function describeWorkflow(
 
   stages.push({
     id: "start",
-    heading: "Старт.",
-    body: mergeTextSegments([
-      t(startBody),
-      ...scenarioSegments,
-      ...baseTriggerSegments,
-      ...modeSegments,
-      ...budgetSegments,
-      ...domainSegments,
-    ]),
+    kind: "start",
+    heading: hasScoring ? "Скоринг базы" : "Загрузка базы",
+    body: mergeTextSegments([t(startBody), ...domainSegments]),
+    ...(settings.length ? { settings } : {}),
   });
 
   if (messages.length) {
@@ -551,7 +561,8 @@ export function describeWorkflow(
       : [t(nextSentence)];
     stages.push({
       id: "first-touch",
-      heading: "Первое касание.",
+      kind: "touch",
+      heading: "Первое касание",
       body: mergeTextSegments(touchBody),
       messages,
     });
@@ -560,7 +571,8 @@ export function describeWorkflow(
   if (messages.length && hasCheck) {
     stages.push({
       id: "check",
-      heading: "Проверка реакции.",
+      kind: "check",
+      heading: "Проверка реакции",
       body: [
         t(
           multiChannel
@@ -578,7 +590,8 @@ export function describeWorkflow(
       : " и повторяет то же сообщение.";
     stages.push({
       id: "retry",
-      heading: "Пауза и повтор.",
+      kind: "retry",
+      heading: "Пауза и повтор",
       // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
       // правится (§2.12: после запуска — та же демоция в `none`, что и у
       // шаблона, с тем же переносом nodeId ради иконки — fix round 2,
@@ -607,7 +620,8 @@ export function describeWorkflow(
   // бюджет переехал в «Старт», сюда его больше не сплавляем).
   stages.push({
     id: "outcome",
-    heading: "Итог.",
+    kind: "outcome",
+    heading: "Итог",
     body: [
       t(
         !messages.length

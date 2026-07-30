@@ -13,11 +13,13 @@ const t = (text: string) => [{ kind: "text" as const, text }];
 const STAGES: DescriptionStage[] = [
   {
     id: "start",
+    kind: "start",
     heading: "Старт.",
     body: t("Загруженная база попадает в кампанию и проходит скоринг."),
   },
   {
     id: "first-touch",
+    kind: "touch",
     heading: "Первое касание.",
     body: t("Аудитория делится на потоки, и каждому уходит своё сообщение:"),
     messages: [
@@ -33,7 +35,7 @@ const STAGES: DescriptionStage[] = [
       },
     ],
   },
-  { id: "outcome", heading: "Итог.", body: t("Остальные завершают путь без конверсии.") },
+  { id: "outcome", kind: "outcome", heading: "Итог.", body: t("Остальные завершают путь без конверсии.") },
 ];
 
 describe("WorkflowDescription", () => {
@@ -95,6 +97,7 @@ describe("WorkflowDescription", () => {
       const stages: DescriptionStage[] = [
         {
           id: "start",
+          kind: "start",
           heading: "Старт.",
           body: [
             { kind: "text", text: "Домены " },
@@ -176,6 +179,7 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
   const stagesWithTemplateTag: DescriptionStage[] = [
     {
       id: "first-touch",
+      kind: "touch",
       heading: "Первое касание.",
       body: t("Первое сообщение:"),
       messages: [
@@ -216,6 +220,7 @@ describe("WorkflowDescription — nodeTypes для пилюль template/node-fi
     const demoted: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [
@@ -251,6 +256,7 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [
@@ -280,6 +286,7 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [
@@ -310,6 +317,7 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [
@@ -340,6 +348,7 @@ describe("WorkflowDescription — пилюля шаблона рендеритс
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [
@@ -366,6 +375,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     const stages: DescriptionStage[] = [
       {
         id: "start",
+        kind: "start",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Сценарий — " },
@@ -383,6 +393,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: [
           { kind: "tag", tag: { id: "trig", label: "Ипотека", target: { kind: "none" } } },
@@ -401,6 +412,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     const stages: DescriptionStage[] = [
       {
         id: "start",
+        kind: "start",
         heading: "Старт.",
         body: [
           { kind: "tag", tag: { id: "scenario", label: "Апсейл", target: { kind: "none" } } },
@@ -419,6 +431,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     const stages: DescriptionStage[] = [
       {
         id: "start",
+        kind: "start",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Слово" },
@@ -439,6 +452,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
     const stages: DescriptionStage[] = [
       {
         id: "first-touch",
+        kind: "touch",
         heading: "Первое касание.",
         body: t("Первое сообщение:"),
         messages: [

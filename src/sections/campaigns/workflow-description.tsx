@@ -2,7 +2,6 @@ import type {
   DescriptionMessage,
   DescriptionSegment,
   DescriptionStage,
-  DescriptionStageId,
   DescriptionTag,
 } from "@/state/graph-description";
 import { DescriptionTagPill } from "./description-tag";
@@ -119,7 +118,7 @@ interface WorkflowDescriptionProps {
    * Ключ — id этапа, поэтому механизм не завязан на конкретный этап и
    * переиспользуется для любого следующего.
    */
-  stageSlots?: Partial<Record<DescriptionStageId, React.ReactNode>>;
+  stageSlots?: Partial<Record<string, React.ReactNode>>;
   /** Клик по кликабельной пилюле (target ≠ `none`) — поднимается наверх, к
    *  экрану кампании, который знает, куда вести (шаг визарда/поповер). */
   onTagActivate?: (tag: DescriptionTag) => void;
