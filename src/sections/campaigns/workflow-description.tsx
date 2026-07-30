@@ -152,8 +152,13 @@ export function WorkflowDescription({
       <ol className="flex flex-col gap-5 text-sm leading-[1.75] text-foreground">
         {stages.map((stage, i) => (
           <li key={stage.id} className="flex gap-3">
+            {/* aria-hidden: номер — декоративный, `<ol>` уже несёт списочную
+                семантику (порядковый номер даёт сам браузер/скринридер);
+                Preflight снимает только визуальный маркер, а не роль списка,
+                поэтому без aria-hidden номер озвучивался бы дважды. */}
             <span
               data-testid="stage-number"
+              aria-hidden
               className="w-4 shrink-0 pt-px text-right text-xs font-medium tabular-nums text-muted-foreground"
             >
               {i + 1}

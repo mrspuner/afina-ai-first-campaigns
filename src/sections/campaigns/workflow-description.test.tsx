@@ -185,18 +185,45 @@ describe("нумерованный таймлайн", () => {
     expect(numbers).toEqual(["1", "2", "3"]);
   });
 
+  // Ревью (fix round): исходный вариант теста проверял лишь наличие текста
+  // заголовка и текста тела ГДЕ-ТО в документе — это проходило и на СТАРОЙ
+  // run-in разметке (`<p><strong>{heading}</strong> {body}</p>`), потому что
+  // там заголовок и тело и так были разными текстовыми узлами (`<strong>` и
+  // соседний `<span>`). Тест не отличал run-in от блочной структуры — ровно
+  // то, ради чего он написан. Теперь утверждаем БЛОЧНУЮ структуру: заголовок
+  // — СВОЙ `<p>` (а не `<strong>` внутри чужого), и тело живёт в СЛЕДУЮЩЕМ
+  // соседнем `<p>` — не в том же узле, что заголовок.
   it("заголовок шага — на своей строке, а не вклеен в абзац", () => {
     render(<WorkflowDescription stages={STAGES} />);
     const heading = screen.getByText("Скоринг базы");
-    expect(heading.textContent).toBe("Скоринг базы");
-    expect(screen.getByText("Загруженная база проходит скоринг.")).toBeTruthy();
+    const headingParagraph = heading.closest("p");
+    // textContent строго равен заголовку — если бы тело было приклеено в тот
+    // же <p> (run-in), здесь оказался бы ещё и текст тела.
+    expect(headingParagraph?.tagName).toBe("P");
+    expect(headingParagraph?.textContent).toBe("Скоринг базы");
+
+    const bodyParagraph = headingParagraph?.nextElementSibling;
+    expect(bodyParagraph?.tagName).toBe("P");
+    expect(bodyParagraph?.textContent).toBe("Загруженная база проходит скоринг.");
   });
 
+  // Ревью (fix round): исходный вариант проверял лишь присутствие подписи и
+  // значения ГДЕ-ТО в документе — прошёл бы, даже если бы подписи и значения
+  // разъехались по разным, рассогласованным строкам. Утверждаем ИМЕННО пару:
+  // значение лежит в <dd>, парном тому <dt>, где стоит подпись, — через общий
+  // родительский <div> строки (см. разметку `stage.settings.map` в
+  // workflow-description.tsx).
   it("показывает настройки старта парами «подпись — значение»", () => {
-    render(<WorkflowDescription stages={STAGES} />);
-    expect(screen.getByText("База")).toBeTruthy();
-    expect(screen.getByText("186 255 строк")).toBeTruthy();
-    expect(screen.getByText("Режим")).toBeTruthy();
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    const list = container.querySelector("[data-testid='stage-settings']");
+    const pairs = [...(list?.children ?? [])].map((row) => ({
+      label: row.querySelector("dt")?.textContent,
+      value: row.querySelector("dd")?.textContent,
+    }));
+    expect(pairs).toEqual([
+      { label: "База", value: "186 255 строк" },
+      { label: "Режим", value: "разовый" },
+    ]);
   });
 
   it("шаг без настроек не рендерит пустой список", () => {
