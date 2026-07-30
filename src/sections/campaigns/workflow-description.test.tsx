@@ -346,6 +346,28 @@ describe("таблица коммуникаций", () => {
     expect(ths.every((th) => th.getAttribute("scope") === "col")).toBe(true);
   });
 
+  // Вторая половина того же зафиксированного решения (первая — в
+  // graph-description.test.ts): описание строку ОТДАЁТ, а таблица её РИСУЕТ —
+  // с пустой ячейкой контента, но с каналом и кнопкой предпросмотра.
+  it("строка с пустым контентом рисуется, а не пропускается таблицей", () => {
+    const stage: DescriptionStage = {
+      id: "touch-1",
+      kind: "touch",
+      heading: "Первое касание",
+      body: t("Каждому контакту уходит первое сообщение:"),
+      groups: [{ id: "g1", rows: [{ nodeId: "n-empty", channel: "SMS", contentText: "" }] }],
+    };
+    const nodeParams = new Map<string, NodeParams>([
+      ["n-empty", { kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" }],
+    ]);
+    const { container } = wrap(
+      <WorkflowDescription stages={[stage]} nodeParams={nodeParams} />,
+    );
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(screen.getByText("SMS")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /предпросмотр/i })).toBeInTheDocument();
+  });
+
   it("глиф ◈ скрыт от скринридера — озвучивается только название ветки", () => {
     const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     const label = container.querySelector("[data-testid='group-label']")!;
