@@ -6,11 +6,25 @@ import {
   type DescriptionSegment,
   type DescribableGraph,
 } from "./graph-description";
-import { createTemplate } from "./workflow-templates";
+import { createTemplate, TEMPLATE_BY_TYPE } from "./workflow-templates";
 import { PRESET_TEMPLATES } from "./app-state";
-import type { NodeParams } from "@/types/workflow";
+import type { NodeParams, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "@/types/workflow";
 
 const T = PRESET_TEMPLATES;
+
+/** Нода рукотворного графа — описанию нужны только id, nodeType и params. */
+function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): WorkflowNode {
+  return {
+    id,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: { label: id, nodeType, ...(params ? { params } : {}) },
+  };
+}
+
+function edge(source: string, target: string, label?: string): WorkflowEdge {
+  return { id: `${source}-${target}`, source, target, ...(label ? { label } : {}) };
+}
 
 /** Однонодовый граф для точечных тестов на резолв шаблона коммуникации — без
  *  scoring/wait, которые describeWorkflow не требует для строки «Первого
@@ -134,52 +148,171 @@ describe("describeWorkflow", () => {
     });
   });
 
-  describe("Первое касание", () => {
-    it("даёт по одной строке на канал: имя шаблона + текст из params", () => {
-      const stages = describeWorkflow(
-        createTemplate("Возврат", "new", ["sms", "email"]),
-        T,
-      );
+  describe("Касания", () => {
+    it("первая волна — таблица строк с каналом, контентом и id шаблона", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms", "email"]), T);
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(touch.heading).toBe("Первое касание");
-      expect(touch.messages).toHaveLength(2);
-
-      const sms = touch.messages!.find((m) => m.channel === "SMS")!;
-      expect(sms.templateName).toBe("SMS — напоминание");
-      expect(sms.text).toBe("Ваше предложение ждёт. Подробности на сайте.");
-
-      // Fix: письмо теперь ТОЖЕ засеяно текстом реального пресета справочника
-      // (раньше — «Мы подготовили для вас персональное предложение.», которого
-      // нет ни в одном письме `email-directory.ts` → шаблон никогда не
-      // резолвился, и пилюля просто не рисовалась — баг, который чинит этот
-      // тред). Email резолвится наравне с SMS/Push.
-      const email = touch.messages!.find((m) => m.channel === "Email")!;
-      expect(email.templateName).toBe("Персональный оффер");
-      expect(email.subject).toBeUndefined();
-      expect(email.text).toContain("персональное предложение");
+      expect(touch.groups).toHaveLength(1);
+      const rows = touch.groups![0].rows;
+      expect(rows.map((r) => r.channel).sort()).toEqual(["Email", "SMS"]);
+      const sms = rows.find((r) => r.channel === "SMS")!;
+      expect(sms.contentText).toBe("Ваше предложение ждёт. Подробности на сайте.");
+      expect(sms.previewTemplateId).toBe("tpl_sms_reminder");
     });
 
-    it("упоминает деление на потоки, когда в графе есть сплиттер", () => {
-      const stages = describeWorkflow(
-        createTemplate("Возврат", "new", ["sms", "email"]),
-        T,
-      );
-      expect(segmentsText(stages.find((s) => s.kind === "touch")!.body)).toContain("потоки");
+    it("email кладёт в контент ТЕМУ, а не тело письма", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["email"]), T);
+      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+      expect(row.channel).toBe("Email");
+      expect(row.contentText).not.toContain("<");
+      expect(row.contentTitle).toBeUndefined();
     });
 
-    it("для одного канала не выдумывает деление на потоки", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      expect(
-        segmentsText(stages.find((s) => s.kind === "touch")!.body),
-      ).not.toContain("потоки");
+    it("push кладёт заголовок отдельной строкой ячейки", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["push"]), T);
+      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+      expect(row.contentTitle).toBe("Давно вас не видели");
+      expect(row.contentText).toBe("Загляните — у нас есть кое-что для вас.");
+    });
+
+    it("нерезолвнутый шаблон даёт пилюлю «не выбран» и предпросмотр без id", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), [], {
+        pending: [], editableSteps: [], graphEditable: true,
+      });
+      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+      expect(row.templateTag!.label).toBe("не выбран");
+      expect(row.previewTemplateId).toBeUndefined();
     });
 
     it("схлопывает одинаковые касания параллельных сегментов в одну строку на канал", () => {
       // Апсейл — сегментированный шаблон: три comm-юнита с одинаковыми params.
+      // Одинаковые потоки — не потоки: развилки нет, есть обычное касание.
       const stages = describeWorkflow(createTemplate("Апсейл", "new", ["sms"]), T);
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(touch.messages).toHaveLength(1);
-      expect(touch.messages![0].channel).toBe("SMS");
+      expect(touch.groups).toHaveLength(1);
+      expect(touch.groups![0].rows).toHaveLength(1);
+      expect(touch.groups![0].rows[0].channel).toBe("SMS");
+    });
+
+    it("идентичный повтор — этап «Пауза и повтор» с той же таблицей и ссылкой на оригинал", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
+        pending: [], editableSteps: [], graphEditable: true,
+      });
+      const retry = stages.find((s) => s.kind === "retry")!;
+      expect(retry.heading).toBe("Пауза и повтор");
+      expect(retry.sameAsHeading).toBe("Первое касание");
+      const first = stages.find((s) => s.kind === "touch")!;
+      expect(retry.groups![0].rows.map((r) => r.contentText))
+        .toEqual(first.groups![0].rows.map((r) => r.contentText));
+      expect(segmentsText(retry.body)).toContain("повторяет ту же серию");
+    });
+
+    it("«Пауза и повтор» берёт длительность из WaitParams", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
+      const retry = stages.find((s) => s.kind === "retry")!;
+      expect(segmentsText(retry.body)).toContain("2 дня"); // durationHours: 48
+    });
+
+    it("«Проверка реакции» появляется один раз, даже когда условий в графе два", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
+      expect(stages.filter((s) => s.kind === "check")).toHaveLength(1);
+    });
+
+    it("«Проверка реакции» описывает уход отреагировавших в успех", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(check.heading).toBe("Проверка реакции");
+      expect(segmentsText(check.body)).toContain("успех");
+    });
+
+    it("волны нумеруются словами до четвёртой, дальше — «Касание N»", () => {
+      // Цепочка из пяти РАЗНЫХ касаний через паузы: ни одна волна не повтор,
+      // поэтому все пять тратят порядковый номер.
+      const texts = ["Первое", "Второе", "Третье", "Четвёртое", "Пятое"];
+      const nodes: WorkflowNode[] = [node("signal", "source")];
+      const edges: WorkflowEdge[] = [];
+      let previous = "signal";
+      texts.forEach((text, i) => {
+        const wait = `wait${i}`;
+        const sms = `sms${i}`;
+        nodes.push(
+          node(wait, "wait", { kind: "wait", mode: "duration", durationHours: 24 }),
+          node(sms, "sms", { kind: "sms", text, alphaName: "BRAND", scheduledAt: "immediate" }),
+        );
+        edges.push(edge(previous, wait), edge(wait, sms));
+        previous = sms;
+      });
+
+      const headings = describeWorkflow({ nodes, edges }, T)
+        .filter((s) => s.kind === "touch")
+        .map((s) => s.heading);
+      expect(headings).toEqual([
+        "Первое касание", "Повторное касание", "Третье касание", "Четвёртое касание", "Касание 5",
+      ]);
+    });
+
+    it("нет коммуникаций — нет касаний, «Итог» про готовый сегмент", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
+      expect(stages.some((s) => s.kind === "touch")).toBe(false);
+      expect(segmentsText(stages.find((s) => s.kind === "outcome")!.body))
+        .toContain("Исходящих коммуникаций нет");
+    });
+  });
+
+  describe("Ветки и потоки", () => {
+    it("сегментный split даёт этап-развилку с ◈-группами по меткам", () => {
+      const stages = describeWorkflow(TEMPLATE_BY_TYPE["Удержание"](), T);
+      const fork = stages.find((s) => s.kind === "fork")!;
+      expect(fork.heading).toBe("Деление на потоки");
+      expect(fork.groups!.map((g) => g.label)).toEqual([
+        "Высокая склонность", "Средняя склонность", "Низкая склонность",
+      ]);
+      expect(segmentsText(fork.body)).toContain("делится на 3 потока");
+    });
+
+    it("condition с разными сообщениями в ветках — «Развилка по реакции» с подписями «сделал/не сделал»", () => {
+      // Ни один шаблон репозитория такой формы не даёт — граф собран руками.
+      const graph = {
+        nodes: [
+          node("signal", "source"),
+          node("first", "email", {
+            kind: "email", subject: "Первое письмо", body: "Знакомство",
+            sender: "care@brand.com",
+          }),
+          node("react", "condition", { kind: "condition", trigger: "opened" }),
+          node("offer", "email", {
+            kind: "email", subject: "Оффер −10%", body: "Скидка тем, кто открыл",
+            sender: "promo@brand.com",
+          }),
+          node("nudge", "sms", {
+            kind: "sms", text: "Короткое напоминание", alphaName: "BRAND",
+            scheduledAt: "immediate",
+          }),
+        ],
+        edges: [
+          edge("signal", "first"),
+          edge("first", "react"),
+          edge("react", "offer", "ДА"),
+          edge("react", "nudge", "НЕТ"),
+        ],
+      };
+
+      const fork = describeWorkflow(graph, T).find((s) => s.kind === "fork")!;
+      expect(fork.heading).toBe("Развилка по реакции");
+      expect(fork.groups!.map((g) => g.label)).toEqual(["Открыл письмо", "Не открыл письмо"]);
+      expect(fork.groups!.map((g) => g.rows.map((r) => r.contentText))).toEqual([
+        ["Оффер −10%"], ["Короткое напоминание"],
+      ]);
+      expect(segmentsText(fork.body)).toContain("расходится по условию открыл письмо?");
+    });
+
+    it("одинаковые по содержанию потоки развилкой не становятся — это обычное касание", () => {
+      const stages = describeWorkflow(createTemplate("Удержание", "new", ["sms", "email"]), T);
+      expect(stages.some((s) => s.kind === "fork")).toBe(false);
+      const touch = stages.find((s) => s.kind === "touch")!;
+      expect(touch.groups).toHaveLength(1);
+      expect(touch.groups![0].label).toBeUndefined();
     });
   });
 
@@ -204,14 +337,14 @@ describe("describeWorkflow", () => {
       );
     });
 
-    it("со сплитом: та же вводная фраза, второе предложение — прежняя формулировка деления на потоки", () => {
+    it("несколько сообщений в волне: та же вводная фраза, второе предложение — про своё сообщение каждому потоку", () => {
       const stages = describeWorkflow(graphSplit, T, {
         pending: [],
         channels: ["sms", "email"],
       });
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(segmentsText(touch.body)).toBe(
-        "Выбрано 2 канала: SMS, Email. Аудитория делится на потоки, и каждому уходит своё сообщение:",
+        "Выбрано 2 канала: SMS, Email. Каждому потоку — своё сообщение:",
       );
     });
 
@@ -267,26 +400,13 @@ describe("describeWorkflow", () => {
     });
   });
 
-  describe("Проверка реакции и повтор", () => {
-    it("описывает проверку после первого касания", () => {
+  describe("Первое касание не втягивает повторный блок", () => {
+    it("ноды повтора уходят в свою волну, а не в таблицу первого касания", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      const check = stages.find((s) => s.kind === "check")!;
-      expect(check.heading).toBe("Проверка реакции");
-      expect(segmentsText(check.body)).toContain("успех");
-    });
-
-    it("берёт длительность паузы из WaitParams и не цитирует тексты повторно", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(retry.heading).toBe("Пауза и повтор");
-      expect(segmentsText(retry.body)).toContain("2 дня"); // durationHours: 48
-      expect(retry.messages).toBeUndefined();
-    });
-
-    it("не цитирует тексты повторного блока в первом касании", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      // Повторный блок несёт те же две ноды; в описании ровно одна строка.
-      expect(stages.find((s) => s.kind === "touch")!.messages).toHaveLength(1);
+      // Повторный блок несёт ту же ноду; в таблице первого касания ровно одна
+      // строка, а повтор — отдельный этап.
+      expect(stages.find((s) => s.kind === "touch")!.groups![0].rows).toHaveLength(1);
+      expect(stages.find((s) => s.kind === "retry")!.groups![0].rows).toHaveLength(1);
     });
   });
 
@@ -354,7 +474,7 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
       expect(stages.map((s) => s.id)).toEqual(["start", "outcome"]);
       expect(segmentsText(stages[1].body)).toContain("готовый сегмент");
-      expect(stages.some((s) => s.messages?.length)).toBe(false);
+      expect(stages.some((s) => s.groups?.length)).toBe(false);
     });
   });
 
@@ -366,9 +486,9 @@ describe("describeWorkflow", () => {
       );
       expect(stages.map((s) => s.id)).toEqual([
         "start",
-        "first-touch",
-        "check",
-        "retry",
+        "touch-1",
+        "check-1",
+        "retry-1",
         "outcome",
       ]);
     });
@@ -399,7 +519,8 @@ describe("describeWorkflow — теги", () => {
    *
    * Task 4: факты кампании (база, сценарий, триггеры, режим, бюджет) переехали
    * из `body` в `settings` — их теги живут внутри `setting.value`, поэтому
-   * список без него не заметил бы половину тегов.
+   * список без него не заметил бы половину тегов. Task 5: строки коммуникаций
+   * переехали из `messages` в `groups[].rows`.
    */
   const allTags = (stages: ReturnType<typeof describeWorkflow>) =>
     stages.flatMap((s) => [
@@ -407,7 +528,9 @@ describe("describeWorkflow — теги", () => {
       ...(s.settings ?? []).flatMap((setting) =>
         setting.value.filter((seg) => seg.kind === "tag").map((seg) => seg.tag),
       ),
-      ...(s.messages ?? []).flatMap((m) => (m.templateTag ? [m.templateTag] : [])),
+      ...(s.groups ?? []).flatMap((g) =>
+        g.rows.flatMap((row) => (row.templateTag ? [row.templateTag] : [])),
+      ),
     ]);
 
   /**
@@ -535,8 +658,8 @@ describe("describeWorkflow — теги", () => {
 
   it("название шаблона становится тегом с целью на свою ноду", () => {
     const stages = describeWorkflow(graph, templates, facts);
-    const message = stages.find((s) => s.kind === "touch")?.messages?.[0];
-    expect(message?.templateTag?.target.kind).toBe("template");
+    const row = stages.find((s) => s.kind === "touch")?.groups?.[0].rows[0];
+    expect(row?.templateTag?.target.kind).toBe("template");
   });
 
   it("пауза несёт тег с целью node-fields на ноду ожидания", () => {
@@ -552,8 +675,8 @@ describe("describeWorkflow — теги", () => {
     expect(tags.some((t) => t.target.kind === "template")).toBe(false);
     expect(tags.some((t) => t.target.kind === "node-fields")).toBe(false);
     // Значения остаются — это носители данных, а не только аффорданс клика.
-    const message = stages.find((s) => s.kind === "touch")?.messages?.[0];
-    expect(message?.templateTag?.label).toBeTruthy();
+    const row = stages.find((s) => s.kind === "touch")?.groups?.[0].rows[0];
+    expect(row?.templateTag?.label).toBeTruthy();
     expect(tags.some((t) => /дн|час/.test(t.label))).toBe(true);
   });
 
@@ -582,6 +705,10 @@ describe("describeWorkflow — теги", () => {
 describe("describeWorkflow — пилюля шаблона рендерится ВСЕГДА (баг: аффорданс «сменить шаблон» пропадал, если текущий текст ноды случайно не совпал с пресетом библиотеки)", () => {
   const editableFacts: CampaignFacts = { pending: [], graphEditable: true };
 
+  /** Единственная строка единственной группы единственного касания. */
+  const onlyRow = (stages: ReturnType<typeof describeWorkflow>) =>
+    stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+
   it("email с телом, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран» — и не теряет тему", () => {
     const graph = commGraph({
       kind: "email",
@@ -589,13 +716,12 @@ describe("describeWorkflow — пилюля шаблона рендерится 
       body: "Совершенно нестандартный текст письма, которого нет в справочнике.",
       sender: "noreply@brand.com",
     });
-    const stages = describeWorkflow(graph, T, editableFacts);
-    const message = stages.find((s) => s.kind === "touch")!.messages![0];
-    expect(message.templateName).toBeUndefined();
-    expect(message.subject).toBe("Индивидуальная тема");
-    expect(message.templateTag).toBeDefined();
-    expect(message.templateTag!.label).toBe("не выбран");
-    expect(message.templateTag!.target).toEqual({ kind: "template", nodeId: "n1" });
+    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
+    expect(row.previewTemplateId).toBeUndefined();
+    expect(row.contentText).toBe("Индивидуальная тема");
+    expect(row.templateTag).toBeDefined();
+    expect(row.templateTag!.label).toBe("не выбран");
+    expect(row.templateTag!.target).toEqual({ kind: "template", nodeId: "n1" });
   });
 
   it("ivr со сценарием, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран»", () => {
@@ -604,27 +730,25 @@ describe("describeWorkflow — пилюля шаблона рендерится 
       scenario: "Совершенно свой сценарий звонка вне библиотеки.",
       voiceType: "neutral",
     });
-    const stages = describeWorkflow(graph, T, editableFacts);
-    const message = stages.find((s) => s.kind === "touch")!.messages![0];
-    expect(message.templateName).toBeUndefined();
-    expect(message.templateTag?.label).toBe("не выбран");
-    expect(message.templateTag?.target).toEqual({ kind: "template", nodeId: "n1" });
+    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
+    expect(row.previewTemplateId).toBeUndefined();
+    expect(row.templateTag?.label).toBe("не выбран");
+    expect(row.templateTag?.target).toEqual({ kind: "template", nodeId: "n1" });
   });
 
-  it("резолвнутый шаблон по-прежнему несёт своё имя пилюлей — регресс не тронут", () => {
+  it("резолвнутый шаблон по-прежнему несёт своё имя пилюлей и id для предпросмотра", () => {
     const smsTemplate = T.find((tpl) => tpl.id === "tpl_sms_reminder")!;
     const graph = commGraph(smsTemplate.content);
-    const stages = describeWorkflow(graph, T, editableFacts);
-    const message = stages.find((s) => s.kind === "touch")!.messages![0];
-    expect(message.templateTag?.label).toBe("SMS — напоминание");
+    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
+    expect(row.templateTag?.label).toBe("SMS — напоминание");
+    expect(row.previewTemplateId).toBe("tpl_sms_reminder");
   });
 
   it("graphEditable=false демотирует нерезолвнутый тег в носитель значения (§2.12) — «не выбран» остаётся видимым, но не кликабельным", () => {
     const graph = commGraph({ kind: "ivr", scenario: "Свой сценарий.", voiceType: "neutral" });
-    const stages = describeWorkflow(graph, T, { pending: [], graphEditable: false });
-    const message = stages.find((s) => s.kind === "touch")!.messages![0];
-    expect(message.templateTag?.target.kind).toBe("none");
-    expect(message.templateTag?.label).toBe("не выбран");
+    const row = onlyRow(describeWorkflow(graph, T, { pending: [], graphEditable: false }));
+    expect(row.templateTag?.target.kind).toBe("none");
+    expect(row.templateTag?.label).toBe("не выбран");
   });
 
   it("без фактов (withTags=false) шаблон-тег по-прежнему не создаётся — обратная совместимость Task 3", () => {
@@ -633,8 +757,12 @@ describe("describeWorkflow — пилюля шаблона рендерится 
       scenario: "Свой сценарий вне библиотеки.",
       voiceType: "neutral",
     });
-    const stages = describeWorkflow(graph, T);
-    const message = stages.find((s) => s.kind === "touch")!.messages![0];
-    expect(message.templateTag).toBeUndefined();
+    const row = onlyRow(describeWorkflow(graph, T));
+    expect(row.templateTag).toBeUndefined();
+  });
+
+  it("строка знает свою ноду — по ней рендер адресует предпросмотр", () => {
+    const graph = commGraph({ kind: "sms", text: "Текст.", alphaName: "BRAND", scheduledAt: "immediate" });
+    expect(onlyRow(describeWorkflow(graph, T, editableFacts)).nodeId).toBe("n1");
   });
 });

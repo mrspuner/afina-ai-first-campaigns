@@ -1,5 +1,4 @@
 import type {
-  DescriptionMessage,
   DescriptionSegment,
   DescriptionStage,
   DescriptionTag,
@@ -53,13 +52,8 @@ function waitParamsForTag(
  *  без пробела («тег.», «тег,», «каналам:»). */
 const GLUED_PUNCTUATION = /^[.,:;!?]/;
 
-/**
- * Единственное место, где живёт величина отступа — используется и для знака
- * препинания после тега в `stage.body` (`punctuationPullBack` ниже), и для
- * двоеточия после `message.templateTag` в списке сообщений (тот же паддинг
- * пилюли, тот же эффект, но другая разметка — литерал `: «…»`, а не сегмент
- * `stage.body`, поэтому через `punctuationPullBack` не идёт).
- */
+/** Единственное место, где живёт величина отступа знака препинания после тега
+ *  в `stage.body` (`punctuationPullBack` ниже). */
 const PILL_PUNCTUATION_PULL_BACK = "-ml-[5px]";
 
 /**
@@ -80,34 +74,6 @@ function punctuationPullBack(
   return prev?.kind === "tag" && GLUED_PUNCTUATION.test(text)
     ? PILL_PUNCTUATION_PULL_BACK
     : undefined;
-}
-
-/**
- * Текстовый «хвостик» после названия канала, когда за него можно уцепиться
- * строкой: legacy-путь БЕЗ тега (вызвавший не передал факты — `withTags=false`
- * в `describeWorkflow`, `message.templateTag` не создаётся вовсе). С тегом
- * (обычный путь карточки кампании) шаблон/«не выбран» всегда несёт пилюля —
- * этой веткой не ведает, см. `subjectQualifier` + JSX ниже.
- */
-function qualifierText(message: DescriptionMessage): string | null {
-  if (message.templateTag) return null;
-  if (message.templateName) return `, шаблон «${message.templateName}»`;
-  if (message.subject) return `, тема «${message.subject}»`;
-  return null;
-}
-
-/**
- * Тема письма ПЕРЕД пилюлей шаблона — только когда шаблон email не резолвлен
- * (иначе имя шаблона уже несёт всю нужную информацию, дублировать тему незачем
- * — спека §3). Не путать с `qualifierText`: тот — целиком альтернатива пилюле
- * (работает только когда её нет); это — довесок ПЕРЕД пилюлей, которая есть
- * всегда, когда факты переданы (fix: пилюля больше не пропадает, если текущий
- * текст ноды не совпал с пресетом).
- */
-function subjectQualifier(message: DescriptionMessage): string | null {
-  return !message.templateName && message.subject
-    ? `, тема «${message.subject}»`
-    : null;
 }
 
 interface WorkflowDescriptionProps {
@@ -190,44 +156,8 @@ export function WorkflowDescription({
                 ),
               )}
             </p>
-            {stage.messages && (
-              <ul className="flex flex-col gap-1 pl-1">
-                {stage.messages.map((message) => (
-                  <li key={`${message.channel}|${message.text}`}>
-                    {/* Тело описания белое, поэтому канал выделяем весом,
-                        а не цветом — иначе строка потеряла бы точку опоры. */}
-                    — <span className="font-medium">{message.channel}</span>
-                    {message.templateTag ? (
-                      <>
-                        {subjectQualifier(message)}
-                        {", шаблон "}
-                        <DescriptionTagPill
-                          tag={message.templateTag}
-                          onActivate={onTagActivate}
-                          nodeType={nodeTypeForTag(message.templateTag, nodeTypes)}
-                        />
-                        {/* Двоеточие идёт вплотную к пилюле в исходном тексте
-                            (без пробела) ровно как «тег.»/«тег,» в
-                            stage.body — тот же паддинг+бордер пилюли создаёт
-                            ту же иллюзию пробела перед ним. Обёрнуто в свой
-                            <span>, а не оставлено голым JSX-текстом, ТОЛЬКО в
-                            этой ветке — именно тут перед двоеточием реально
-                            пилюля; фолбэк-ветка (qualifierText/ничего) ниже
-                            остаётся плоским текстом, как раньше. */}
-                        <span className={PILL_PUNCTUATION_PULL_BACK}>
-                          : «{message.text}»
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {qualifierText(message)}
-                        : «{message.text}»
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* Таблицы коммуникаций (`stage.groups`) рендерит Task 8 — список
+                строк снят вместе с `DescriptionStage.messages` (Task 5). */}
             {stageSlots?.[stage.id] && (
               <div className="pt-1">{stageSlots[stage.id]}</div>
             )}

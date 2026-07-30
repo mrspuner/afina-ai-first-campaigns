@@ -1,8 +1,9 @@
-import { isCommunicationNode, type NodeParams, type WorkflowEdge, type WorkflowNode } from "@/types/workflow";
+import type { NodeParams, WorkflowEdge, WorkflowNode } from "@/types/workflow";
 import { pluralRu } from "@/lib/plural-ru";
 import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
-import { orderNodes } from "./graph-waves";
+import { segmentWaves, type Wave } from "./graph-waves";
+import { conditionBranchLabel, conditionQuestionLabel } from "./node-sublabel";
 import {
   channelForNodeKind,
   templateOptionsForKind,
@@ -24,24 +25,33 @@ import type { Channel, AnalysisMode } from "@/types/campaign";
  * «скоринг»; нет коммуникаций — нет выдуманных касаний.
  */
 
-export interface DescriptionMessage {
+/** Строка таблицы коммуникаций: одна нода канала внутри волны. */
+export interface DescriptionCommunication {
+  /** Нода-источник — ключ строки и адрес предпросмотра. */
+  nodeId: string;
   /** Человекочитаемый канал: «SMS», «Email», «Push», «Звонок». */
   channel: string;
-  /** Имя шаблона из библиотеки, если params ноды совпали с его контентом. */
-  templateName?: string;
-  /** Тема письма — фолбэк для email, когда шаблон не резолвится. */
-  subject?: string;
-  /** Текст сообщения, взятый из params ноды. */
-  text: string;
   /** Название шаблона как тег — раскрывает поповер выбора шаблона у пилюли. */
   templateTag?: DescriptionTag;
+  /** Первая строка ячейки контента — только push (его заголовок). */
+  contentTitle?: string;
+  /** Основной текст ячейки: sms.text / email.subject / push.body / ivr.scenario. */
+  contentText: string;
+  /** id библиотечного шаблона, если резолвится — иначе предпросмотр из params ноды. */
+  previewTemplateId?: string;
+}
+
+/** Поток внутри этапа: своя ветка развилки со своей таблицей. */
+export interface DescriptionGroup {
+  id: string;
+  /** ◈-подзаголовок ветки/потока. Отсутствует у обычного касания. */
+  label?: string;
+  rows: DescriptionCommunication[];
 }
 
 /**
  * Категория этапа — грубее, чем `DescriptionStage.id` (тот остаётся строкой:
- * следующая задача сможет штамповать составные id для повторяющихся волн).
- * `"fork"` пока не производится — зарезервирован под развилки следующей
- * задачей (`graph-waves.ts` уже умеет их находить).
+ * повторяющиеся волны нумеруются внутри своего вида — `touch-2`, `retry-1`).
  */
 export type DescriptionStageKind = "start" | "touch" | "fork" | "check" | "retry" | "outcome";
 
@@ -106,8 +116,16 @@ export interface DescriptionStage {
   body: DescriptionSegment[];
   /** Факты кампании списком «подпись — значение» — пока только у старта. */
   settings?: DescriptionSetting[];
-  /** Строки коммуникаций — только у первого касания. */
-  messages?: DescriptionMessage[];
+  /**
+   * Таблицы коммуникаций. Одна группа без `label` — обычное касание. У
+   * `kind:"retry"` это таблица САМОЙ повторной волны (её ноды, её id тегов),
+   * содержательно совпадающая с оригиналом, — рендеру не приходится искать
+   * чужой этап по заголовку, а идентификаторы тегов остаются уникальными.
+   */
+  groups?: DescriptionGroup[];
+  /** Заголовок волны-оригинала → «Та же серия, что в шаге „Первое касание“».
+   *  Только у `kind:"retry"`. */
+  sameAsHeading?: string;
 }
 
 export interface DescribableGraph {
@@ -115,115 +133,46 @@ export interface DescribableGraph {
   edges: WorkflowEdge[];
 }
 
-// ── Обход графа ──────────────────────────────────────────────────────────────
+// ── Коммуникации → строка таблицы ────────────────────────────────────────────
 
-/** Обход графа для текстового описания: порядок нод, коммуникационные ноды и
- *  множество «первого прохода» (до повтора) вычисляются один раз. */
-interface GraphTraversal {
-  ordered: WorkflowNode[];
-  commNodes: WorkflowNode[];
-  retryWaits: WorkflowNode[];
-  isFirstPass: (node: WorkflowNode) => boolean;
-}
-
-function traverseGraph(graph: DescribableGraph): GraphTraversal {
-  const adjacency = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    const list = adjacency.get(edge.source);
-    if (list) list.push(edge.target);
-    else adjacency.set(edge.source, [edge.target]);
-  }
-
-  const ordered = orderNodes(graph, adjacency);
-  const commNodes = ordered.filter((n) => isCommunicationNode(n.data.nodeType));
-
-  // «Повтор» — это ноды за задержкой, которая сама стоит ПОСЛЕ коммуникации.
-  // Задержка перед первым касанием (её носят легаси-шаблоны) повтором не
-  // считается, иначе первое касание осталось бы без текстов.
-  const afterAnyComm = reachableFrom(commNodes.map((n) => n.id), adjacency);
-  const retryWaits = ordered.filter(
-    (n) => n.data.nodeType === "wait" && afterAnyComm.has(n.id),
-  );
-  const afterRetry = reachableFrom(retryWaits.map((n) => n.id), adjacency);
-  const isFirstPass = (node: WorkflowNode) => !afterRetry.has(node.id);
-
-  return { ordered, commNodes, retryWaits, isFirstPass };
-}
-
-/** Множество нод, достижимых из `seeds` по рёбрам (сами seeds включены). */
-function reachableFrom(seeds: string[], adjacency: Map<string, string[]>): Set<string> {
-  const seen = new Set<string>(seeds);
-  const queue = [...seeds];
-  while (queue.length) {
-    for (const next of adjacency.get(queue.shift()!) ?? []) {
-      if (seen.has(next)) continue;
-      seen.add(next);
-      queue.push(next);
-    }
-  }
-  return seen;
-}
-
-// ── Коммуникации → строка описания ───────────────────────────────────────────
-
-/** Цитируемый текст коммуникационной ноды. */
-function messageText(params: NodeParams): string {
+/** Контент ячейки таблицы по каналу — что ПОКАЗЫВАЕМ, не что сравниваем
+ *  (сравнение волн живёт в `graph-waves.ts` и читает другие поля). */
+function communicationContent(params: NodeParams): { contentTitle?: string; contentText: string } {
   switch (params.kind) {
-    case "sms": return params.text;
-    case "email": return params.body;
-    case "push": return params.body;
-    case "ivr": return params.scenario;
-    default: return "";
+    case "sms": return { contentText: params.text };
+    case "email": return { contentText: params.subject };
+    case "push": return { contentTitle: params.title, contentText: params.body };
+    case "ivr": return { contentText: params.scenario };
+    default: return { contentText: "" };
   }
 }
 
-/**
- * Ключ дедупа коммуникационной ноды — `канал|текст`, единственный источник
- * истины для схлопывания строк текста (`describeWorkflow`): сегментированный
- * сценарий (Апсейл/Удержание — N одинаковых comm-юнитов) даёт РОВНО одну
- * строку на канал, а не N визуально идентичных строк. `null` — канал не
- * резолвится (не comm-нода) или текст пуст (дедупу не подлежит).
- */
-function communicationDedupKey(node: WorkflowNode): string | null {
-  const params = node.data.params;
-  if (!params) return null;
-  const channel = channelForNodeKind(params.kind);
-  if (!channel) return null;
-  const text = messageText(params).trim();
-  if (!text) return null;
-  return `${CHANNEL_LABEL[channel]}|${text}`;
-}
-
-function describeMessage(
+function describeCommunication(
   node: WorkflowNode,
   templates: MessageTemplate[],
   withTags: boolean,
   graphEditable: boolean,
-): DescriptionMessage | null {
+): DescriptionCommunication | null {
   const params = node.data.params;
   if (!params) return null;
   const channel = channelForNodeKind(params.kind);
   if (!channel) return null;
 
-  const text = messageText(params).trim();
-  if (!text) return null;
-
   const matchKey = templateParamKeyForKind(params.kind);
   const bound = matchKey ? (params as unknown as Record<string, unknown>)[matchKey] : undefined;
-  const templateName = matchKey
+  const template = matchKey
     ? templateOptionsForKind(templates, params.kind).find(
         (t) => (t.content as unknown as Record<string, unknown>)[matchKey] === bound,
-      )?.name
+      )
     : undefined;
 
   return {
+    nodeId: node.id,
     channel: CHANNEL_LABEL[channel],
-    ...(templateName ? { templateName } : {}),
-    // Тема — фолбэк только для письма без резолвнутого шаблона (спека §3).
-    ...(!templateName && params.kind === "email" && params.subject
-      ? { subject: params.subject }
-      : {}),
-    text,
+    ...communicationContent(params),
+    // Резолвится шаблон — предпросмотр открывает его из библиотеки; не
+    // резолвится — рендер собирает синтетический из params самой ноды.
+    ...(template ? { previewTemplateId: template.id } : {}),
     // Fix: пилюля появляется ВСЕГДА в режиме тегов (вызвавший передал факты) —
     // резолвится шаблон или нет. Раньше тег создавался только когда
     // `templateName` резолвился, а резолв зависел от случайного совпадения
@@ -242,7 +191,7 @@ function describeMessage(
       ? {
           templateTag: {
             id: `msg-${node.id}-template`,
-            label: templateName ?? "не выбран",
+            label: template?.name ?? "не выбран",
             target: graphEditable
               ? { kind: "template", nodeId: node.id }
               : { kind: "none", nodeId: node.id },
@@ -281,6 +230,116 @@ function waitPhrase(params: Extract<NodeParams, { kind: "wait" }>): string {
     return `${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
   }
   return `${hours} ${pluralRu(hours, ["час", "часа", "часов"])}`;
+}
+
+/**
+ * Метка потока: сокращения рёбер сегментного сплиттера → человеческая фраза.
+ * Незнакомая метка проходит как есть — граф мог быть собран вручную или ИИ.
+ */
+const SEGMENT_LABEL: Record<string, string> = {
+  "Макс": "Максимальная склонность",
+  "Выс": "Высокая склонность",
+  "Ср": "Средняя склонность",
+  "Низ": "Низкая склонность",
+};
+
+const TOUCH_HEADING = ["Первое касание", "Повторное касание", "Третье касание", "Четвёртое касание"];
+
+/** Заголовок волны-касания по её порядковому номеру (1-based). Развилки и
+ *  повторы номер НЕ тратят — их заголовки не зависят от него вовсе. */
+function touchHeading(ordinal: number): string {
+  return TOUCH_HEADING[ordinal - 1] ?? `Касание ${ordinal}`;
+}
+
+/**
+ * Ветка условия — положительная? Рёбра сгенерированных шаблонов подписаны
+ * «ДА»/«НЕТ», легаси-шаблонов — «YES»/«NO». Любая другая подпись (граф собран
+ * вручную или ИИ) даёт `undefined`: тогда метка ветки идёт сырой, а не
+ * угадывается наугад.
+ */
+function conditionBranchYes(label: string | undefined): boolean | undefined {
+  switch (label?.toUpperCase()) {
+    case "ДА": case "YES": return true;
+    case "НЕТ": case "NO": return false;
+    default: return undefined;
+  }
+}
+
+/** ◈-подпись группы: сырая метка ребра, разложенная по виду развилки. */
+function groupLabel(wave: Wave, raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  if (wave.forkKind === "split") return SEGMENT_LABEL[raw] ?? raw;
+  if (wave.forkKind === "condition") {
+    const params = wave.forkNode?.data.params;
+    const yes = conditionBranchYes(raw);
+    if (params?.kind === "condition" && yes !== undefined) {
+      return conditionBranchLabel(params.trigger, yes);
+    }
+  }
+  return raw;
+}
+
+/** Таблицы волны. Группа без строк (ноды без канала/params) не выпускается. */
+function describeGroups(
+  wave: Wave,
+  templates: MessageTemplate[],
+  withTags: boolean,
+  graphEditable: boolean,
+): DescriptionGroup[] {
+  const groups: DescriptionGroup[] = [];
+  for (const group of wave.groups) {
+    const rows = group.nodes
+      .map((node) => describeCommunication(node, templates, withTags, graphEditable))
+      .filter((row): row is DescriptionCommunication => row !== null);
+    if (!rows.length) continue;
+    const label = groupLabel(wave, group.label);
+    groups.push({ id: group.id, ...(label !== undefined ? { label } : {}), rows });
+  }
+  return groups;
+}
+
+/**
+ * Значение внутри фразы этапа: пилюля, когда вызвавший передал факты, иначе
+ * просто текст. Без фактов описание остаётся чистым текстом — правило файла
+ * старше этой задачи (Task 3/4).
+ */
+function valueSegments(withTags: boolean, tag: DescriptionTag): DescriptionSegment[] {
+  return withTags ? [{ kind: "tag", tag }] : [t(tag.label)];
+}
+
+/**
+ * Тело этапа-развилки.
+ *
+ * Пилюля развилки — носитель значения без цели (`none`): поповера у
+ * `condition`/`split` не существует, а кликабельная пилюля без поповера была бы
+ * мёртвой кнопкой. `nodeId` на `none` переносится ради иконки узла, как у
+ * демотированных шаблона и паузы.
+ */
+function forkBody(wave: Wave, groupCount: number, withTags: boolean): DescriptionSegment[] {
+  const fork = wave.forkNode;
+  const params = fork?.data.params;
+  const forkTag = (label: string): DescriptionSegment[] =>
+    fork
+      ? valueSegments(withTags, {
+          id: `fork-${fork.id}`,
+          label,
+          target: { kind: "none", nodeId: fork.id },
+        })
+      : [t(label)];
+
+  if (wave.forkKind === "condition") {
+    if (params?.kind !== "condition") return [t("Дальше путь расходится по условию:")];
+    return [
+      t("Дальше путь расходится по условию "),
+      ...forkTag(conditionQuestionLabel(params.trigger)),
+      t(":"),
+    ];
+  }
+  return [
+    t(`Аудитория делится на ${groupCount} ${pluralRu(groupCount, ["поток", "потока", "потоков"])} по `),
+    ...forkTag("уровню склонности"),
+    t(", каждый получает своё:"),
+  ];
 }
 
 // ── Сборка описания ──────────────────────────────────────────────────────────
@@ -374,7 +433,7 @@ export function describeWorkflow(
 ): DescriptionStage[] {
   if (!graph.nodes.length) return [];
 
-  const { ordered, commNodes, retryWaits, isFirstPass } = traverseGraph(graph);
+  const { ordered, steps } = segmentWaves(graph);
 
   // Без фактов описание остаётся ровно тем, что производил Task 3 — чистым
   // текстом. Теги, не привязанные к конкретному полю CampaignFacts (шаблон
@@ -388,27 +447,19 @@ export function describeWorkflow(
   // дефолт был бы молча кликабельным.
   const graphEditable = facts?.graphEditable ?? false;
 
-  // Параллельные сегменты несут одинаковые касания — схлопываем в строку на
-  // канал (дедуп по каналу и тексту, а не по ноде).
-  const messages: DescriptionMessage[] = [];
-  const seenMessages = new Set<string>();
-  for (const node of commNodes.filter(isFirstPass)) {
-    const message = describeMessage(node, templates, hasFacts, graphEditable);
-    if (!message) continue;
-    // Не может быть null здесь: describeMessage вернул сообщение только если
-    // канал резолвится и текст непуст — ровно условия communicationDedupKey.
-    const key = communicationDedupKey(node)!;
-    if (seenMessages.has(key)) continue;
-    seenMessages.add(key);
-    messages.push(message);
+  // Таблицы собираются ДО нумерации этапов: формулировка «Проверки реакции»
+  // зависит от того, сколько каналов несут ВСЕ волны, а не только предыдущая.
+  const groupsByWave = new Map<string, DescriptionGroup[]>();
+  const channelsSeen = new Set<string>();
+  for (const step of steps) {
+    if (step.kind !== "wave") continue;
+    const groups = describeGroups(step.wave, templates, hasFacts, graphEditable);
+    groupsByWave.set(step.wave.id, groups);
+    for (const group of groups) for (const row of group.rows) channelsSeen.add(row.channel);
   }
+  const multiChannel = channelsSeen.size > 1;
 
   const hasScoring = ordered.some((n) => n.data.nodeType === "scoring");
-  const hasSplit = ordered.some((n) => n.data.nodeType === "split" && isFirstPass(n));
-  const hasCheck = ordered.some((n) => n.data.nodeType === "condition" && isFirstPass(n));
-  const multiChannel = messages.length > 1;
-  const retryParams = retryWaits[0]?.data.params;
-  const hasRetry = retryParams?.kind === "wait";
 
   const stages: DescriptionStage[] = [];
 
@@ -537,83 +588,142 @@ export function describeWorkflow(
     ...(settings.length ? { settings } : {}),
   });
 
-  if (messages.length) {
-    // Item 3 (финальная полировка): пилюля называет СКОЛЬКО каналов выбрано
-    // («3 канала»), а не перечисляет имена внутри себя — имена идут следом
-    // обычным текстом. Отдельное предложение-вводная («Выбрано …:») перед
-    // существующей фразой про первое касание/деление на потоки — та не
-    // трогается (кроме потери своего собственного «по каналам …»).
-    const channelsCount = facts?.channels?.length ?? 0;
-    const channelsCountTag: DescriptionSegment | null = channelsCount
-      ? stepTag(
-          "first-touch-channels",
-          `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
-          "channels",
-          editableSteps,
-        )
-      : null;
-    const channelNames = facts?.channels?.map((c) => CHANNEL_LABEL[c]).join(", ") ?? "";
-    const nextSentence = hasSplit
-      ? "Аудитория делится на потоки, и каждому уходит своё сообщение:"
-      : "Каждому контакту уходит первое сообщение:";
-    const touchBody: DescriptionSegment[] = channelsCountTag
-      ? [t("Выбрано "), channelsCountTag, t(`: ${channelNames}. `), t(nextSentence)]
-      : [t(nextSentence)];
-    stages.push({
-      id: "first-touch",
-      kind: "touch",
-      heading: "Первое касание",
-      body: mergeTextSegments(touchBody),
-      messages,
-    });
-  }
+  // Волны графа → этапы. Порядковые номера ведутся раздельно: заголовок
+  // касания зависит от номера КАСАНИЙ (развилки и повторы его не тратят), а
+  // выбор «первой» формулировки — от номера ВОЛНЫ (легаси-«Реактивация»
+  // ставит паузу перед первым касанием, и оно всё равно первое).
+  let waveOrdinal = 0;
+  let touchOrdinal = 0;
+  let forkOrdinal = 0;
+  let retryOrdinal = 0;
+  let checkOrdinal = 0;
+  /** Заголовок последней НЕ-повторной волны — на него ссылается «Пауза и повтор». */
+  let originHeading: string | undefined;
+  let hasRetry = false;
 
-  if (messages.length && hasCheck) {
-    stages.push({
-      id: "check",
-      kind: "check",
-      heading: "Проверка реакции",
-      body: [
-        t(
-          multiChannel
-            ? "После рассылки система смотрит, кто отреагировал по любому из каналов. Отреагировавшие уходят к результату как успех."
-            : "После рассылки система смотрит, кто отреагировал. Отреагировавшие уходят к результату как успех.",
+  for (const step of steps) {
+    if (step.kind === "check") {
+      // Проверять реакцию не на что, пока ничего не отправлено; вторая и
+      // дальнейшие проверки поглощаются формулировкой «Итога».
+      if (waveOrdinal === 0 || checkOrdinal > 0) continue;
+      checkOrdinal += 1;
+      stages.push({
+        id: `check-${checkOrdinal}`,
+        kind: "check",
+        heading: "Проверка реакции",
+        body: [
+          t(
+            multiChannel
+              ? "Кто отреагировал по любому каналу — уходит в успех и покидает кампанию."
+              : "Кто отреагировал — уходит в успех и покидает кампанию.",
+          ),
+        ],
+      });
+      continue;
+    }
+
+    const wave = step.wave;
+    const groups = groupsByWave.get(wave.id) ?? [];
+    if (!groups.length) continue;
+    waveOrdinal += 1;
+
+    // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
+    // правится (§2.12: после запуска — та же демоция в `none`, что и у
+    // шаблона, с тем же переносом nodeId ради иконки — fix round 2, Finding 2).
+    const waitNode = wave.waitBefore;
+    const waitParams = waitNode?.data.params;
+    const waitTag: DescriptionTag | undefined =
+      waitNode && waitParams?.kind === "wait"
+        ? {
+            id: `wait-${waitNode.id}`,
+            label: waitPhrase(waitParams),
+            target: graphEditable
+              ? { kind: "node-fields", nodeId: waitNode.id }
+              : { kind: "none", nodeId: waitNode.id },
+          }
+        : undefined;
+
+    if (wave.repeatsPrevious) {
+      retryOrdinal += 1;
+      hasRetry = true;
+      stages.push({
+        id: `retry-${retryOrdinal}`,
+        kind: "retry",
+        heading: "Пауза и повтор",
+        body: mergeTextSegments(
+          waitTag
+            ? [
+                t("Тем, кто не отреагировал, кампания выжидает "),
+                ...valueSegments(hasFacts, waitTag),
+                t(" и повторяет ту же серию по тем же каналам."),
+              ]
+            : [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам.")],
         ),
-      ],
-    });
-  }
+        groups,
+        ...(originHeading ? { sameAsHeading: originHeading } : {}),
+      });
+      continue;
+    }
 
-  if (hasRetry) {
-    const retryPrefix = "Тем, кто не отреагировал, кампания выжидает ";
-    const retrySuffix = multiChannel
-      ? " и повторяет ту же серию сообщений по тем же каналам."
-      : " и повторяет то же сообщение.";
+    // Развилка — только когда ветки РАЗЛИЧАЮТСЯ: одинаковые по содержанию
+    // потоки `graph-waves` уже схлопнул в одну группу, и делить там нечего.
+    if (wave.forkKind && groups.length > 1) {
+      forkOrdinal += 1;
+      const heading = wave.forkKind === "split" ? "Деление на потоки" : "Развилка по реакции";
+      stages.push({
+        id: `fork-${forkOrdinal}`,
+        kind: "fork",
+        heading,
+        body: mergeTextSegments(forkBody(wave, groups.length, hasFacts)),
+        groups,
+      });
+      originHeading = heading;
+      continue;
+    }
+
+    touchOrdinal += 1;
+    const heading = touchHeading(touchOrdinal);
+    let touchBody: DescriptionSegment[];
+    if (waveOrdinal === 1) {
+      // Item 3 (финальная полировка): пилюля называет СКОЛЬКО каналов выбрано
+      // («3 канала»), а не перечисляет имена внутри себя — имена идут следом
+      // обычным текстом.
+      const channelsCount = facts?.channels?.length ?? 0;
+      const channelsCountTag: DescriptionSegment | null = channelsCount
+        ? stepTag(
+            "first-touch-channels",
+            `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
+            "channels",
+            editableSteps,
+          )
+        : null;
+      const channelNames = facts?.channels?.map((c) => CHANNEL_LABEL[c]).join(", ") ?? "";
+      const rowCount = groups.reduce((n, group) => n + group.rows.length, 0);
+      const nextSentence =
+        rowCount > 1
+          ? "Каждому потоку — своё сообщение:"
+          : "Каждому контакту уходит первое сообщение:";
+      touchBody = channelsCountTag
+        ? [t("Выбрано "), channelsCountTag, t(`: ${channelNames}. `), t(nextSentence)]
+        : [t(nextSentence)];
+    } else {
+      // Волна разошлась с предыдущей: те же люди, но другой заход.
+      touchBody = waitTag
+        ? [
+            t("Тем, кто не отреагировал, кампания выжидает "),
+            ...valueSegments(hasFacts, waitTag),
+            t(" и заходит иначе — другими каналами и шаблонами:"),
+          ]
+        : [t("Тем, кто не отреагировал, кампания заходит иначе — другими каналами и шаблонами:")];
+    }
     stages.push({
-      id: "retry",
-      kind: "retry",
-      heading: "Пауза и повтор",
-      // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
-      // правится (§2.12: после запуска — та же демоция в `none`, что и у
-      // шаблона, с тем же переносом nodeId ради иконки — fix round 2,
-      // Finding 2). Без фактов (hasFacts=false) остаётся прежним единым
-      // текстом Task 3.
-      body: hasFacts
-        ? mergeTextSegments([
-            t(retryPrefix),
-            {
-              kind: "tag",
-              tag: {
-                id: "retry-wait",
-                label: waitPhrase(retryParams),
-                target: graphEditable
-                  ? { kind: "node-fields", nodeId: retryWaits[0].id }
-                  : { kind: "none", nodeId: retryWaits[0].id },
-              },
-            },
-            t(retrySuffix),
-          ])
-        : [t(`${retryPrefix}${waitPhrase(retryParams)}${retrySuffix}`)],
+      id: `touch-${touchOrdinal}`,
+      kind: "touch",
+      heading,
+      body: mergeTextSegments(touchBody),
+      groups,
     });
+    originHeading = heading;
   }
 
   // «Итог» — снова только про исход конверсии (review round 1, Finding 2:
@@ -624,10 +734,10 @@ export function describeWorkflow(
     heading: "Итог",
     body: [
       t(
-        !messages.length
+        waveOrdinal === 0
           ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
           : hasRetry
-            ? "После повтора — финальная проверка: отреагировавшие засчитываются в успех, остальные завершают путь без конверсии."
+            ? "После финальной проверки: отреагировавшие — в успех, остальные завершают путь без конверсии."
             : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
       ),
     ],
