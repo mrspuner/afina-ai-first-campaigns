@@ -16,6 +16,30 @@ function conditionTriggerLabel(t: string): string {
 }
 
 /**
+ * Подпись ветки условия для ◈-подзаголовка описания. Отдельна от
+ * `conditionTriggerLabel` (та даёт статус ноды на канвасе — «Открыто»), потому
+ * что ветке нужна пара «сделал / не сделал», а не состояние.
+ */
+export function conditionBranchLabel(trigger: string, yes: boolean): string {
+  switch (trigger) {
+    case "delivered": return yes ? "Доставлено" : "Не доставлено";
+    case "not_delivered": return yes ? "Не доставлено" : "Доставлено";
+    case "opened": return yes ? "Открыл письмо" : "Не открыл письмо";
+    case "not_opened": return yes ? "Не открыл письмо" : "Открыл письмо";
+    case "clicked": return yes ? "Нажал ссылку" : "Не нажал ссылку";
+    case "not_clicked": return yes ? "Не нажал ссылку" : "Нажал ссылку";
+    // События справочника (`eventCatalog`) приходят готовой фразой — отрицание
+    // для них не выводится грамматически, поэтому вторая ветка нейтральна.
+    default: return yes ? trigger : "Иначе";
+  }
+}
+
+/** «открыл письмо?» — значение пилюли в «расходится по условию […]». */
+export function conditionQuestionLabel(trigger: string): string {
+  return `${conditionBranchLabel(trigger, true).toLowerCase()}?`;
+}
+
+/**
  * Подзаголовок ноды ожидания в мини-превью графа. Недельная ветка мирроит
  * `waitPhrase` (graph-description.ts) и `splitDuration` (wait-fields.tsx) —
  * та же лестница «крупнейшая точная единица» (168 → 24 → 1). Найдено при

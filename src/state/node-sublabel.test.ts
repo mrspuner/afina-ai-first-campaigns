@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNodeSublabel, computeSublabels } from "./node-sublabel";
+import { computeNodeSublabel, computeSublabels, conditionBranchLabel, conditionQuestionLabel } from "./node-sublabel";
 import type { NodeParams, WorkflowNode } from "@/types/workflow";
 
 describe("computeNodeSublabel", () => {
@@ -82,5 +82,31 @@ describe("computeSublabels", () => {
   it("выставляет подзаголовок из контента", () => {
     const [out] = computeSublabels([node({ kind: "split", by: "segment", branches: 4 })]);
     expect(out.data.sublabel).toBe("По сегменту · 4 ветки");
+  });
+});
+
+describe("conditionBranchLabel", () => {
+  it("даёт человеческую пару для известных событий", () => {
+    expect(conditionBranchLabel("opened", true)).toBe("Открыл письмо");
+    expect(conditionBranchLabel("opened", false)).toBe("Не открыл письмо");
+    expect(conditionBranchLabel("clicked", true)).toBe("Нажал ссылку");
+    expect(conditionBranchLabel("clicked", false)).toBe("Не нажал ссылку");
+  });
+
+  it("инвертированное событие меняет пару местами", () => {
+    expect(conditionBranchLabel("not_opened", true)).toBe("Не открыл письмо");
+    expect(conditionBranchLabel("not_opened", false)).toBe("Открыл письмо");
+  });
+
+  it("произвольное событие справочника: ДА — как есть, НЕТ — «Иначе»", () => {
+    expect(conditionBranchLabel("Заявка оформлена", true)).toBe("Заявка оформлена");
+    expect(conditionBranchLabel("Заявка оформлена", false)).toBe("Иначе");
+  });
+});
+
+describe("conditionQuestionLabel", () => {
+  it("формулирует условие вопросом в нижнем регистре", () => {
+    expect(conditionQuestionLabel("opened")).toBe("открыл письмо?");
+    expect(conditionQuestionLabel("Заявка оформлена")).toBe("заявка оформлена?");
   });
 });
