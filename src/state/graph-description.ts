@@ -588,10 +588,33 @@ export function describeWorkflow(
     ...(settings.length ? { settings } : {}),
   });
 
-  // Волны графа → этапы. Порядковые номера ведутся раздельно: заголовок
-  // касания зависит от номера КАСАНИЙ (развилки и повторы его не тратят), а
-  // выбор «первой» формулировки — от номера ВОЛНЫ (легаси-«Реактивация»
-  // ставит паузу перед первым касанием, и оно всё равно первое).
+  // Вводная «Выбрано [N каналов]: …» принадлежит ПЕРВОЙ волне, какой бы она ни
+  // была: пилюля — единственный вход описания в шаг визарда «Каналы», и терять
+  // её оттого, что первая волна разветвилась (легаси-«Удержание» — развилка по
+  // построению), нельзя.
+  const channelsCount = facts?.channels?.length ?? 0;
+  const channelsIntro: DescriptionSegment[] = channelsCount
+    ? [
+        t("Выбрано "),
+        // Пилюля называет СКОЛЬКО каналов выбрано («3 канала»), а не
+        // перечисляет имена внутри себя — имена идут следом обычным текстом.
+        stepTag(
+          "first-touch-channels",
+          `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
+          "channels",
+          editableSteps,
+        ),
+        t(`: ${facts!.channels!.map((c) => CHANNEL_LABEL[c]).join(", ")}. `),
+      ]
+    : [];
+
+  // Волны графа → этапы. Счётчиков два, и оба содержательные: ПОРЯДКОВЫЙ НОМЕР
+  // КАСАНИЯ тратят и обычные волны, и развилки (развилка — полноценный шаг
+  // рассылки, просто со своим заголовком; иначе следующая волна назвалась бы
+  // «Первым касанием», рассказывая при этом про неотреагировавших), а повтор не
+  // тратит — это та же волна, повторённая. НОМЕР ВОЛНЫ решает, чья формулировка
+  // «первая»: легаси-«Реактивация» ставит паузу перед первым касанием, и оно
+  // всё равно остаётся первым.
   let waveOrdinal = 0;
   let touchOrdinal = 0;
   let forkOrdinal = 0;
@@ -599,6 +622,8 @@ export function describeWorkflow(
   let checkOrdinal = 0;
   /** Заголовок последней НЕ-повторной волны — на него ссылается «Пауза и повтор». */
   let originHeading: string | undefined;
+  /** Каналы предыдущей волны — расходящаяся волна сверяется с ними. */
+  let previousChannels: Set<string> | undefined;
   let hasRetry = false;
 
   for (const step of steps) {
@@ -626,6 +651,7 @@ export function describeWorkflow(
     const groups = groupsByWave.get(wave.id) ?? [];
     if (!groups.length) continue;
     waveOrdinal += 1;
+    const waveChannels = new Set(groups.flatMap((g) => g.rows.map((r) => r.channel)));
 
     // Пауза — тег с целью node-fields на саму ноду ожидания, пока граф
     // правится (§2.12: после запуска — та же демоция в `none`, что и у
@@ -662,68 +688,63 @@ export function describeWorkflow(
         groups,
         ...(originHeading ? { sameAsHeading: originHeading } : {}),
       });
+      previousChannels = waveChannels;
       continue;
     }
 
     // Развилка — только когда ветки РАЗЛИЧАЮТСЯ: одинаковые по содержанию
     // потоки `graph-waves` уже схлопнул в одну группу, и делить там нечего.
-    if (wave.forkKind && groups.length > 1) {
-      forkOrdinal += 1;
-      const heading = wave.forkKind === "split" ? "Деление на потоки" : "Развилка по реакции";
-      stages.push({
-        id: `fork-${forkOrdinal}`,
-        kind: "fork",
-        heading,
-        body: mergeTextSegments(forkBody(wave, groups.length, hasFacts)),
-        groups,
-      });
-      originHeading = heading;
-      continue;
-    }
-
+    const isFork = wave.forkKind !== undefined && groups.length > 1;
+    // Номер тратят и развилка, и обычное касание — см. комментарий у счётчиков.
     touchOrdinal += 1;
-    const heading = touchHeading(touchOrdinal);
-    let touchBody: DescriptionSegment[];
-    if (waveOrdinal === 1) {
-      // Item 3 (финальная полировка): пилюля называет СКОЛЬКО каналов выбрано
-      // («3 канала»), а не перечисляет имена внутри себя — имена идут следом
-      // обычным текстом.
-      const channelsCount = facts?.channels?.length ?? 0;
-      const channelsCountTag: DescriptionSegment | null = channelsCount
-        ? stepTag(
-            "first-touch-channels",
-            `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
-            "channels",
-            editableSteps,
-          )
-        : null;
-      const channelNames = facts?.channels?.map((c) => CHANNEL_LABEL[c]).join(", ") ?? "";
+    const heading = isFork
+      ? wave.forkKind === "split"
+        ? "Деление на потоки"
+        : "Развилка по реакции"
+      : touchHeading(touchOrdinal);
+
+    let waveBody: DescriptionSegment[];
+    if (isFork) {
+      waveBody = forkBody(wave, groups.length, hasFacts);
+    } else if (waveOrdinal === 1) {
       const rowCount = groups.reduce((n, group) => n + group.rows.length, 0);
-      const nextSentence =
-        rowCount > 1
-          ? "Каждому потоку — своё сообщение:"
-          : "Каждому контакту уходит первое сообщение:";
-      touchBody = channelsCountTag
-        ? [t("Выбрано "), channelsCountTag, t(`: ${channelNames}. `), t(nextSentence)]
-        : [t(nextSentence)];
+      waveBody = [
+        t(
+          rowCount > 1
+            ? "Каждому потоку — своё сообщение:"
+            : "Каждому контакту уходит первое сообщение:",
+        ),
+      ];
     } else {
-      // Волна разошлась с предыдущей: те же люди, но другой заход.
-      touchBody = waitTag
+      // Волна разошлась с предыдущей: те же люди, но другой заход. Чем именно
+      // он другой — сверяем по каналам, а не утверждаем наугад: вторая волна
+      // тех же каналов с другими текстами — обычная форма, и врать про «другие
+      // каналы» описание не должно.
+      const sameChannels =
+        previousChannels !== undefined &&
+        previousChannels.size === waveChannels.size &&
+        [...waveChannels].every((c) => previousChannels!.has(c));
+      const differs = sameChannels ? "другими сообщениями" : "другими каналами и шаблонами";
+      waveBody = waitTag
         ? [
             t("Тем, кто не отреагировал, кампания выжидает "),
             ...valueSegments(hasFacts, waitTag),
-            t(" и заходит иначе — другими каналами и шаблонами:"),
+            t(` и заходит иначе — ${differs}:`),
           ]
-        : [t("Тем, кто не отреагировал, кампания заходит иначе — другими каналами и шаблонами:")];
+        : [t(`Тем, кто не отреагировал, кампания заходит иначе — ${differs}:`)];
     }
+
     stages.push({
-      id: `touch-${touchOrdinal}`,
-      kind: "touch",
+      id: isFork ? `fork-${++forkOrdinal}` : `touch-${touchOrdinal}`,
+      kind: isFork ? "fork" : "touch",
       heading,
-      body: mergeTextSegments(touchBody),
+      // Вводная про каналы — у первой волны любого вида, перед её собственной
+      // фразой.
+      body: mergeTextSegments(waveOrdinal === 1 ? [...channelsIntro, ...waveBody] : waveBody),
       groups,
     });
     originHeading = heading;
+    previousChannels = waveChannels;
   }
 
   // «Итог» — снова только про исход конверсии (review round 1, Finding 2:

@@ -149,6 +149,13 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
     const collapsed = collapseGroups(
       draft.map((group) => ({ ...group, nodes: dedupeNodes(group.nodes) })),
     );
+    // Пауза расходуется ПОПЫТКОЙ выпустить волну, а не её успехом: волна без
+    // коммуникаций не выпускается, но и утечь в следующую волну её пауза не
+    // должна. Пока `pendingWait` присваивался безусловно (`= node`), устаревшее
+    // значение затиралось само; с `??=` (первая пауза волны, а не последняя)
+    // такой страховки больше нет, поэтому инвариант закрыт явно.
+    const waitBefore = pendingWait;
+    pendingWait = undefined;
     if (!collapsed.length) return;
     const id = `wave-${++waveCount}`;
     const groups: WaveGroup[] = collapsed.map((group, i) => ({
@@ -166,12 +173,11 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
         id,
         groups,
         ...(fork ? { forkNode: fork.node, forkKind: fork.kind } : {}),
-        ...(pendingWait ? { waitBefore: pendingWait } : {}),
+        ...(waitBefore ? { waitBefore } : {}),
         repeatsPrevious: key === previousKey,
       },
     });
     previousKey = key;
-    pendingWait = undefined;
   };
 
   /** Копившиеся подряд коммуникации — это одна волна без развилки. */

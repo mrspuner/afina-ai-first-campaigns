@@ -26,6 +26,36 @@ function edge(source: string, target: string, label?: string): WorkflowEdge {
   return { id: `${source}-${target}`, source, target, ...(label ? { label } : {}) };
 }
 
+/**
+ * Развилка ПЕРВОЙ волной, за ней через паузу вторая волна: сегментный сплиттер
+ * с разными каналами в ветках (легаси-«Удержание» такой и есть), три ветки
+ * сходятся в паузу, за паузой — общее sms. Ни один шаблон репозитория обе
+ * половины сразу не даёт, поэтому граф собран руками.
+ */
+function forkThenTouchGraph(): DescribableGraph {
+  return {
+    nodes: [
+      node("signal", "source"),
+      node("split", "split", { kind: "split", by: "segment", branches: 3 }),
+      node("ivr", "ivr", { kind: "ivr", scenario: "Удержание", voiceType: "neutral" }),
+      node("email", "email", {
+        kind: "email", subject: "Ваш дайджест", body: "Самое важное", sender: "d@brand.com",
+      }),
+      node("push", "push", { kind: "push", title: "Загляните", body: "Есть новое" }),
+      node("wait", "wait", { kind: "wait", mode: "duration", durationHours: 168 }),
+      node("sms", "sms", {
+        kind: "sms", text: "Последнее напоминание", alphaName: "BRAND", scheduledAt: "immediate",
+      }),
+    ],
+    edges: [
+      edge("signal", "split"),
+      edge("split", "ivr", "Выс"), edge("split", "email", "Ср"), edge("split", "push", "Низ"),
+      edge("ivr", "wait"), edge("email", "wait"), edge("push", "wait"),
+      edge("wait", "sms"),
+    ],
+  };
+}
+
 /** Однонодовый граф для точечных тестов на резолв шаблона коммуникации — без
  *  scoring/wait, которые describeWorkflow не требует для строки «Первого
  *  касания». */
@@ -161,12 +191,31 @@ describe("describeWorkflow", () => {
       expect(sms.previewTemplateId).toBe("tpl_sms_reminder");
     });
 
-    it("email кладёт в контент ТЕМУ, а не тело письма", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["email"]), T);
+    it("email кладёт в контент ТЕМУ, а не тело письма, и при этом резолвит свой шаблон", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["email"]), T, {
+        pending: [], graphEditable: true,
+      });
       const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
       expect(row.channel).toBe("Email");
-      expect(row.contentText).not.toContain("<");
+      // Равенство ТЕМЕ пресета, а не «нет угловых скобок»: тело письма — тоже
+      // простой текст, и проверка на «<» темы от тела не отличала бы.
+      expect(row.contentText).toBe("Ваше предложение готово");
       expect(row.contentTitle).toBeUndefined();
+      // Положительный резолв шаблона ИМЕННО этого канала (исторический баг:
+      // сид-текст письма не совпадал ни с одним пресетом справочника, шаблон не
+      // резолвился и пилюля не рисовалась). Рассогласование сида со справочником
+      // специфично для канала — зелёный SMS за email не отвечает.
+      expect(row.previewTemplateId).toBe("tpl_eml_offer");
+      expect(row.templateTag!.label).toBe("Персональный оффер");
+    });
+
+    it("ivr резолвит свой шаблон — тот же щит для четвёртого канала", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["ivr"]), T, {
+        pending: [], graphEditable: true,
+      });
+      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+      expect(row.channel).toBe("Звонок");
+      expect(row.previewTemplateId).toBe("tpl_ivr_greeting");
     });
 
     it("push кладёт заголовок отдельной строкой ячейки", () => {
@@ -252,6 +301,45 @@ describe("describeWorkflow", () => {
       ]);
     });
 
+    // Расходящаяся волна не должна врать о том, ЧЕМ она отличается: вторая
+    // волна тех же каналов с другими текстами — обычная форма кампании.
+    describe("расходящаяся волна называет настоящее отличие", () => {
+      const wait = (id: string) =>
+        node(id, "wait", { kind: "wait", mode: "duration", durationHours: 24 });
+
+      it("те же каналы, другие тексты → «другими сообщениями»", () => {
+        const sms = (id: string, text: string) =>
+          node(id, "sms", { kind: "sms", text, alphaName: "BRAND", scheduledAt: "immediate" });
+        const stages = describeWorkflow(
+          {
+            nodes: [node("signal", "source"), sms("a", "Первый заход"), wait("w"), sms("b", "Второй заход")],
+            edges: [edge("signal", "a"), edge("a", "w"), edge("w", "b")],
+          },
+          T,
+        );
+        const second = stages.filter((s) => s.kind === "touch")[1];
+        expect(segmentsText(second.body)).toContain("другими сообщениями");
+        expect(segmentsText(second.body)).not.toContain("другими каналами");
+      });
+
+      it("другой канал → «другими каналами и шаблонами»", () => {
+        const stages = describeWorkflow(
+          {
+            nodes: [
+              node("signal", "source"),
+              node("a", "sms", { kind: "sms", text: "Первый заход", alphaName: "BRAND", scheduledAt: "immediate" }),
+              wait("w"),
+              node("b", "email", { kind: "email", subject: "Второй заход", body: "Текст", sender: "b@brand.com" }),
+            ],
+            edges: [edge("signal", "a"), edge("a", "w"), edge("w", "b")],
+          },
+          T,
+        );
+        const second = stages.filter((s) => s.kind === "touch")[1];
+        expect(segmentsText(second.body)).toContain("другими каналами и шаблонами");
+      });
+    });
+
     it("нет коммуникаций — нет касаний, «Итог» про готовый сегмент", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
       expect(stages.some((s) => s.kind === "touch")).toBe(false);
@@ -305,6 +393,61 @@ describe("describeWorkflow", () => {
         ["Оффер −10%"], ["Короткое напоминание"],
       ]);
       expect(segmentsText(fork.body)).toContain("расходится по условию открыл письмо?");
+    });
+
+    it("развилка ТРАТИТ номер касания: следующая волна — «Повторное касание», и она про неотреагировавших", () => {
+      // Развилка первой волной (легаси-«Удержание» — развилка по построению),
+      // за ней через паузу вторая волна. Если бы развилка номер не тратила,
+      // вторая волна назвалась бы «Первым касанием», рассказывая при этом про
+      // тех, кто не отреагировал, — этап противоречил бы сам себе.
+      const stages = describeWorkflow(forkThenTouchGraph(), T, {
+        pending: [], channels: ["ivr", "email", "push"],
+      });
+      expect(stages.map((s) => s.heading)).toEqual([
+        "Загрузка базы", "Деление на потоки", "Повторное касание", "Итог",
+      ]);
+      expect(segmentsText(stages.find((s) => s.kind === "touch")!.body))
+        .toContain("Тем, кто не отреагировал");
+    });
+
+    it("вводная «Выбрано N каналов» есть и тогда, когда первая волна — развилка", () => {
+      // Пилюля «Каналы» — единственный вход описания в этот шаг визарда; она не
+      // должна пропадать оттого, что первая волна разветвилась.
+      const stages = describeWorkflow(forkThenTouchGraph(), T, {
+        pending: [], channels: ["ivr", "email", "push"], editableSteps: ["channels"],
+      });
+      const fork = stages.find((s) => s.kind === "fork")!;
+      expect(segmentsText(fork.body)).toBe(
+        "Выбрано 3 канала: Звонок, Email, Push. Аудитория делится на 3 потока по уровню склонности, каждый получает своё:",
+      );
+      const tag = fork.body.find((s) => s.kind === "tag")!;
+      expect(tag.tag.label).toBe("3 канала");
+      expect(tag.tag.target).toEqual({ kind: "wizard-step", step: "channels" });
+    });
+
+    it("повтор номер НЕ тратит: касание → повтор → касание даёт «Первое / Пауза и повтор / Повторное»", () => {
+      const sms = (id: string, text: string) =>
+        node(id, "sms", { kind: "sms", text, alphaName: "BRAND", scheduledAt: "immediate" });
+      const wait = (id: string) =>
+        node(id, "wait", { kind: "wait", mode: "duration", durationHours: 24 });
+      const graph = {
+        nodes: [
+          node("signal", "source"),
+          sms("a1", "Первый заход"), wait("w1"),
+          sms("a2", "Первый заход"), wait("w2"),
+          sms("b1", "Совсем другой текст"),
+        ],
+        edges: [
+          edge("signal", "a1"), edge("a1", "w1"), edge("w1", "a2"),
+          edge("a2", "w2"), edge("w2", "b1"),
+        ],
+      };
+      const stages = describeWorkflow(graph, T).filter((s) => s.kind !== "start" && s.kind !== "outcome");
+      expect(stages.map((s) => [s.kind, s.heading])).toEqual([
+        ["touch", "Первое касание"],
+        ["retry", "Пауза и повтор"],
+        ["touch", "Повторное касание"],
+      ]);
     });
 
     it("одинаковые по содержанию потоки развилкой не становятся — это обычное касание", () => {
