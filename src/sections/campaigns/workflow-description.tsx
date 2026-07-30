@@ -68,21 +68,26 @@ function waitParamsForTag(
  * Без цели (ни `previewTemplateId`, ни резолвнутых `nodeParams`) кнопка не
  * рендерится вовсе — не пустышкой без действия.
  *
- * `groupLabel` (Task 9, передано из задачи 8) — ◈-подпись ветки, которой
- * принадлежит строка. У сегментированных сценариев («Апсейл») один шаг несёт
- * несколько ◈-групп одного канала («SMS» и в «Высокая склонность», и в
- * «Средняя склонность») — без метки ветки их `aria-label` совпадал бы
- * дословно, и скринридер не мог бы различить кнопки. С меткой ярлык
- * становится «Предпросмотр — SMS, Высокая склонность»; без метки (обычное
- * касание без веток) — как раньше, только каналом.
+ * `stageHeading` (Task 9, fix round) — заголовок этапа, которому принадлежит
+ * строка. РЕАЛЬНЫЙ источник дублей аудио-имён — не ◈-группы одного шага (у
+ * них `group.label` заполняется только настоящей развилкой, `forkKind`), а
+ * этап «Пауза и повтор»: он рисует СВОЮ таблицу с содержательно той же самой
+ * строкой, что и оригинальное касание, и обе группы при этом БЕЗ `group.label`
+ * (повтор никогда не развилка). Поэтому единственный различитель, который
+ * реально покрывает этот случай — заголовок ЭТАПА (он уникален в описании и
+ * человекочитаем): «Предпросмотр — SMS, Первое касание» против «Предпросмотр
+ * — SMS, Пауза и повтор». `groupLabel` (◈-подпись ветки НАСТОЯЩЕЙ развилки)
+ * добавляется тем же способом поверх — обе причины дублей закрыты независимо.
  */
 function PreviewButton({
   row,
   nodeParams,
+  stageHeading,
   groupLabel,
 }: {
   row: DescriptionCommunication;
   nodeParams?: Map<string, NodeParams>;
+  stageHeading: string;
   groupLabel?: string;
 }) {
   const { openTemplatePreview } = useChat();
@@ -90,7 +95,8 @@ function PreviewButton({
   const fallback = params ? nodePreviewTemplate(row.nodeId, params) : null;
   const target = row.previewTemplateId ?? fallback;
   if (!target) return null;
-  const label = groupLabel ? `Предпросмотр — ${row.channel}, ${groupLabel}` : `Предпросмотр — ${row.channel}`;
+  const parts = [row.channel, stageHeading, ...(groupLabel ? [groupLabel] : [])];
+  const label = `Предпросмотр — ${parts.join(", ")}`;
   return (
     <button
       type="button"
@@ -297,7 +303,12 @@ export function WorkflowDescription({
                             </span>
                           </td>
                           <td className="py-1.5">
-                            <PreviewButton row={row} nodeParams={nodeParams} groupLabel={group.label} />
+                            <PreviewButton
+                              row={row}
+                              nodeParams={nodeParams}
+                              stageHeading={stage.heading}
+                              groupLabel={group.label}
+                            />
                           </td>
                         </tr>
                       ))}

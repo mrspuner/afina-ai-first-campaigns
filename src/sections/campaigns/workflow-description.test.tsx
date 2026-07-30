@@ -3,12 +3,14 @@ import type { ReactElement } from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { WorkflowDescription } from "./workflow-description";
-import { segmentsText, type DescriptionStage } from "@/state/graph-description";
+import { describeWorkflow, segmentsText, type DescriptionStage } from "@/state/graph-description";
 import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
 import { TemplatePreviewDrawer } from "./template-preview-drawer";
 import { NODE_STYLES } from "./node-visuals";
 import type { NodeParams } from "@/types/workflow";
+import { createTemplate } from "@/state/workflow-templates";
+import { getScenario } from "@/data/scenarios";
 
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
@@ -358,14 +360,46 @@ describe("таблица коммуникаций", () => {
 });
 
 /**
- * Task 9 (передано из Task 8): у сегментированных сценариев («Апсейл») один
- * шаг несёт несколько ◈-групп ОДНОГО канала — обе SMS-строки резолвят один и
- * тот же дефолтный шаблон, и без метки ветки в `aria-label` кнопки
- * предпросмотра скринридер слышит «Предпросмотр — SMS» дважды и не может их
- * различить (та же неоднозначность, что ловит campaign-screen.test.tsx на
- * getByRole). Ярлык обязан включать `group.label`, когда он есть.
+ * Task 9 (fix round — ревью нашло дыру в первой версии): РЕАЛЬНЫЙ источник
+ * дублей `aria-label` — не несколько ◈-групп одного шага (`group.label`
+ * заполняется только настоящей развилкой, `forkKind`), а этап «Пауза и
+ * повтор»: он рисует СВОЮ таблицу с содержательно той же строкой, что и
+ * оригинальное касание, и ОБЕ группы при этом без `group.label` (повтор
+ * никогда не развилка). Единственный различитель, который реально покрывает
+ * этот случай, — заголовок ЭТАПА (уникален в описании, человекочитаем).
+ * `groupLabel` добавляется поверх для НАСТОЯЩИХ развилок — обе причины дублей
+ * закрыты независимо друг от друга.
  */
 describe("таблица коммуникаций — уникальный aria-label кнопки предпросмотра (Task 9)", () => {
+  it("реальный случай (Апсейл): касание + повтор с той же таблицей — все ярлыки предпросмотра различны", () => {
+    // Та же фикстура, что использует campaign-screen.test.tsx (draftCampaign):
+    // Апсейл, канал sms, sourceType "new" — реальный `describeWorkflow`, а не
+    // сконструированный вручную DescriptionStage[].
+    const signalType = getScenario("base-upsell")!.signalType;
+    const graph = createTemplate(signalType, "new", ["sms"]);
+    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
+    const nodeParams = new Map(
+      graph.nodes
+        .filter((n) => n.data.params !== undefined)
+        .map((n) => [n.id, n.data.params!] as const),
+    );
+
+    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
+
+    const previewButtons = screen.getAllByRole("button", { name: /предпросмотр/i });
+    const labels = previewButtons.map((btn) => btn.getAttribute("aria-label"));
+    // Доказываем, что тест реально ловит дубль-кейс, а не проходит вхолостую:
+    // оба этапа с одноимённым SMS-шаблоном присутствуют.
+    expect(labels).toContain("Предпросмотр — SMS, Первое касание");
+    expect(labels).toContain("Предпросмотр — SMS, Пауза и повтор");
+    // И главное утверждение — различимость: ни одно имя не повторяется.
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  // Вторая половина правила (её можно оставить синтетической — она не про
+  // повтор, а про НАСТОЯЩУЮ развилку внутри одного шага, где `group.label`
+  // реально заполняется): два ◈-потока одного канала внутри одного этапа
+  // получают разные ярлыки за счёт метки ветки поверх заголовка этапа.
   const sameChannelStage: DescriptionStage = {
     id: "touch-1",
     kind: "touch",
@@ -389,25 +423,27 @@ describe("таблица коммуникаций — уникальный aria-
     ],
   };
 
-  it("две группы одного канала получают различающиеся ярлыки — канал + метка ветки", () => {
+  it("две ◈-группы одного канала внутри одного шага получают различающиеся ярлыки — этап + метка ветки", () => {
     wrap(<WorkflowDescription stages={[sameChannelStage]} />);
     // Каждый ярлык находится по отдельности (getByRole кинул бы «multiple
     // elements», если бы метка ветки не вошла в aria-label).
     expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Высокая склонность" }),
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Высокая склонность" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Средняя склонность" }),
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Средняя склонность" }),
     ).toBeInTheDocument();
   });
 
-  it("группа без метки — ярлык остаётся кратким, только канал (обратная совместимость)", () => {
+  it("группа без метки ветки — ярлык несёт канал и этап, без хвоста группы", () => {
     const stage: DescriptionStage = {
       ...GROUP_STAGE,
       groups: [{ id: "g", rows: [GROUP_STAGE.groups![0].rows[0]] }],
     };
     wrap(<WorkflowDescription stages={[stage]} />);
-    expect(screen.getByRole("button", { name: "Предпросмотр — Email" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Предпросмотр — Email, Первое касание" }),
+    ).toBeInTheDocument();
   });
 });
 
