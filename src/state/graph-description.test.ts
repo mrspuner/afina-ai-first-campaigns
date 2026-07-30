@@ -274,6 +274,46 @@ describe("describeWorkflow", () => {
       expect(segmentsText(retry.body)).toContain("повторяет ту же серию");
     });
 
+    /**
+     * Критерий приёмки 8 на том пути, который карточка сама и предлагает:
+     * пользователь меняет шаблон письма пилюлей «Шаблон» в «Первом касании».
+     * Поповер (`TemplateTagPopover.onSelect`) патчит РОВНО `body` и РОВНО одну
+     * ноду — воспроизводим это здесь, вместо того чтобы моделировать «другую
+     * серию» произвольной правкой, которой у пользователя нет.
+     */
+    it("смена шаблона письма в первом касании снимает утверждение «та же серия»", () => {
+      const base = createTemplate("Возврат", "new", ["email"]);
+      // Нода повтора несёт префикс `_repeat` (buildCommUnit), первая — нет.
+      const firstEmail = base.nodes.find(
+        (n) => n.data.nodeType === "email" && !n.id.includes("repeat"),
+      )!;
+      const other = T.find((tpl) => tpl.channel === "email")!;
+      const otherBody = (other.content as unknown as Record<string, unknown>)["body"] as string;
+      const graph = {
+        nodes: base.nodes.map((n) =>
+          n.id === firstEmail.id
+            ? { ...n, data: { ...n.data, params: { ...n.data.params!, body: otherBody } } }
+            : n,
+        ),
+        edges: base.edges,
+      };
+      // Тест ловит реальный кейс, а не проходит вхолостую: тела разошлись,
+      // а ТЕМЫ у обеих нод остались одинаковыми — на этом прежний ключ и слеп.
+      const bodies = graph.nodes
+        .filter((n) => n.data.nodeType === "email")
+        .map((n) => n.data.params as Extract<NodeParams, { kind: "email" }>);
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0].subject).toBe(bodies[1].subject);
+      expect(bodies[0].body).not.toBe(bodies[1].body);
+
+      const stages = describeWorkflow(graph, T);
+      expect(stages.some((s) => s.kind === "retry")).toBe(false);
+      expect(stages.some((s) => s.sameAsHeading !== undefined)).toBe(false);
+      expect(stages.map((s) => segmentsText(s.body)).join(" ")).not.toContain("ту же серию");
+      // Вторая волна осталась видимой — она стала обычным касанием.
+      expect(stages.filter((s) => s.kind === "touch")).toHaveLength(2);
+    });
+
     it("«Пауза и повтор» берёт длительность из WaitParams", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const retry = stages.find((s) => s.kind === "retry")!;

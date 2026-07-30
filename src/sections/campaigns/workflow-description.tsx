@@ -317,7 +317,6 @@ export function WorkflowDescription({
                         <th scope="col" className="pb-1 font-normal" />
                       </tr>
                     </thead>
-
                     <tbody>
                       {group.rows.map((row) => (
                         <tr key={row.nodeId} className="align-top">
