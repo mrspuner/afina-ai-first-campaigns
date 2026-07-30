@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { segmentWaves } from "./graph-waves";
 import { createTemplate, TEMPLATE_BY_TYPE } from "./workflow-templates";
+import type {
+  NodeParams,
+  WorkflowEdge,
+  WorkflowNode,
+  WorkflowNodeType,
+} from "@/types/workflow";
+
+/** Нода рукотворного графа: обходу нужны только id, nodeType и params. */
+function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): WorkflowNode {
+  return {
+    id,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: { label: id, nodeType, ...(params ? { params } : {}) },
+  };
+}
+
+function edge(source: string, target: string, label?: string): WorkflowEdge {
+  return { id: `${source}-${target}`, source, target, ...(label ? { label } : {}) };
+}
 
 describe("segmentWaves", () => {
   it("канонический одноканальный граф: одна волна, повтор помечен repeatsPrevious", () => {
@@ -40,13 +60,15 @@ describe("segmentWaves", () => {
 
   it("сегменты с ОДИНАКОВЫМИ каналами схлопываются в одну группу без метки", () => {
     const graph = createTemplate("Удержание", "new", ["sms", "email"]);
+    // Без `!` и без guard'а: если развилка перестанет резолвиться, тест обязан
+    // упасть — именно эту регрессию он и стережёт.
     const fork = segmentWaves(graph).steps.find(
       (s) => s.kind === "wave" && s.wave.forkKind === "split",
-    );
-    if (fork && fork.kind === "wave") {
-      expect(fork.wave.groups).toHaveLength(1);
-      expect(fork.wave.groups[0].label).toBeUndefined();
-    }
+    )!;
+    expect(fork.kind).toBe("wave");
+    const groups = fork.kind === "wave" ? fork.wave.groups : [];
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBeUndefined();
   });
 
   it("параллельные сегменты дают по одной строке на канал, а не N одинаковых", () => {
@@ -67,6 +89,52 @@ describe("segmentWaves", () => {
     expect(waves).toHaveLength(2);
     expect(waves[0].wave.repeatsPrevious).toBe(false);
     expect(waves[1].wave.repeatsPrevious).toBe(true);
+  });
+
+  it("condition с РАЗНЫМИ сообщениями в ветках — развилка по реакции, с метками ДА/НЕТ", () => {
+    // Ни один шаблон репозитория такой формы не даёт, поэтому граф собран
+    // руками: это прямой критерий приёмки спеки («Развилка по реакции»).
+    const condition = node("react", "condition", { kind: "condition", trigger: "opened" });
+    const graph = {
+      nodes: [
+        node("signal", "source"),
+        node("first", "email", {
+          kind: "email",
+          subject: "Первое письмо",
+          body: "Знакомство",
+          sender: "care@brand.com",
+        }),
+        condition,
+        node("offer", "email", {
+          kind: "email",
+          subject: "Оффер −10%",
+          body: "Скидка тем, кто открыл",
+          sender: "promo@brand.com",
+        }),
+        node("nudge", "sms", {
+          kind: "sms",
+          text: "Короткое напоминание",
+          alphaName: "BRAND",
+          scheduledAt: "immediate",
+        }),
+      ],
+      edges: [
+        edge("signal", "first"),
+        edge("first", "react"),
+        edge("react", "offer", "ДА"),
+        edge("react", "nudge", "НЕТ"),
+      ],
+    };
+
+    const fork = segmentWaves(graph).steps.find(
+      (s) => s.kind === "wave" && s.wave.forkKind === "condition",
+    )!;
+    expect(fork.kind).toBe("wave");
+    const wave = fork.kind === "wave" ? fork.wave : undefined;
+    expect(wave!.forkNode).toBe(condition);
+    expect(wave!.groups).toHaveLength(2);
+    expect(wave!.groups.map((g) => g.label)).toEqual(["ДА", "НЕТ"]);
+    expect(wave!.groups.map((g) => g.nodes.map((n) => n.id))).toEqual([["offer"], ["nudge"]]);
   });
 
   it("пустой граф даёт пустые шаги", () => {
