@@ -73,21 +73,32 @@ function waitParamsForTag(
  * них `group.label` заполняется только настоящей развилкой, `forkKind`), а
  * этап «Пауза и повтор»: он рисует СВОЮ таблицу с содержательно той же самой
  * строкой, что и оригинальное касание, и обе группы при этом БЕЗ `group.label`
- * (повтор никогда не развилка). Поэтому единственный различитель, который
- * реально покрывает этот случай — заголовок ЭТАПА (он уникален в описании и
- * человекочитаем): «Предпросмотр — SMS, Первое касание» против «Предпросмотр
- * — SMS, Пауза и повтор». `groupLabel` (◈-подпись ветки НАСТОЯЩЕЙ развилки)
- * добавляется тем же способом поверх — обе причины дублей закрыты независимо.
+ * (повтор никогда не развилка). Поэтому основной различитель — заголовок
+ * ЭТАПА (человекочитаем): «Предпросмотр — SMS, Первое касание» против
+ * «Предпросмотр — SMS, Пауза и повтор». `groupLabel` (◈-подпись ветки
+ * НАСТОЯЩЕЙ развилки) добавляется поверх — обе причины дублей закрыты
+ * независимо.
+ *
+ * `stageId` (финальное ревью) — страховка на случай, когда и заголовка мало.
+ * Заголовки уникальны у шаблонов репозитория, но не ПО ПОСТРОЕНИЮ: цепочка
+ * A → пауза → A → пауза → A даёт два этапа «Пауза и повтор», а две
+ * условные развилки — две «Развилки по реакции» (из шаблонов недостижимо, из
+ * ИИ-правки графа — вполне). Уникален по построению только `stage.id`
+ * (`touch-1`, `retry-1`, `retry-2`), поэтому он и дописывается хвостом — но
+ * ТОЛЬКО когда заголовки реально совпали (проп приходит `undefined` в обычном
+ * случае), иначе ярлык терял бы читаемость на всех нормальных карточках.
  */
 function PreviewButton({
   row,
   nodeParams,
   stageHeading,
+  stageId,
   groupLabel,
 }: {
   row: DescriptionCommunication;
   nodeParams?: Map<string, NodeParams>;
   stageHeading: string;
+  stageId?: string;
   groupLabel?: string;
 }) {
   const { openTemplatePreview } = useChat();
@@ -95,7 +106,12 @@ function PreviewButton({
   const fallback = params ? nodePreviewTemplate(row.nodeId, params) : null;
   const target = row.previewTemplateId ?? fallback;
   if (!target) return null;
-  const parts = [row.channel, stageHeading, ...(groupLabel ? [groupLabel] : [])];
+  const parts = [
+    row.channel,
+    stageHeading,
+    ...(groupLabel ? [groupLabel] : []),
+    ...(stageId ? [stageId] : []),
+  ];
   const label = `Предпросмотр — ${parts.join(", ")}`;
   return (
     <button
@@ -178,6 +194,18 @@ export function WorkflowDescription({
   domains,
 }: WorkflowDescriptionProps) {
   if (!stages.length) return null;
+
+  /**
+   * Заголовки, встречающиеся в описании больше одного раза. Только их ярлыки
+   * предпросмотра получают хвост из `stage.id` — см. `PreviewButton`.
+   * Считается по всему `stages`, а не по соседям: два одноимённых этапа могут
+   * стоять и не подряд (касание — развилка — то же касание).
+   */
+  const ambiguousHeadings = new Set(
+    stages
+      .map((s) => s.heading)
+      .filter((heading, i, all) => all.indexOf(heading) !== i),
+  );
 
   /**
    * Один путь рендера сегментов для ДВУХ мест — тела этапа (`stage.body`) и
@@ -307,6 +335,9 @@ export function WorkflowDescription({
                               row={row}
                               nodeParams={nodeParams}
                               stageHeading={stage.heading}
+                              stageId={
+                                ambiguousHeadings.has(stage.heading) ? stage.id : undefined
+                              }
                               groupLabel={group.label}
                             />
                           </td>

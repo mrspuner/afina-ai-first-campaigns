@@ -8,12 +8,22 @@ import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
 import { TemplatePreviewDrawer } from "./template-preview-drawer";
 import { NODE_STYLES } from "./node-visuals";
-import type { NodeParams } from "@/types/workflow";
+import type { NodeParams, WorkflowNode, WorkflowNodeType } from "@/types/workflow";
 import { createTemplate } from "@/state/workflow-templates";
 import { getScenario } from "@/data/scenarios";
 
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
+
+/** Нода рукотворного графа — описанию нужны только id, nodeType и params. */
+function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): WorkflowNode {
+  return {
+    id,
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: { label: id, nodeType, ...(params ? { params } : {}) },
+  };
+}
 
 // ВНИМАНИЕ (Task 5 → Task 7): поле `DescriptionStage.messages` снято — строки
 // коммуникаций живут в `groups[].rows` (`DescriptionCommunication`), рендерит
@@ -433,6 +443,57 @@ describe("таблица коммуникаций — уникальный aria-
     expect(
       screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Средняя склонность" }),
     ).toBeInTheDocument();
+  });
+
+  // Ревью финального круга: заголовок этапа уникален у ШАБЛОНОВ репозитория, но
+  // не по построению. Цепочка A → пауза → A → пауза → A даёт ДВА этапа «Пауза и
+  // повтор», два условия-развилки — две «Развилки по реакции». Тогда
+  // возвращается ровно тот дефект, который различитель и закрывал. Уникален по
+  // построению только `stage.id` (`touch-1`, `retry-1`, `retry-2`, …), поэтому
+  // он и дописывается — но ТОЛЬКО когда заголовки реально совпали, иначе ярлык
+  // терял бы человекочитаемость на всех обычных карточках.
+  it("два этапа с ОДИНАКОВЫМ заголовком получают различающиеся ярлыки", () => {
+    const sms = (id: string) =>
+      node(id, "sms", {
+        kind: "sms",
+        text: "Ваше предложение ждёт.",
+        alphaName: "BRAND",
+        scheduledAt: "immediate",
+      });
+    const wait = (id: string) =>
+      node(id, "wait", { kind: "wait", mode: "duration", durationHours: 48 });
+    // Две паузы подряд с той же серией: обе волны — «Пауза и повтор».
+    const graph = {
+      nodes: [node("signal", "source"), sms("a1"), wait("w1"), sms("a2"), wait("w2"), sms("a3")],
+      edges: [
+        { id: "e1", source: "signal", target: "a1" },
+        { id: "e2", source: "a1", target: "w1" },
+        { id: "e3", source: "w1", target: "a2" },
+        { id: "e4", source: "a2", target: "w2" },
+        { id: "e5", source: "w2", target: "a3" },
+      ],
+    };
+    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
+    const nodeParams = new Map(
+      graph.nodes
+        .filter((n) => n.data.params !== undefined)
+        .map((n) => [n.id, n.data.params!] as const),
+    );
+
+    // Тест ловит реальный кейс, а не проходит вхолостую: заголовок «Пауза и
+    // повтор» действительно встречается дважды.
+    const repeated = stages.filter((s) => s.heading === "Пауза и повтор");
+    expect(repeated).toHaveLength(2);
+
+    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
+    const labels = screen
+      .getAllByRole("button", { name: /предпросмотр/i })
+      .map((btn) => btn.getAttribute("aria-label"));
+    expect(new Set(labels).size).toBe(labels.length);
+    // Человекочитаемость не потеряна: канал и заголовок этапа по-прежнему
+    // ведут ярлык, id дописан хвостом и только у совпавших.
+    expect(labels).toContain("Предпросмотр — SMS, Первое касание");
+    expect(labels.filter((l) => l?.startsWith("Предпросмотр — SMS, Пауза и повтор,"))).toHaveLength(2);
   });
 
   it("группа без метки ветки — ярлык несёт канал и этап, без хвоста группы", () => {
