@@ -174,7 +174,12 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
         groups,
         ...(fork ? { forkNode: fork.node, forkKind: fork.kind } : {}),
         ...(waitBefore ? { waitBefore } : {}),
-        repeatsPrevious: key === previousKey,
+        // Спека §2 п.5: повтор — волна с ключом предыдущей, «которую от неё
+        // отделяет `wait`». Разделяющая пауза входит в определение, а не
+        // прилагается к нему: без неё две одинаковые волны, разделённые лишь
+        // проверкой, становились бы «Паузой и повтором» при отсутствующей
+        // паузе. Совпал ключ, но паузы нет — это новое касание.
+        repeatsPrevious: key === previousKey && waitBefore !== undefined,
       },
     });
     previousKey = key;

@@ -228,3 +228,35 @@ describe("segmentWaves — ключ письма читает тему И тел
   });
 });
 
+/**
+ * Спека §2 п.5 определяет повтор как волну с ключом предыдущей, «которую от неё
+ * отделяет `wait`». Разделяющая пауза — часть определения, а не украшение: без
+ * неё две одинаковые волны, разделённые одной проверкой, назывались бы
+ * «Паузой и повтором» при отсутствующей паузе (и этап выводил бы «кампания
+ * выжидает …» из ноды, которой нет).
+ */
+describe("segmentWaves — повтор требует разделяющей паузы (спека §2 п.5)", () => {
+  it("те же ноды через одну проверку, без паузы, — новое касание, а не повтор", () => {
+    const graph = {
+      nodes: [
+        node("signal", "source"),
+        emailNode("first", "Один и тот же текст."),
+        node("c", "condition", { kind: "condition", trigger: "opened" }),
+        node("success", "success"),
+        emailNode("second", "Один и тот же текст."),
+      ],
+      edges: [
+        edge("signal", "first"),
+        edge("first", "c"),
+        edge("c", "success", "ДА"),
+        edge("c", "second", "НЕТ"),
+      ],
+    };
+
+    const waves = segmentWaves(graph).steps.filter((s) => s.kind === "wave");
+    expect(waves).toHaveLength(2);
+    // Ключи волн совпали — но паузы между ними нет, значит это не повтор.
+    expect(waves[1].wave.waitBefore).toBeUndefined();
+    expect(waves[1].wave.repeatsPrevious).toBe(false);
+  });
+});
