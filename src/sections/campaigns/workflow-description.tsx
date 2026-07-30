@@ -67,23 +67,34 @@ function waitParamsForTag(
  * библиотеке — «Сохранить» списало бы правку в несуществующий id).
  * Без цели (ни `previewTemplateId`, ни резолвнутых `nodeParams`) кнопка не
  * рендерится вовсе — не пустышкой без действия.
+ *
+ * `groupLabel` (Task 9, передано из задачи 8) — ◈-подпись ветки, которой
+ * принадлежит строка. У сегментированных сценариев («Апсейл») один шаг несёт
+ * несколько ◈-групп одного канала («SMS» и в «Высокая склонность», и в
+ * «Средняя склонность») — без метки ветки их `aria-label` совпадал бы
+ * дословно, и скринридер не мог бы различить кнопки. С меткой ярлык
+ * становится «Предпросмотр — SMS, Высокая склонность»; без метки (обычное
+ * касание без веток) — как раньше, только каналом.
  */
 function PreviewButton({
   row,
   nodeParams,
+  groupLabel,
 }: {
   row: DescriptionCommunication;
   nodeParams?: Map<string, NodeParams>;
+  groupLabel?: string;
 }) {
   const { openTemplatePreview } = useChat();
   const params = nodeParams?.get(row.nodeId);
   const fallback = params ? nodePreviewTemplate(row.nodeId, params) : null;
   const target = row.previewTemplateId ?? fallback;
   if (!target) return null;
+  const label = groupLabel ? `Предпросмотр — ${row.channel}, ${groupLabel}` : `Предпросмотр — ${row.channel}`;
   return (
     <button
       type="button"
-      aria-label={`Предпросмотр — ${row.channel}`}
+      aria-label={label}
       onClick={() => openTemplatePreview(target)}
       className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
     >
@@ -286,7 +297,7 @@ export function WorkflowDescription({
                             </span>
                           </td>
                           <td className="py-1.5">
-                            <PreviewButton row={row} nodeParams={nodeParams} />
+                            <PreviewButton row={row} nodeParams={nodeParams} groupLabel={group.label} />
                           </td>
                         </tr>
                       ))}

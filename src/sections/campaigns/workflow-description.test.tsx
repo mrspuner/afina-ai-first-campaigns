@@ -357,6 +357,60 @@ describe("таблица коммуникаций", () => {
   });
 });
 
+/**
+ * Task 9 (передано из Task 8): у сегментированных сценариев («Апсейл») один
+ * шаг несёт несколько ◈-групп ОДНОГО канала — обе SMS-строки резолвят один и
+ * тот же дефолтный шаблон, и без метки ветки в `aria-label` кнопки
+ * предпросмотра скринридер слышит «Предпросмотр — SMS» дважды и не может их
+ * различить (та же неоднозначность, что ловит campaign-screen.test.tsx на
+ * getByRole). Ярлык обязан включать `group.label`, когда он есть.
+ */
+describe("таблица коммуникаций — уникальный aria-label кнопки предпросмотра (Task 9)", () => {
+  const sameChannelStage: DescriptionStage = {
+    id: "touch-1",
+    kind: "touch",
+    heading: "Первое касание",
+    body: t("Каждому потоку — своё сообщение:"),
+    groups: [
+      {
+        id: "g1",
+        label: "Высокая склонность",
+        rows: [
+          { nodeId: "n-high", channel: "SMS", contentText: "Текст", previewTemplateId: "tpl_sms" },
+        ],
+      },
+      {
+        id: "g2",
+        label: "Средняя склонность",
+        rows: [
+          { nodeId: "n-mid", channel: "SMS", contentText: "Текст", previewTemplateId: "tpl_sms" },
+        ],
+      },
+    ],
+  };
+
+  it("две группы одного канала получают различающиеся ярлыки — канал + метка ветки", () => {
+    wrap(<WorkflowDescription stages={[sameChannelStage]} />);
+    // Каждый ярлык находится по отдельности (getByRole кинул бы «multiple
+    // elements», если бы метка ветки не вошла в aria-label).
+    expect(
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Высокая склонность" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Средняя склонность" }),
+    ).toBeInTheDocument();
+  });
+
+  it("группа без метки — ярлык остаётся кратким, только канал (обратная совместимость)", () => {
+    const stage: DescriptionStage = {
+      ...GROUP_STAGE,
+      groups: [{ id: "g", rows: [GROUP_STAGE.groups![0].rows[0]] }],
+    };
+    wrap(<WorkflowDescription stages={[stage]} />);
+    expect(screen.getByRole("button", { name: "Предпросмотр — Email" })).toBeInTheDocument();
+  });
+});
+
 describe("таблица коммуникаций — кнопка предпросмотра открывает дровер", () => {
   // `TemplatePreviewDrawer` смонтирован рядом — тот же приём, что
   // `template-preview-drawer.test.tsx` использует для «глаза» ноды: клик по
