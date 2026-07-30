@@ -1,4 +1,12 @@
+// Task 8: таблица коммуникаций несёт кнопку предпросмотра, а та зовёт
+// useChat() — компонент перестаёт быть чисто серверным/презентационным и
+// нуждается в границе клиентского компонента (тот же приём, что уже несёт
+// сосед `description-tag.tsx`).
+"use client";
+
+import { Eye } from "lucide-react";
 import type {
+  DescriptionCommunication,
   DescriptionSegment,
   DescriptionStage,
   DescriptionTag,
@@ -7,6 +15,8 @@ import { DescriptionTagPill } from "./description-tag";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
+import { useChat } from "@/state/chat-context";
+import { nodePreviewTemplate } from "@/state/node-template-options";
 
 /**
  * Тип ноды по её id для целей `template`/`node-fields` — сам тег его не несёт
@@ -46,6 +56,41 @@ function waitParamsForTag(
   if (tag.target.kind !== "node-fields") return undefined;
   const params = nodeParams?.get(tag.target.nodeId);
   return params?.kind === "wait" ? params : undefined;
+}
+
+/**
+ * Кнопка 4-й колонки таблицы коммуникаций (Task 8). Тот же механизм, что
+ * «глаз» в селекте шаблонов ноды (`node-card-content.tsx`): резолвнутый
+ * шаблон открывается по id, а нерезолвнутый — синтетическим шаблоном из
+ * текущих params ноды, который `nodePreviewTemplate` помечает
+ * `usedInCampaigns: 1`, чтобы дровер открыл его read-only (нет записи в
+ * библиотеке — «Сохранить» списало бы правку в несуществующий id).
+ * Без цели (ни `previewTemplateId`, ни резолвнутых `nodeParams`) кнопка не
+ * рендерится вовсе — не пустышкой без действия.
+ */
+function PreviewButton({
+  row,
+  nodeParams,
+}: {
+  row: DescriptionCommunication;
+  nodeParams?: Map<string, NodeParams>;
+}) {
+  const { openTemplatePreview } = useChat();
+  const params = nodeParams?.get(row.nodeId);
+  const fallback = params ? nodePreviewTemplate(row.nodeId, params) : null;
+  const target = row.previewTemplateId ?? fallback;
+  if (!target) return null;
+  return (
+    <button
+      type="button"
+      aria-label={`Предпросмотр — ${row.channel}`}
+      onClick={() => openTemplatePreview(target)}
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+    >
+      <Eye className="h-3.5 w-3.5" aria-hidden />
+      <span className="text-xs">Предпросмотр</span>
+    </button>
+  );
 }
 
 /** Знаки, которые в тексте описания всегда стоят СРАЗУ за предыдущим словом,
@@ -99,12 +144,14 @@ interface WorkflowDescriptionProps {
  *
  * Описание — связный текст с вкраплёнными пилюлями значений (Task 4/5):
  * подзаголовки этапов жирным, тексты сообщений в кавычках, параметры кампании
- * — кликабельными тегами. Никаких карточек нод — граф живёт отдельной
- * миниатюрой ниже.
+ * — кликабельными тегами. Таблицы коммуникаций (Task 8) — ниже текста, по
+ * ◈-группам шага. Никаких карточек нод — граф живёт отдельной миниатюрой ниже.
  *
- * Чисто презентационный компонент: правки отсюда не запускаются напрямую —
- * клик по тегу лишь поднимает его наверх (`onTagActivate`), решение о том,
- * куда вести (шаг визарда/поповер), принимает вызывающий.
+ * Клик по тегу поднимается наверх (`onTagActivate`) — решение о том, куда
+ * вести (шаг визарда/поповер), принимает вызывающий. Но кнопка предпросмотра
+ * (Task 8) зовёт `useChat().openTemplatePreview` сама — компонент больше не
+ * чисто презентационный: он открывает боковой дровер напрямую, хотя ничего
+ * в нём не правит (правки таблица не производит вовсе).
  */
 export function WorkflowDescription({
   stages,
@@ -176,8 +223,77 @@ export function WorkflowDescription({
                   ))}
                 </dl>
               ) : null}
-              {/* Таблицы коммуникаций (`stage.groups`) и кнопку предпросмотра
-                  рисует Task 8 — здесь их пока нет. */}
+              {stage.sameAsHeading && (
+                <p className="text-muted-foreground italic">
+                  Та же серия, что в шаге «{stage.sameAsHeading}»
+                </p>
+              )}
+              {stage.groups?.map((group, gi) => (
+                <div key={group.id} className={gi > 0 ? "mt-3" : undefined}>
+                  {group.label && (
+                    <p
+                      data-testid="group-label"
+                      className="mb-1.5 font-medium text-foreground"
+                    >
+                      ◈ {group.label}
+                    </p>
+                  )}
+                  <table className="w-full table-fixed border-collapse text-left">
+                    {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
+                        шапки, но шапка — ОДИН раз на шаг (у первой ◈-группы), а
+                        table-fixed берёт ширины колонок из первой строки СВОЕЙ
+                        таблицы, а не соседней. Без общего <colgroup> у 2-й+
+                        группы колонки поплыли бы — здесь общий источник ширин
+                        для ВСЕХ таблиц шага, выровненных между группами. */}
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      <col className="w-[26%]" />
+                      <col />
+                      <col className="w-[7rem]" />
+                    </colgroup>
+                    {gi === 0 && (
+                      <thead>
+                        <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
+                          <th className="pb-1 font-normal">Коммуникация</th>
+                          <th className="pb-1 font-normal">Шаблон</th>
+                          <th className="pb-1 font-normal">Контент шаблона</th>
+                          <th className="pb-1 font-normal" />
+                        </tr>
+                      </thead>
+                    )}
+                    <tbody>
+                      {group.rows.map((row) => (
+                        <tr key={row.nodeId} className="align-top">
+                          <td className="py-1.5 pr-2 font-medium">{row.channel}</td>
+                          <td className="py-1.5 pr-2">
+                            {row.templateTag && (
+                              <DescriptionTagPill
+                                tag={row.templateTag}
+                                onActivate={onTagActivate}
+                                nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
+                              />
+                            )}
+                          </td>
+                          <td className="py-1.5 pr-2 text-muted-foreground">
+                            {/* Без кавычек и без меток «Тема:»/«Текст:» —
+                                контент читается как факт таблицы, не цитата. */}
+                            <span className="line-clamp-2">
+                              {row.contentTitle && (
+                                <span className="text-foreground">{row.contentTitle}</span>
+                              )}
+                              {row.contentTitle && <br />}
+                              {row.contentText}
+                            </span>
+                          </td>
+                          <td className="py-1.5">
+                            <PreviewButton row={row} nodeParams={nodeParams} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
           </li>
         ))}

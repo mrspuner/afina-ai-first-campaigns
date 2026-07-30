@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
+import type { ReactElement } from "react";
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { WorkflowDescription } from "./workflow-description";
 import { segmentsText, type DescriptionStage } from "@/state/graph-description";
+import { AppStateProvider } from "@/state/app-state-context";
+import { ChatProvider } from "@/state/chat-context";
+import { TemplatePreviewDrawer } from "./template-preview-drawer";
+import { NODE_STYLES } from "./node-visuals";
+import type { NodeParams } from "@/types/workflow";
 
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
@@ -231,5 +237,277 @@ describe("нумерованный таймлайн", () => {
       <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-settings']")).toBeNull();
+  });
+});
+
+/**
+ * Таблица коммуникаций (Task 8). `PreviewButton` внутри строки зовёт
+ * `useChat()` напрямую — компонент перестаёт быть чисто презентационным,
+ * поэтому здесь и только здесь нужна обёртка провайдерами (та же пара, что
+ * `campaign-screen.tsx` реально ставит вокруг `WorkflowDescription`).
+ */
+const wrap = (ui: ReactElement) =>
+  render(
+    <AppStateProvider>
+      <ChatProvider>{ui}</ChatProvider>
+    </AppStateProvider>,
+  );
+
+const GROUP_STAGE: DescriptionStage = {
+  id: "touch-1",
+  kind: "touch",
+  heading: "Первое касание",
+  body: t("Каждому потоку — своё сообщение:"),
+  groups: [
+    {
+      id: "g1",
+      label: "Высокая склонность",
+      rows: [
+        {
+          nodeId: "n1",
+          channel: "Email",
+          contentText: "Ваше предложение готово",
+          previewTemplateId: "tpl_email_1",
+          templateTag: { id: "tt1", label: "Горячий оффер", target: { kind: "none", nodeId: "n1" } },
+        },
+      ],
+    },
+    {
+      id: "g2",
+      label: "Средняя склонность",
+      rows: [
+        {
+          nodeId: "n2",
+          channel: "Push",
+          contentTitle: "Напоминание",
+          contentText: "У нас есть кое-что для вас.",
+          templateTag: { id: "tt2", label: "не выбран", target: { kind: "none", nodeId: "n2" } },
+        },
+      ],
+    },
+  ],
+};
+
+describe("таблица коммуникаций", () => {
+  it("рендерит канал, шаблон и контент строкой таблицы", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(screen.getByText("Email")).toBeTruthy();
+    expect(screen.getByText("Горячий оффер")).toBeTruthy();
+    expect(screen.getByText("Ваше предложение готово")).toBeTruthy();
+  });
+
+  it("контент без кавычек и без меток «Тема»/«Текст»", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const cell = screen.getByText("Ваше предложение готово");
+    expect(cell.textContent).not.toContain("«");
+    expect(cell.textContent).not.toContain("Тема:");
+  });
+
+  it("push показывает заголовок и текст двумя строками ячейки", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(screen.getByText("Напоминание")).toBeTruthy();
+    expect(screen.getByText("У нас есть кое-что для вас.")).toBeTruthy();
+  });
+
+  it("шапка колонок — один раз на шаг, у первой таблицы", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(container.querySelectorAll("thead")).toHaveLength(1);
+    expect(container.querySelectorAll("table")).toHaveLength(2);
+  });
+
+  it("◈-подзаголовок стоит над таблицей своей группы", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(screen.getByText(/Высокая склонность/)).toBeTruthy();
+    expect(screen.getByText(/Средняя склонность/)).toBeTruthy();
+  });
+
+  it("группа без метки не рисует ◈-подзаголовок", () => {
+    const stage: DescriptionStage = {
+      ...GROUP_STAGE,
+      groups: [{ id: "g", rows: GROUP_STAGE.groups![0].rows }],
+    };
+    const { container } = wrap(<WorkflowDescription stages={[stage]} />);
+    expect(container.querySelector("[data-testid='group-label']")).toBeNull();
+  });
+
+  // Расхождение с эскизом брифа (см. отчёт задачи): у GROUP_STAGE строка
+  // Push (n2) не несёт `previewTemplateId` — «не выбран» у её пилюли ровно
+  // это и значит (шаблон не резолвился из библиотеки). Кнопка предпросмотра
+  // для такой строки существует ТОЛЬКО через синтетический fallback из
+  // `nodeParams` (реальный вызывающий, `CampaignScreen`, всегда передаёт его
+  // вместе со `stages`) — без него в этой строке нечего превьюить, и брифовский
+  // тест (без `nodeParams` вовсе) находит только 1 кнопку, а не 2. Передаём
+  // nodeParams для n2 здесь, сохраняя намерение теста «у каждой строки есть
+  // кнопка», а не подгоняя реализацию под неполную фикстуру.
+  it("у каждой строки есть кнопка предпросмотра", () => {
+    const nodeParams = new Map<string, NodeParams>([
+      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
+    ]);
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} nodeParams={nodeParams} />);
+    expect(screen.getAllByRole("button", { name: /предпросмотр/i })).toHaveLength(2);
+  });
+
+  it("пометка «Та же серия…» показывается у повтора", () => {
+    wrap(
+      <WorkflowDescription
+        stages={[{ ...GROUP_STAGE, kind: "retry", heading: "Пауза и повтор", sameAsHeading: "Первое касание" }]}
+      />,
+    );
+    expect(screen.getByText(/Та же серия, что в шаге «Первое касание»/)).toBeTruthy();
+  });
+});
+
+describe("таблица коммуникаций — кнопка предпросмотра открывает дровер", () => {
+  // `TemplatePreviewDrawer` смонтирован рядом — тот же приём, что
+  // `template-preview-drawer.test.tsx` использует для «глаза» ноды: клик по
+  // кнопке диспатчит через `useChat()`, а сам дровер читает диспатченное
+  // состояние и рендерит содержимое.
+  it("резолвнутый шаблон (previewTemplateId) открывает дровер с содержимым библиотеки", () => {
+    const stage: DescriptionStage = {
+      id: "touch-1",
+      kind: "touch",
+      heading: "Первое касание",
+      body: t("Каждому потоку — своё сообщение:"),
+      groups: [
+        {
+          id: "g1",
+          rows: [
+            {
+              nodeId: "n1",
+              channel: "SMS",
+              contentText: "Ваше предложение ждёт. Подробности на сайте.",
+              // Реальный библиотечный шаблон — `PRESET_TEMPLATES` в app-state.ts.
+              previewTemplateId: "tpl_sms_reminder",
+            },
+          ],
+        },
+      ],
+    };
+    wrap(
+      <>
+        <WorkflowDescription stages={[stage]} />
+        <TemplatePreviewDrawer />
+      </>,
+    );
+    expect(screen.queryByTestId("template-preview-drawer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(drawer).toBeInTheDocument();
+    // Скоуп на дровер: та же строка «Ваше предложение ждёт…» лежит ЕЩЁ и в
+    // ячейке таблицы позади дровера — screen.getByText без within нашёл бы
+    // ДВА узла и упал бы с «multiple elements found».
+    expect(
+      within(drawer).getByText("Ваше предложение ждёт. Подробности на сайте."),
+    ).toBeInTheDocument();
+  });
+
+  it("нерезолвнутый шаблон открывает синтетический предпросмотр из params ноды, read-only", () => {
+    const stage: DescriptionStage = {
+      id: "touch-1",
+      kind: "touch",
+      heading: "Первое касание",
+      body: t("Каждому потоку — своё сообщение:"),
+      groups: [
+        {
+          id: "g1",
+          rows: [
+            {
+              nodeId: "n2",
+              channel: "Push",
+              contentTitle: "Напоминание",
+              contentText: "У нас есть кое-что для вас.",
+              // Нет previewTemplateId — «не выбран», предпросмотр идёт из
+              // текущих params ноды (nodePreviewTemplate), не из библиотеки.
+            },
+          ],
+        },
+      ],
+    };
+    const nodeParams = new Map<string, NodeParams>([
+      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
+    ]);
+    wrap(
+      <>
+        <WorkflowDescription stages={[stage]} nodeParams={nodeParams} />
+        <TemplatePreviewDrawer />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
+    const drawer = screen.getByTestId("template-preview-drawer");
+    expect(drawer).toBeInTheDocument();
+    // Скоуп на дровер — та же причина, что и в тесте выше: контент строки
+    // таблицы («У нас есть кое-что для вас.») дублируется дровером поверх неё.
+    expect(within(drawer).getByText("У нас есть кое-что для вас.")).toBeInTheDocument();
+    // `nodePreviewTemplate` метит синтетический шаблон usedInCampaigns: 1 —
+    // без записи в библиотеке «Сохранить» списало бы правку в несуществующий
+    // id, поэтому дровер обязан открыть его read-only (баннер-предупреждение).
+    expect(within(drawer).getByText(/нельзя редактировать/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Покрытие `nodeTypeForTag` внутри таблицы (Task 8 явно просит его вернуть —
+ * прошлая задача сняла юнит-покрытие этой функции, т.к. живого пути к ней не
+ * было; таблица — этот путь). Пилюля шаблона строки (`target.kind:"template"`)
+ * красится под `NODE_STYLES` СВОЕГО канала — не общим цветом, не нейтральным —
+ * подтверждаем на ДВУХ разных каналах в одной таблице, чтобы исключить
+ * совпадение по случайности/дефолту.
+ */
+function hexToRgb(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
+describe("таблица коммуникаций — пилюля шаблона красится под цвет узла (nodeTypeForTag)", () => {
+  it("email- и push-строки красятся разными цветами своих каналов, а не нейтрально", () => {
+    const stage: DescriptionStage = {
+      id: "touch-1",
+      kind: "touch",
+      heading: "Первое касание",
+      body: t("Каждому потоку — своё сообщение:"),
+      groups: [
+        {
+          id: "g1",
+          rows: [
+            {
+              nodeId: "n-email",
+              channel: "Email",
+              contentText: "Ваше предложение готово",
+              templateTag: {
+                id: "tt-email",
+                label: "Email — оффер",
+                target: { kind: "template", nodeId: "n-email" },
+              },
+            },
+            {
+              nodeId: "n-push",
+              channel: "Push",
+              contentText: "Загляните",
+              templateTag: {
+                id: "tt-push",
+                label: "Push — возвращение",
+                target: { kind: "template", nodeId: "n-push" },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const nodeTypes = new Map([
+      ["n-email", "email" as const],
+      ["n-push", "push" as const],
+    ]);
+    wrap(<WorkflowDescription stages={[stage]} nodeTypes={nodeTypes} />);
+
+    const emailPill = screen.getByRole("button", { name: "Email — оффер" });
+    const pushPill = screen.getByRole("button", { name: "Push — возвращение" });
+
+    expect(emailPill.style.backgroundColor).toBe(hexToRgb(NODE_STYLES.email.bg));
+    expect(emailPill.style.color).toBe(hexToRgb(NODE_STYLES.email.color));
+    expect(pushPill.style.backgroundColor).toBe(hexToRgb(NODE_STYLES.push.bg));
+    expect(pushPill.style.color).toBe(hexToRgb(NODE_STYLES.push.color));
+    // Разные каналы → разные цвета: доказывает, что цвет реально зависит от
+    // резолвнутого `nodeType` строки, а не от одного дефолтного стиля.
+    expect(emailPill.style.backgroundColor).not.toBe(pushPill.style.backgroundColor);
   });
 });
