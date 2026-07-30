@@ -118,7 +118,7 @@ function PreviewButton({
       type="button"
       aria-label={label}
       onClick={() => openTemplatePreview(target)}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
       <Eye className="h-3.5 w-3.5" aria-hidden />
       <span className="text-xs">Предпросмотр</span>
@@ -280,7 +280,10 @@ export function WorkflowDescription({
                       data-testid="group-label"
                       className="mb-1.5 font-medium text-foreground"
                     >
-                      ◈ {group.label}
+                      {/* Глиф — маркер списка ветвей, а не слово: без
+                          aria-hidden скринридер зачитывал бы его перед каждым
+                          названием потока («ромб чёрный, Высокая склонность»). */}
+                      <span aria-hidden>◈</span> {group.label}
                     </p>
                   )}
                   <table className="w-full table-fixed border-collapse text-left">
@@ -296,16 +299,25 @@ export function WorkflowDescription({
                       <col />
                       <col className="w-[7rem]" />
                     </colgroup>
-                    {gi === 0 && (
-                      <thead>
-                        <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
-                          <th className="pb-1 font-normal">Коммуникация</th>
-                          <th className="pb-1 font-normal">Шаблон</th>
-                          <th className="pb-1 font-normal">Контент шаблона</th>
-                          <th className="pb-1 font-normal" />
-                        </tr>
-                      </thead>
-                    )}
+                    {/* Шапку несёт КАЖДАЯ таблица шага, но видимая — только у
+                        первой ◈-группы: визуально повторять подписи колонок над
+                        каждой веткой незачем, а вот без `<thead>` вторая и
+                        третья таблицы приходили к скринридеру полностью
+                        неподписанными сетками данных. `sr-only` снимает ровно
+                        визуальную половину проблемы, не трогая семантику. */}
+                    <thead className={gi === 0 ? undefined : "sr-only"}>
+                      <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
+                        <th scope="col" className="pb-1 font-normal">Коммуникация</th>
+                        <th scope="col" className="pb-1 font-normal">Шаблон</th>
+                        <th scope="col" className="pb-1 font-normal">Контент шаблона</th>
+                        {/* Колонка кнопки предпросмотра остаётся без подписи:
+                            сама кнопка уже несёт полный aria-label
+                            («Предпросмотр — SMS, Первое касание»), и заголовок
+                            колонки только удваивал бы его при чтении ячейки. */}
+                        <th scope="col" className="pb-1 font-normal" />
+                      </tr>
+                    </thead>
+
                     <tbody>
                       {group.rows.map((row) => (
                         <tr key={row.nodeId} className="align-top">

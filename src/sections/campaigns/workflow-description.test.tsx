@@ -321,10 +321,45 @@ describe("таблица коммуникаций", () => {
     expect(screen.getByText("У нас есть кое-что для вас.")).toBeTruthy();
   });
 
-  it("шапка колонок — один раз на шаг, у первой таблицы", () => {
+  // Финальное ревью: прежний вариант считал `<thead>` и требовал ровно один на
+  // шаг — визуально верно, но вторая и последующие ◈-таблицы оставались
+  // полностью НЕПОДПИСАННЫМИ сетками данных для скринридера. Тест переписан на
+  // то, что он на самом деле охраняет: ВИДИМАЯ шапка одна на шаг, у остальных
+  // таблиц шапка есть, но только для скринридера.
+  it("видимая шапка — одна на шаг; у последующих ◈-таблиц шапка только для скринридера", () => {
     const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    expect(container.querySelectorAll("thead")).toHaveLength(1);
-    expect(container.querySelectorAll("table")).toHaveLength(2);
+    const tables = [...container.querySelectorAll("table")];
+    expect(tables).toHaveLength(2);
+
+    const heads = tables.map((table) => table.querySelector("thead"));
+    // Ни одна таблица данных не остаётся без подписей колонок.
+    expect(heads.every((head) => head !== null)).toBe(true);
+    // Но видимая ровно одна — у первой группы; остальные скрыты визуально.
+    expect(heads[0]!.className).not.toContain("sr-only");
+    expect(heads.slice(1).every((head) => head!.className.includes("sr-only"))).toBe(true);
+  });
+
+  it("ячейки шапки объявлены заголовками КОЛОНОК (scope=col)", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const ths = [...container.querySelectorAll("th")];
+    expect(ths.length).toBeGreaterThan(0);
+    expect(ths.every((th) => th.getAttribute("scope") === "col")).toBe(true);
+  });
+
+  it("глиф ◈ скрыт от скринридера — озвучивается только название ветки", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const label = container.querySelector("[data-testid='group-label']")!;
+    const glyph = label.querySelector("[aria-hidden]");
+    expect(glyph?.textContent).toContain("◈");
+  });
+
+  it("кнопка предпросмотра несёт кольцо focus-visible, как соседние контролы", () => {
+    const nodeParams = new Map<string, NodeParams>([
+      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
+    ]);
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} nodeParams={nodeParams} />);
+    const button = screen.getAllByRole("button", { name: /предпросмотр/i })[0];
+    expect(button.className).toContain("focus-visible:ring");
   });
 
   it("◈-подзаголовок стоит над таблицей своей группы", () => {
