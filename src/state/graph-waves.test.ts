@@ -22,6 +22,16 @@ function edge(source: string, target: string, label?: string): WorkflowEdge {
   return { id: `${source}-${target}`, source, target, ...(label ? { label } : {}) };
 }
 
+/** Письмо с общей темой и подставляемым телом — фикстура двух блоков ниже. */
+function emailNode(id: string, body: string): WorkflowNode {
+  return node(id, "email", {
+    kind: "email",
+    subject: "Ваше предложение готово",
+    body,
+    sender: "offers@brand.com",
+  });
+}
+
 describe("segmentWaves", () => {
   it("канонический одноканальный граф: одна волна, повтор помечен repeatsPrevious", () => {
     const { steps } = segmentWaves(createTemplate("Возврат", "new", ["sms"]));
@@ -154,3 +164,67 @@ describe("segmentWaves", () => {
     expect(segmentWaves({ nodes: [], edges: [] }).steps).toEqual([]);
   });
 });
+
+/**
+ * Ключ сравнения писем обязан читать ТО ЖЕ поле, которое правит пилюля шаблона.
+ *
+ * `templateParamKeyForKind("email")` — это `body`, и поповер выбора шаблона
+ * (`TemplateTagPopover.onSelect`) патчит ТОЛЬКО его и ТОЛЬКО на одной ноде.
+ * Пока ключ сравнения читал `subject`, смена шаблона письма в первом касании
+ * не меняла ключ вовсе: волны оставались «одинаковыми», описание продолжало
+ * утверждать «повторяет ту же серию» — и рисовало под этой пометкой ДВЕ
+ * таблицы с разными шаблонами. Это прямой провал критерия приёмки 8 на пути,
+ * который карточка сама и предлагает.
+ */
+describe("segmentWaves — ключ письма читает тему И тело", () => {
+  it("другое ТЕЛО письма во второй волне — это не повтор, даже при совпавшей теме", () => {
+    const graph = {
+      nodes: [
+        node("signal", "source"),
+        emailNode("first", "Первый заход: знакомство с предложением."),
+        node("w", "wait", { kind: "wait", mode: "duration", durationHours: 48 }),
+        emailNode("second", "Второй заход: другой текст под тем же заголовком."),
+      ],
+      edges: [edge("signal", "first"), edge("first", "w"), edge("w", "second")],
+    };
+
+    const waves = segmentWaves(graph).steps.filter((s) => s.kind === "wave");
+    expect(waves).toHaveLength(2);
+    expect(waves[1].wave.repeatsPrevious).toBe(false);
+  });
+
+  it("совпали и тема, и тело — повтор по-прежнему схлопывается (эталон A)", () => {
+    const graph = {
+      nodes: [
+        node("signal", "source"),
+        emailNode("first", "Один и тот же текст."),
+        node("w", "wait", { kind: "wait", mode: "duration", durationHours: 48 }),
+        emailNode("second", "Один и тот же текст."),
+      ],
+      edges: [edge("signal", "first"), edge("first", "w"), edge("w", "second")],
+    };
+
+    const waves = segmentWaves(graph).steps.filter((s) => s.kind === "wave");
+    expect(waves).toHaveLength(2);
+    expect(waves[1].wave.repeatsPrevious).toBe(true);
+  });
+
+  it("два письма одной волны с одинаковой темой, но разными телами — ДВЕ строки, не одна", () => {
+    // Второе следствие того же ключа: дедуп внутри волны молча терял целую
+    // коммуникацию, у которой совпал лишь заголовок.
+    const graph = {
+      nodes: [
+        node("signal", "source"),
+        emailNode("a", "Условия предложения."),
+        emailNode("b", "Инструкция, как им воспользоваться."),
+      ],
+      edges: [edge("signal", "a"), edge("a", "b")],
+    };
+
+    const wave = segmentWaves(graph).steps.find((s) => s.kind === "wave")!;
+    expect(wave.kind).toBe("wave");
+    const nodes = wave.kind === "wave" ? wave.wave.groups[0].nodes.map((n) => n.id) : [];
+    expect(nodes).toEqual(["a", "b"]);
+  });
+});
+

@@ -298,11 +298,24 @@ function contentKey(node: WorkflowNode): string {
   return `${node.data.nodeType}|${commText(node.data.params)}`;
 }
 
-/** Текст коммуникации для сравнения волн/групп — НЕ для показа. */
+/**
+ * Текст коммуникации для сравнения волн/групп — НЕ для показа (показывает
+ * `communicationContent` в graph-description.ts, и она берёт у письма только
+ * тему).
+ *
+ * Письмо сравнивается по теме И телу, потому что тело — это поле, которое
+ * правит пилюля шаблона: `templateParamKeyForKind("email")` = `body`, и
+ * поповер выбора шаблона патчит РОВНО его, на одной ноде. Пока ключ читал одну
+ * тему, смена шаблона письма в первом касании не меняла ключ вовсе — волны
+ * оставались «одинаковыми», и описание утверждало «повторяет ту же серию» над
+ * двумя таблицами с разными шаблонами. Тем же ключом дедупится состав волны:
+ * по одной теме два разных письма схлопывались в одну строку, и одна
+ * коммуникация молча исчезала.
+ */
 function commText(params: NodeParams | undefined): string {
   switch (params?.kind) {
     case "sms": return params.text;
-    case "email": return params.subject;
+    case "email": return `${params.subject}\n${params.body}`;
     case "push": return `${params.title}\n${params.body}`;
     case "ivr": return params.scenario;
     default: return "";
