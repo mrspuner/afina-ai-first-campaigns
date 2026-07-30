@@ -78,13 +78,6 @@ function punctuationPullBack(
 
 interface WorkflowDescriptionProps {
   stages: DescriptionStage[];
-  /**
-   * Доп. контент, вставляемый ПОД текстом конкретного этапа (напр. нодо-блок
-   * «Старта» — A2.1 — или нодо-блоки коммуникаций под «Первым касанием»).
-   * Ключ — id этапа, поэтому механизм не завязан на конкретный этап и
-   * переиспользуется для любого следующего.
-   */
-  stageSlots?: Partial<Record<string, React.ReactNode>>;
   /** Клик по кликабельной пилюле (target ≠ `none`) — поднимается наверх, к
    *  экрану кампании, который знает, куда вести (шаг визарда/поповер). */
   onTagActivate?: (tag: DescriptionTag) => void;
@@ -115,13 +108,38 @@ interface WorkflowDescriptionProps {
  */
 export function WorkflowDescription({
   stages,
-  stageSlots,
   onTagActivate,
   nodeTypes,
   nodeParams,
   domains,
 }: WorkflowDescriptionProps) {
   if (!stages.length) return null;
+
+  /**
+   * Один путь рендера сегментов для ДВУХ мест — тела этапа (`stage.body`) и
+   * значения настройки (`settings[].value`). Если бы у каждого была своя
+   * копия этой развилки, пилюли настроек и пилюли прозы неизбежно разъехались
+   * бы по пул-бэку пунктуации/резолву nodeType при первой же независимой
+   * правке одной из копий.
+   */
+  function renderSegments(segments: DescriptionSegment[]) {
+    return segments.map((segment, i) =>
+      segment.kind === "text" ? (
+        <span key={i} className={punctuationPullBack(segments[i - 1], segment.text)}>
+          {segment.text}
+        </span>
+      ) : (
+        <DescriptionTagPill
+          key={segment.tag.id}
+          tag={segment.tag}
+          onActivate={onTagActivate}
+          nodeType={nodeTypeForTag(segment.tag, nodeTypes)}
+          waitParams={waitParamsForTag(segment.tag, nodeParams)}
+          domains={domains}
+        />
+      ),
+    );
+  }
 
   return (
     <TooltipProvider delay={1000}>
@@ -131,39 +149,34 @@ export function WorkflowDescription({
           соприкасаются пилюлями. 1.75 подобрано глазом на реальной карточке —
           даёт видимый зазор, не раздувая текст; трогаем только контейнер
           описания, не глобальную типографику. */}
-      <div className="flex flex-col gap-3 text-sm leading-[1.75] text-foreground">
-        {stages.map((stage) => (
-          <div key={stage.id} className="flex flex-col gap-1.5">
-            <p>
-              <strong className="font-semibold text-foreground">{stage.heading}</strong>{" "}
-              {stage.body.map((segment, i) =>
-                segment.kind === "text" ? (
-                  <span
-                    key={i}
-                    className={punctuationPullBack(stage.body[i - 1], segment.text)}
-                  >
-                    {segment.text}
-                  </span>
-                ) : (
-                  <DescriptionTagPill
-                    key={segment.tag.id}
-                    tag={segment.tag}
-                    onActivate={onTagActivate}
-                    nodeType={nodeTypeForTag(segment.tag, nodeTypes)}
-                    waitParams={waitParamsForTag(segment.tag, nodeParams)}
-                    domains={domains}
-                  />
-                ),
-              )}
-            </p>
-            {/* Таблицы коммуникаций (`stage.groups`) рендерит Task 8 — список
-                строк снят вместе с `DescriptionStage.messages` (Task 5). */}
-            {stageSlots?.[stage.id] && (
-              <div className="pt-1">{stageSlots[stage.id]}</div>
-            )}
-          </div>
+      <ol className="flex flex-col gap-5 text-sm leading-[1.75] text-foreground">
+        {stages.map((stage, i) => (
+          <li key={stage.id} className="flex gap-3">
+            <span
+              data-testid="stage-number"
+              className="w-4 shrink-0 pt-px text-right text-xs font-medium tabular-nums text-muted-foreground"
+            >
+              {i + 1}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <p className="font-semibold text-foreground">{stage.heading}</p>
+              <p>{renderSegments(stage.body)}</p>
+              {stage.settings?.length ? (
+                <dl data-testid="stage-settings" className="mt-0.5 flex flex-col gap-1">
+                  {stage.settings.map((s) => (
+                    <div key={s.id} className="flex items-baseline gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{s.label}</dt>
+                      <dd className="min-w-0">{renderSegments(s.value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+              {/* Таблицы коммуникаций (`stage.groups`) и кнопку предпросмотра
+                  рисует Task 8 — здесь их пока нет. */}
+            </div>
+          </li>
         ))}
-      </div>
+      </ol>
     </TooltipProvider>
   );
 }
