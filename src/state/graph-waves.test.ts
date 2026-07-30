@@ -49,6 +49,26 @@ describe("segmentWaves", () => {
     }
   });
 
+  it("параллельные сегменты дают по одной строке на канал, а не N одинаковых", () => {
+    const { steps } = segmentWaves(createTemplate("Удержание", "new", ["sms", "email"]));
+    const waves = steps.filter((s) => s.kind === "wave");
+    expect(waves.length).toBeGreaterThan(0);
+    for (const w of waves) {
+      for (const g of w.wave.groups) {
+        const keys = g.nodes.map((n) => `${n.data.nodeType}`);
+        expect(new Set(keys).size).toBe(keys.length);
+      }
+    }
+  });
+
+  it("повтор сегментированного сценария помечается repeatsPrevious", () => {
+    const { steps } = segmentWaves(createTemplate("Удержание", "new", ["sms", "email"]));
+    const waves = steps.filter((s) => s.kind === "wave");
+    expect(waves).toHaveLength(2);
+    expect(waves[0].wave.repeatsPrevious).toBe(false);
+    expect(waves[1].wave.repeatsPrevious).toBe(true);
+  });
+
   it("пустой граф даёт пустые шаги", () => {
     expect(segmentWaves({ nodes: [], edges: [] }).steps).toEqual([]);
   });

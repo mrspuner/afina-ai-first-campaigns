@@ -143,7 +143,12 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
   };
 
   const emitWave = (draft: DraftGroup[], fork?: { node: WorkflowNode; kind: "condition" | "split" }) => {
-    const collapsed = collapseGroups(draft);
+    // Дедуп ДО схлопывания групп (п. 6) и до ключа волны (п. 7) — иначе три
+    // параллельных сегмента с одинаковыми каналами дали бы группу с шестью
+    // нодами, а сравнение с предыдущей волной сорвалось бы на кратности.
+    const collapsed = collapseGroups(
+      draft.map((group) => ({ ...group, nodes: dedupeNodes(group.nodes) })),
+    );
     if (!collapsed.length) return;
     const id = `wave-${++waveCount}`;
     const groups: WaveGroup[] = collapsed.map((group, i) => ({
@@ -252,6 +257,22 @@ function collapseGroups(groups: DraftGroup[]): DraftGroup[] {
   const keys = filled.map((group) => groupKey(group.nodes));
   if (keys.some((key) => key !== keys[0])) return filled;
   return [{ nodes: filled[0].nodes }];
+}
+
+/**
+ * Одинаковые сообщения внутри группы — одна строка, а не N визуально
+ * идентичных: параллельные сегменты несут ОДНО касание, размноженное по
+ * сегментам графа. Порядок первого вхождения сохраняется — он и есть порядок
+ * каналов в описании.
+ */
+function dedupeNodes(nodes: WorkflowNode[]): WorkflowNode[] {
+  const seen = new Set<string>();
+  return nodes.filter((node) => {
+    const key = contentKey(node);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Ключ сравнения группы — от состава коммуникаций, а не от их порядка. */
