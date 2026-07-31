@@ -428,7 +428,19 @@ export function WorkflowDescription({
                             по-прежнему без фиксированной ширины (авто): его текст
                             и так ограничен двумя строками (`line-clamp-2`), а
                             освободившееся место у колонки кнопки лучше отдать
-                            ему, чем раздувать соседние колонки. */}
+                            ему, чем раздувать соседние колонки.
+
+                            Паддинг ячеек ниже — `px-2` (8px), не `px-3` (12px):
+                            ревью Task 4 поймало регресс замером на живой
+                            карточке — с `px-3` «Персональный оффер» переставал
+                            влезать в 196px («Шаблон») ровно на 4px (scrollWidth
+                            144 против clientWidth 140) и обрезался многоточием,
+                            хотя до этой задачи помещался целиком. Ширины
+                            `<colgroup>` в этом не виноваты (они из макета) —
+                            виноват паддинг, который выбирался при вёрстке
+                            панели и не был откалиброван под уже подобранные
+                            замером ширины. `px-2` возвращает точное совпадение
+                            (144 = 144, замерено там же). */}
                         <colgroup>
                           <col className="w-[110px]" />
                           <col className="w-[196px]" />
@@ -443,14 +455,14 @@ export function WorkflowDescription({
                             визуальную половину проблемы, не трогая семантику. */}
                         <thead className={gi === 0 ? undefined : "sr-only"}>
                           <tr className="border-b border-scenario-rail text-[10px] font-medium uppercase tracking-wide text-scenario-th">
-                            <th scope="col" className="px-3 py-1.5">Коммуникация</th>
-                            <th scope="col" className="px-3 py-1.5">Шаблон</th>
-                            <th scope="col" className="px-3 py-1.5">Контент шаблона</th>
+                            <th scope="col" className="px-2 py-1.5">Коммуникация</th>
+                            <th scope="col" className="px-2 py-1.5">Шаблон</th>
+                            <th scope="col" className="px-2 py-1.5">Контент шаблона</th>
                             {/* Колонка кнопки предпросмотра остаётся без подписи:
                                 сама кнопка уже несёт полный aria-label
                                 («Предпросмотр — SMS, Первое касание»), и заголовок
                                 колонки только удваивал бы его при чтении ячейки. */}
-                            <th scope="col" className="px-3 py-1.5" />
+                            <th scope="col" className="px-2 py-1.5" />
                           </tr>
                         </thead>
                         <tbody>
@@ -462,8 +474,8 @@ export function WorkflowDescription({
                             // Tailwind-эквивалент :last-child, снимает разделитель у
                             // последней строки без сравнения индекса в JS.
                             <tr key={row.nodeId} className="border-b border-scenario-rail align-top last:border-b-0">
-                              <td className="px-3 py-2.5 font-medium">{row.channel}</td>
-                              <td className="px-3 py-2.5">
+                              <td className="px-2 py-2.5 font-medium">{row.channel}</td>
+                              <td className="px-2 py-2.5">
                                 {row.templateTag && (
                                   <DescriptionTagPill
                                     tag={row.templateTag}
@@ -476,7 +488,7 @@ export function WorkflowDescription({
                                   />
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-muted-foreground">
+                              <td className="px-2 py-2.5 text-muted-foreground">
                                 {/* Без кавычек и без меток «Тема:»/«Текст:» —
                                     контент читается как факт таблицы, не цитата. */}
                                 <span className="line-clamp-2">
@@ -489,7 +501,7 @@ export function WorkflowDescription({
                               </td>
                               {/* Кнопка прижата к правому краю таблицы — квадратная
                                   иконка (Task 4), переносить больше нечему. */}
-                              <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                              <td className="px-2 py-2.5 text-right whitespace-nowrap">
                                 <PreviewButton
                                   row={row}
                                   nodeParams={nodeParams}
