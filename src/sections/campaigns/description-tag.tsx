@@ -39,9 +39,11 @@ const PILL_BASE =
  * заливка Task 6. Радиус/паддинг переопределены под макет (7px) — `cn` в
  * `pillClass` ниже мёржит их через `twMerge`, поэтому `rounded-md`/`px-1.5` из
  * `PILL_BASE` не остаются в финальном классе. Демоция в `none` (кампания
- * запущена / шага нет в визарде) остаётся ЭТИМ ЖЕ классом — она снимает
- * интерактив, а не цвет: серая read-only-пилюля прятала бы значение ровно
- * там, где его только и можно прочитать.
+ * запущена / шага нет в визарде) остаётся ЭТИМ ЖЕ классом у ШАГОВЫХ тегов
+ * («Режим», «Бюджет») — она снимает интерактив, а не цвет: серая
+ * read-only-пилюля прятала бы значение ровно там, где его только и можно
+ * прочитать. У типизированных узлов (шаблон/пауза/условие) демоция цвет тоже
+ * не гасит, но там он свой — из `NODE_STYLES` (см. `resolveVisual`).
  */
 const NEUTRAL_CLASS =
   "rounded-[7px] border border-white bg-scenario-tag-bg px-[7px] text-white";
@@ -66,14 +68,18 @@ interface ResolvedVisual {
  * `NODE_STYLES`/`NODE_ICON` — источник истины для цвета нод (см. node-visuals.ts).
  * Тип ноды тег не хранит, поэтому приходит пропом; без него — нейтральный вид.
  *
- * `none` (кампания запущена, либо граф больше не правится) остаётся
- * нейтральным по фону/бордеру — цвет узла означал бы «кликабельно», а это
- * больше не так (спека §2.12). Но иконку демоция снимать не должна: без неё
- * «12 000 строк» и «разовый» становятся одинаковыми серыми табличками, и
- * прочитать, какой тег о чём, нельзя (fix round 2, Finding 2). Иконку
- * резолвим по личности, которую демоция сохранила на `none` — `step`
- * (шаговый тег → `STEP_ICON`) либо `nodeType`, пришедший пропом по `nodeId`,
- * который тоже пережил демоцию (шаблон/пауза → `NODE_ICON`).
+ * `none` (кампания запущена, либо граф больше не правится) снимает ТОЛЬКО
+ * интерактив — ни цвет, ни иконку (визуальная спека §4: «цвет остаётся, клик
+ * пропадает»). Личность демоции хранит сам таргет: `step` — шаговый тег
+ * («Режим», «Бюджет»), у него собственного цвета узла нет и не было, остаётся
+ * серый вид макета плюс `STEP_ICON`; `nodeId` — узел (шаблон/пауза/условие),
+ * его `nodeType` приходит пропом тем же лукапом, что и у живой цели, и даёт
+ * ту же пару `NODE_STYLES`/`NODE_ICON`. Серый для типизированного узла делал
+ * бы пилюли ЗАПУЩЕННОЙ кампании непохожими на её же узлы графом ниже —
+ * рассинхрон «тег ↔ узел», который визуальная спека §3 прямо запрещает.
+ * Разница между демотированной и живой цветной пилюлей — не в цвете, а в
+ * отсутствии кнопки/поповера/курсора (hover-подсветки нет ни у той, ни у
+ * другой: `NEUTRAL_HOVER_CLASS` — только нейтральный путь).
  */
 function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefined): ResolvedVisual {
   const target = tag.target;
@@ -92,11 +98,21 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
     }
     case "domains":
       return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: Globe };
-    case "none":
+    case "none": {
+      // Шаговый тег — вид макета (своего цвета у него нет), но без
+      // hover-подсветки: нажимать больше нечего.
+      if (target.step) return { className: NEUTRAL_CLASS, Icon: STEP_ICON[target.step] };
+      // Демотированный узел красится ровно как живой — та же ветка
+      // `NODE_STYLES`/`NODE_ICON`, что у `template`/`node-fields` выше, только
+      // без кнопки и поповера вокруг неё.
+      if (!nodeType) return { className: NEUTRAL_CLASS };
+      const s = NODE_STYLES[nodeType];
       return {
-        className: NEUTRAL_CLASS,
-        Icon: target.step ? STEP_ICON[target.step] : nodeType ? NODE_ICON[nodeType] : undefined,
+        className: "",
+        style: { borderColor: s.border, backgroundColor: s.bg, color: s.color },
+        Icon: NODE_ICON[nodeType],
       };
+    }
   }
 }
 
@@ -353,6 +369,13 @@ export function DescriptionTagPill({
  * остатком свёрнутого перечисления, без строки-подтверждения). Не передан
  * (`undefined`, три существующих поповера — шаблон/пауза/домены) —
  * поведение прежнее: `tooltipBody(hint)`.
+ *
+ * `side` (финальный фикс-раунд) — сторона раскрытия. По умолчанию `"bottom"`,
+ * как у самого `PopoverContent`; тег-настройка просит `"top"` (спека 2 §2 —
+ * «поповер НАД тегом»): настройки шага идут плотным списком строк, и
+ * раскрытый вниз поповер закрывал бы соседние строки того же списка.
+ * Автопереворот base-ui при этом никуда не девается — когда сверху не
+ * помещается, поповер по-прежнему уходит вниз сам.
  */
 function TagPopoverShell({
   open,
@@ -364,6 +387,7 @@ function TagPopoverShell({
   contentClassName,
   content,
   tooltipContent,
+  side,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -374,6 +398,7 @@ function TagPopoverShell({
   contentClassName: string;
   content: ReactNode;
   tooltipContent?: ReactNode | null;
+  side?: "top" | "bottom";
 }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -389,7 +414,7 @@ function TagPopoverShell({
           <TooltipContent>{tooltipContent ?? tooltipBody(hint)}</TooltipContent>
         </Tooltip>
       )}
-      <PopoverContent align="start" className={contentClassName}>
+      <PopoverContent align="start" side={side} className={contentClassName}>
         {content}
       </PopoverContent>
     </Popover>
@@ -447,6 +472,9 @@ function WizardStepTagPopover({
       style={style}
       hint={hint}
       tooltipContent={tooltipContent}
+      // Спека 2 §2 — поповер НАД тегом: настройки шага стоят плотным списком,
+      // и раскрытый вниз поповер перекрывал бы соседние строки настроек.
+      side="top"
       contentClassName="w-64 p-2.5"
       content={
         <div className="flex flex-col gap-2">

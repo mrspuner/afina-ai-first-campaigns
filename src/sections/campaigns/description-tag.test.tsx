@@ -1,6 +1,7 @@
 import { beforeAll, describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { DescriptionTagPill } from "./description-tag";
+import { NODE_STYLES } from "./node-visuals";
 import type { DescriptionTag } from "@/state/graph-description";
 import { AppStateProvider, useAppState } from "@/state/app-state-context";
 import { ChatProvider, useChat } from "@/state/chat-context";
@@ -322,6 +323,67 @@ describe("DescriptionTagPill — иконка после демоции не п�
 });
 
 // ---------------------------------------------------------------------------
+// Финальное ревью (Important) — демоция снимает интерактив, а НЕ цвет узла
+// (визуальная спека §4: «цвет остаётся, клик пропадает»). У запущенной
+// кампании пилюли шаблонов в таблице обязаны нести палитру своего канала —
+// ту же, что несут узлы графа ниже; серый там был бы рассинхроном «тег ↔
+// узел», ради устранения которого §3 и переводила обоих на общий NODE_STYLES.
+// Шаговый тег («Режим», «Бюджет») собственного цвета узла не имеет — он и
+// после демоции остаётся серым видом макета.
+// ---------------------------------------------------------------------------
+describe("демоция не гасит цвет узла", () => {
+  /** jsdom отдаёт инлайн-цвета в rgb() — сравниваем в том же виде, что и
+   *  `workflow-description.test.tsx` (тот же помощник). */
+  const hexToRgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+  };
+
+  it("демотированная пилюля шаблона несёт цвет своего канала, а не нейтральный", () => {
+    const tag: DescriptionTag = {
+      id: "msg-n1-template",
+      label: "Email — оффер",
+      target: { kind: "none", nodeId: "n1" },
+    };
+    render(<DescriptionTagPill tag={tag} nodeType="email" />);
+    const pill = screen.getByText("Email — оффер").parentElement as HTMLElement;
+    expect(pill.style.backgroundColor).toBe(hexToRgb(NODE_STYLES.email.bg));
+    expect(pill.style.color).toBe(hexToRgb(NODE_STYLES.email.color));
+    expect(pill.style.borderColor).toBe(hexToRgb(NODE_STYLES.email.border));
+    // Серой подложки макета на ней нет вовсе — цвет узла её ЗАМЕЩАЕТ, а не
+    // ложится поверх.
+    expect(pill.className).not.toContain("bg-scenario-tag-bg");
+    // И при этом она по-прежнему не кнопка: демоция сняла именно интерактив.
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("цвет демотированной пилюли совпадает с цветом живой того же канала", () => {
+    const { container: live } = renderPillWithProviders({
+      tag: { id: "a", label: "SMS — напоминание", target: { kind: "template", nodeId: "n1" } },
+      nodeType: "sms",
+    });
+    const { container: dead } = render(
+      <DescriptionTagPill
+        tag={{ id: "b", label: "SMS — напоминание", target: { kind: "none", nodeId: "n1" } }}
+        nodeType="sms"
+      />,
+    );
+    const box = (c: HTMLElement) => c.querySelector("[class*='rounded-']") as HTMLElement;
+    expect(box(dead).getAttribute("style")).toBe(box(live).getAttribute("style"));
+  });
+
+  it("демотированный шаговый тег остаётся серым — своего цвета узла у него нет", () => {
+    render(
+      <DescriptionTagPill tag={{ id: "s", label: "разовый", target: { kind: "none", step: "analysis" } }} />,
+    );
+    const pill = screen.getByText("разовый").parentElement as HTMLElement;
+    expect(pill.className).toContain("bg-scenario-tag-bg");
+    // Инлайн-цвета узла на шаговом теге нет — иначе он потерял бы вид макета.
+    expect(pill.style.backgroundColor).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 8 — поповер паузы (target.kind === "node-fields"): содержимое — тот же
 // WaitFields, что нодо-блок графа несёт внутри себя. Пилюля сама params не
 // читает — waitParams приходит пропом (см. renderPillWithProviders выше),
@@ -622,10 +684,14 @@ describe("вид пилюли", () => {
 // оставлено отдельным блоком, т.к. это буквальные кейсы брифа Task 2.
 // ---------------------------------------------------------------------------
 describe("тег-параметр: вид", () => {
+  // Проверки ниже спрашивают ИМЕННО базовый токен (`bg-scenario-tag-bg`), а не
+  // префикс `bg-scenario-tag` (финальное ревью, Minor): тот матчится и
+  // hover-токеном `bg-scenario-tag-hover`, поэтому пилюля, потерявшая базовый
+  // фон, но сохранившая hover-подсветку, проходила бы тест насквозь.
   it("несёт фон макета и белую обводку, а не светлую заливку", () => {
     render(<DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "none" } }} />);
     const box = screen.getByText("разовый").parentElement as HTMLElement;
-    expect(box.className).toContain("bg-scenario-tag");
+    expect(box.className).toContain("bg-scenario-tag-bg");
     expect(box.className).not.toContain("bg-foreground");
     expect(box.className).toContain("font-semibold");
   });
@@ -641,8 +707,8 @@ describe("тег-параметр: вид", () => {
     // узел-владелец, только потомков — передаём КОНТЕЙНЕР рендера, а не
     // `.firstChild` (у него бокс пилюли — сам корень, не потомок корня).
     const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-']") as HTMLElement).className;
-    expect(cls(dead)).toContain("bg-scenario-tag");
-    expect(cls(live)).toContain("bg-scenario-tag");
+    expect(cls(dead)).toContain("bg-scenario-tag-bg");
+    expect(cls(live)).toContain("bg-scenario-tag-bg");
   });
 
   // Minor (ревью V-Task 2): ничего в файле раньше не закрепляло, что
