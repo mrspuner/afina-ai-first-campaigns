@@ -15,7 +15,6 @@ describe("CHANNEL_NODE_MAP", () => {
     for (const ch of channels) {
       expect(CHANNEL_NODE_MAP[ch]).toBeDefined();
       expect(CHANNEL_NODE_MAP[ch].label).toBeTruthy();
-      expect(CHANNEL_NODE_MAP[ch].color).toBeTruthy();
     }
   });
 

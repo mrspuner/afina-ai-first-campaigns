@@ -105,15 +105,18 @@ describe("NODE_STYLES — палитра каналов", () => {
     expect(NODE_STYLES.channel).toEqual(NODE_STYLES.sms);
   });
 
-  it("условие и деление красятся одинаково розовым", async () => {
+  // Полная тройка (border/bg/color), а не только .color — для этих узлов
+  // фон и обводка так же значимы (спека фиксирует все три), проверка одного
+  // color пропустила бы расхождение border/bg при совпадающем текстовом цвете.
+  it("условие и деление красятся одинаково розовым (полная тройка border/bg/color)", async () => {
     const { NODE_STYLES } = await import("./node-visuals");
-    expect(NODE_STYLES.condition.color).toBe("#e08bd0");
-    expect(NODE_STYLES.split.color).toBe("#e08bd0");
+    expect(NODE_STYLES.condition).toEqual({ border: "#5a2f52", bg: "#241020", color: "#e08bd0" });
+    expect(NODE_STYLES.split).toEqual({ border: "#5a2f52", bg: "#241020", color: "#e08bd0" });
   });
 
-  it("пауза — янтарь макета, не брендовый жёлтый", async () => {
+  it("пауза — янтарь макета, не брендовый жёлтый (полная тройка border/bg/color)", async () => {
     const { NODE_STYLES } = await import("./node-visuals");
-    expect(NODE_STYLES.wait.color).toBe("#f2b34a");
+    expect(NODE_STYLES.wait).toEqual({ border: "#4a3c1c", bg: "#2a2314", color: "#f2b34a" });
     expect(NODE_STYLES.wait.color).not.toBe("#FFEC00");
   });
 });

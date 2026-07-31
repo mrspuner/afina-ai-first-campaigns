@@ -3,7 +3,9 @@
  *
  * Single source of truth for:
  * - Channel type (re-export from types/campaign to avoid circular deps)
- * - Channel labels, colors, and default params
+ * - Channel labels and default params (цвет живёт ТОЛЬКО в node-visuals.ts —
+ *   см. Task 1 ревью: параллельный `CHANNEL_COLORS` здесь был мёртвым кодом,
+ *   разошедшимся с реальной палитрой, и удалён целиком)
  * - buildChannelBlock: parallel split→channels (Слияние удалено) or single node
  * - buildCommUnit: channel block + condition + retry + second condition
  *
@@ -16,16 +18,6 @@ import type { WorkflowNode, WorkflowEdge, NodeParams } from "@/types/workflow";
 import type { Channel } from "@/types/campaign";
 
 export type { Channel };
-
-// ── Node visual configuration ─────────────────────────────────────────────────
-
-/** Border/bg/text colors for each channel (mirrors node-visuals.ts). */
-const CHANNEL_COLORS: Record<Channel, string> = {
-  sms:   "#5eead4",
-  email: "#67e8f9",
-  push:  "#93c5fd",
-  ivr:   "#c4b5fd",
-};
 
 // ── Channel label map ─────────────────────────────────────────────────────────
 
@@ -128,14 +120,13 @@ export function channelTemplateParams(channel: Channel): NodeParams {
 export interface ChannelNodeEntry {
   label: string;
   defaultParams: NodeParams;
-  color: string;
 }
 
 export const CHANNEL_NODE_MAP: Record<Channel, ChannelNodeEntry> = {
-  sms:   { label: CHANNEL_LABEL.sms,   defaultParams: channelDefaultParams("sms"),   color: CHANNEL_COLORS.sms   },
-  email: { label: CHANNEL_LABEL.email, defaultParams: channelDefaultParams("email"), color: CHANNEL_COLORS.email },
-  push:  { label: CHANNEL_LABEL.push,  defaultParams: channelDefaultParams("push"),  color: CHANNEL_COLORS.push  },
-  ivr:   { label: "IVR",   defaultParams: channelDefaultParams("ivr"),   color: CHANNEL_COLORS.ivr   },
+  sms:   { label: CHANNEL_LABEL.sms,   defaultParams: channelDefaultParams("sms")   },
+  email: { label: CHANNEL_LABEL.email, defaultParams: channelDefaultParams("email") },
+  push:  { label: CHANNEL_LABEL.push,  defaultParams: channelDefaultParams("push")  },
+  ivr:   { label: "IVR",   defaultParams: channelDefaultParams("ivr")   },
 };
 
 // ── Node factory ─────────────────────────────────────────────────────────────
