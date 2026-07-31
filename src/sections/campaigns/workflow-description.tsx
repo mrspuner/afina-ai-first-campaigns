@@ -443,7 +443,7 @@ export function WorkflowDescription({
                         за скруглением панели). */}
                     <div
                       data-testid="table-panel"
-                      className="overflow-hidden rounded-[10px] border border-scenario-rail bg-scenario-panel"
+                      className="overflow-hidden rounded-[10px] border border-scenario-rail bg-scenario-panel/50"
                     >
                       <table className="w-full table-fixed border-collapse text-left">
                         {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
