@@ -12,6 +12,7 @@ import type {
   DescriptionTag,
 } from "@/state/graph-description";
 import { DescriptionTagPill } from "./description-tag";
+import { NODE_STYLES } from "./node-visuals";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
@@ -148,7 +149,12 @@ function PreviewButton({
       aria-label={label}
       title={label}
       onClick={() => openTemplatePreview(target)}
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-scenario-badge-border bg-scenario-badge-bg text-scenario-badge-text transition-colors hover:border-scenario-badge-text hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      // hover: спека §6 просит светлее И обводку, И иконку. Цвет иконки на
+      // наведении — `--scenario-heading` (#ECECED, самый светлый нейтраль
+      // блока), десятого хекса не заводим; `text-*` наследуется в `<Eye>`
+      // через `currentColor`, поэтому подсвечивать саму иконку отдельным
+      // классом не нужно.
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-scenario-badge-border bg-scenario-badge-bg text-scenario-badge-text transition-colors hover:border-scenario-badge-text hover:bg-white/10 hover:text-scenario-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
       <Eye className="h-3.5 w-3.5" aria-hidden />
     </button>
@@ -391,16 +397,28 @@ export function WorkflowDescription({
               {stage.groups?.map((group, gi) => {
                 const distinctions = rowDistinctions(group.rows);
                 return (
-                  <div key={group.id} className={gi > 0 ? "mt-3" : undefined}>
+                  // Спека §7: между блоками групп ~22px — ветки читаются как
+                  // отдельные блоки, а не как продолжение предыдущей таблицы.
+                  <div key={group.id} className={gi > 0 ? "mt-[22px]" : undefined}>
                     {group.label && (
                       <p
                         data-testid="group-label"
-                        className="mb-1.5 font-medium text-foreground"
+                        className="mb-1.5 font-semibold text-foreground"
                       >
                         {/* Глиф — маркер списка ветвей, а не слово: без
                             aria-hidden скринридер зачитывал бы его перед каждым
-                            названием потока («ромб чёрный, Высокая склонность»). */}
-                        <span aria-hidden>◈</span> {group.label}
+                            названием потока («ромб чёрный, Высокая склонность»).
+
+                            Цвет — из палитры узла-развилки (`NODE_STYLES.condition`
+                            = `split`, #E08BD0 макета): подзаголовок помечает
+                            ветку, порождённую именно этим узлом, и берёт его
+                            цвет из общего справочника, а не десятым хексом в
+                            компоненте. Инлайном, а не классом, ровно по той же
+                            причине, что и цвета пилюль. */}
+                        <span aria-hidden style={{ color: NODE_STYLES.condition.color }}>
+                          ◈
+                        </span>{" "}
+                        {group.label}
                       </p>
                     )}
                     {/* Task 4: панель вокруг таблицы — фон/обводка/радиус,

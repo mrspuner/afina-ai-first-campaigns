@@ -506,6 +506,19 @@ describe("таблица коммуникаций", () => {
     expect(screen.getByText(/Средняя склонность/)).toBeTruthy();
   });
 
+  // Финальное ревью (Important): §7 спеки визуала требует у подзаголовка глиф
+  // цветом развилки и текст веса 600 — до этого он наследовал `text-foreground`
+  // и весил 500. Цвет берём из `NODE_STYLES.condition` (= `split`), а не из
+  // литерала «#E08BD0»: подзаголовок помечает ветку узла-развилки и обязан
+  // ехать вместе с его палитрой, а не отдельным хексом.
+  it("глиф ◈ окрашен палитрой развилки, а подзаголовок весит 600", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const label = container.querySelector("[data-testid='group-label']") as HTMLElement;
+    const glyph = label.querySelector("[aria-hidden]") as HTMLElement;
+    expect(glyph.style.color).toBe(hexToRgb(NODE_STYLES.condition.color));
+    expect(label.className).toContain("font-semibold");
+  });
+
   it("группа без метки не рисует ◈-подзаголовок", () => {
     const stage: DescriptionStage = {
       ...GROUP_STAGE,
