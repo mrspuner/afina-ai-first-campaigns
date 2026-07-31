@@ -203,6 +203,29 @@ describe("нумерованный таймлайн", () => {
     expect(numbers).toEqual(["1", "2", "3"]);
   });
 
+  // Task 4: номер шага — кружок-бейдж (Ø28px), а не плоская цифра на левом
+  // поле. `tabular-nums` держит одинаковую ширину цифр 1–9 внутри круга.
+  it("номер шага — в кружке-бейдже, а не плоской цифрой", () => {
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    const badge = container.querySelector("[data-testid='stage-number']") as HTMLElement;
+    expect(badge.className).toContain("rounded-full");
+    expect(badge.className).toContain("tabular-nums");
+  });
+
+  // Task 4: вертикальная линия-таймлайн связывает бейджи соседних шагов.
+  it("шаги связаны вертикальной линией-таймлайном", () => {
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    expect(container.querySelector("[data-testid='stage-rail']")).toBeTruthy();
+  });
+
+  // Соединять нечего — линия рисуется ТОЛЬКО между соседними бейджами.
+  it("одинокий шаг линии не рисует", () => {
+    const { container } = render(
+      <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+    );
+    expect(container.querySelector("[data-testid='stage-rail']")).toBeNull();
+  });
+
   // Ревью (fix round): исходный вариант теста проверял лишь наличие текста
   // заголовка и текста тела ГДЕ-ТО в документе — это проходило и на СТАРОЙ
   // run-in разметке (`<p><strong>{heading}</strong> {body}</p>`), потому что
@@ -308,6 +331,25 @@ describe("таблица коммуникаций", () => {
     expect(screen.getByText("Ваше предложение готово")).toBeTruthy();
   });
 
+  // Task 4: таблица лежит в обрамлённой панели — фон, обводка, скруглённые
+  // углы, overflow: hidden (иначе строки/шапка вылезали бы за радиус).
+  it("таблица лежит в обрамлённой панели", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const panel = container.querySelector("[data-testid='table-panel']") as HTMLElement;
+    expect(panel.className).toContain("rounded-[10px]");
+    expect(panel.className).toContain("overflow-hidden");
+  });
+
+  // Task 4: кнопка предпросмотра теряет видимую подпись «Предпросмотр», но не
+  // доступность — aria-label уже уникальный (различает канал/этап/группу),
+  // title дублирует его для наведения мышью.
+  it("кнопка предпросмотра — только иконка, подпись остаётся доступной", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const btn = screen.getAllByRole("button", { name: /^Предпросмотр/ })[0];
+    expect(btn.textContent).toBe("");
+    expect(btn.getAttribute("title")).toMatch(/Предпросмотр/);
+  });
+
   it("контент без кавычек и без меток «Тема»/«Текст»", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     const cell = screen.getByText("Ваше предложение готово");
@@ -391,19 +433,19 @@ describe("таблица коммуникаций", () => {
   /**
    * Ширины колонок — единственный источник на ВСЕ таблицы шага: `table-fixed`
    * берёт их из первой строки СВОЕЙ таблицы, поэтому разъехавшийся `<colgroup>`
-   * сдвинул бы колонки таблицы повтора относительно таблицы касания. Значения
-   * подобраны замером (см. комментарий у `<colgroup>`), поэтому тест сторожит
-   * и их: колонка шаблона шире колонки канала, а колонка кнопки не уже самой
-   * кнопки («Предпросмотр» вылезал за правый край таблицы при 7rem).
+   * сдвинул бы колонки таблицы повтора относительно таблицы касания. Task 4
+   * приводит ширины к макету (110px / 196px / авто / 52px) — кнопка стала
+   * квадратной иконкой без подписи, поэтому её колонка сузилась с 7rem/120px
+   * до 52px (28px кнопки + по 12px паддинга с каждой стороны).
    */
-  it("colgroup одинаков у всех таблиц шага и несёт подобранные замером ширины", () => {
+  it("colgroup одинаков у всех таблиц шага и несёт ширины макета", () => {
     const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     const widths = [...container.querySelectorAll("table")].map((table) =>
       [...table.querySelectorAll("col")].map((col) => col.className),
     );
     expect(widths).toHaveLength(2);
     expect(widths[0]).toEqual(widths[1]);
-    expect(widths[0]).toEqual(["w-[18%]", "w-[32%]", "", "w-[7.5rem]"]);
+    expect(widths[0]).toEqual(["w-[110px]", "w-[196px]", "", "w-[52px]"]);
   });
 
   it("колонка предпросмотра прижимает кнопку к правому краю и не переносит подпись", () => {

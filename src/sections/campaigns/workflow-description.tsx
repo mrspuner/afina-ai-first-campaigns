@@ -138,14 +138,19 @@ function PreviewButton({
   ];
   const label = `Предпросмотр — ${parts.join(", ")}`;
   return (
+    // Task 4: квадратная кнопка-иконка вместо иконки с подписью — подпись
+    // «Предпросмотр» уходит из видимого текста (освобождает колонку под
+    // контент), но не из доступного имени: aria-label уже уникален (различает
+    // канал/этап/группу/строку выше), а `title` дублирует его для наведения
+    // мышью — подсказка не пропадает вместе с текстом.
     <button
       type="button"
       aria-label={label}
+      title={label}
       onClick={() => openTemplatePreview(target)}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-scenario-badge-border bg-scenario-badge-bg text-scenario-badge-text transition-colors hover:border-scenario-badge-text hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
       <Eye className="h-3.5 w-3.5" aria-hidden />
-      <span className="text-xs">Предпросмотр</span>
     </button>
   );
 }
@@ -318,7 +323,42 @@ export function WorkflowDescription({
           описания, не глобальную типографику. */}
       <ol className="flex flex-col gap-5 text-sm leading-[1.75] text-foreground">
         {stages.map((stage, i) => (
-          <li key={stage.id} className="flex gap-3">
+          // relative — контейнер позиционирования для сегмента рельса ниже:
+          // сегмент считает свои top/bottom от границ ИМЕННО этого <li>, а не
+          // всего списка (см. комментарий у stage-rail). isolate — создаёт
+          // СВОЙ стековый контекст: без него -z-10 рельса ищет ближайший
+          // такой контекст выше по дереву (li с z-index:auto его не создаёт)
+          // и сравнивается там с фоном родительской карточки (`bg-card` у
+          // CardSection) — обычный некликабельный блок в потоке красится
+          // тем же тиром стекинга, что и фон карточки, и перекрывает рельс
+          // целиком (проверено вживую: elementFromPoint возвращал <li>, а не
+          // рельс, на его собственных координатах). isolate запирает -z-10
+          // внутри ЭТОГО <li> — сравнение остаётся только с СОБСТВЕННЫМ
+          // (прозрачным) фоном li, а не с чужой картой выше по дереву.
+          <li key={stage.id} className="relative isolate flex gap-3">
+            {/* Таймлайн-рельс (Task 4): соединяет бейдж ЭТОГО шага с бейджем
+                СЛЕДУЮЩЕГО. Не единый div на всю высоту списка — тот подход
+                (как в референс-прототипе, `.steps::before` на весь контейнер)
+                считает bottom-отступ от низа ПОСЛЕДНЕГО шага целиком, а тело
+                шага (текст, таблицы) обычно намного выше своего бейджа —
+                линия утекала бы далеко за круг последнего шага. Сегмент на
+                каждый шаг, кроме последнего, зависит только от высоты
+                СВОЕГО <li>: `top-3.5` — центр СВОЕГО бейджа (28px/2=14px),
+                `-bottom-[34px]` — уходит на gap-5 (20px) + половину бейджа
+                СЛЕДУЮЩЕГО шага (14px) ниже своей нижней границы, попадая
+                ровно в центр следующего бейджа без единой замерной цифры.
+                `-z-10`: бейдж и текст — обычный поток (не positioned),
+                поэтому по спецификации стекинга рисуются ПОВЕРХ отрицательного
+                z-index рельса независимо от порядка в DOM — линия проходит
+                позади круга, а не поверх него. Не рисуем у одинокого шага и у
+                последнего — соединять не с чем. */}
+            {i < stages.length - 1 && (
+              <div
+                data-testid="stage-rail"
+                aria-hidden
+                className="absolute left-[13px] top-3.5 -bottom-[34px] -z-10 w-0.5 bg-scenario-rail"
+              />
+            )}
             {/* aria-hidden: номер — декоративный, `<ol>` уже несёт списочную
                 семантику (порядковый номер даёт сам браузер/скринридер);
                 Preflight снимает только визуальный маркер, а не роль списка,
@@ -326,12 +366,12 @@ export function WorkflowDescription({
             <span
               data-testid="stage-number"
               aria-hidden
-              className="w-4 shrink-0 pt-px text-right text-xs font-medium tabular-nums text-muted-foreground"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-scenario-badge-border bg-scenario-badge-bg text-xs font-medium tabular-nums text-scenario-badge-text"
             >
               {i + 1}
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <p className="font-semibold text-foreground">{stage.heading}</p>
+              <p className="text-[15.5px] font-semibold text-scenario-heading">{stage.heading}</p>
               <p>{renderSegments(stage.body)}</p>
               {stage.settings?.length ? (
                 <dl data-testid="stage-settings" className="mt-0.5 flex flex-col gap-1">
@@ -363,98 +403,109 @@ export function WorkflowDescription({
                         <span aria-hidden>◈</span> {group.label}
                       </p>
                     )}
-                    <table className="w-full table-fixed border-collapse text-left">
-                      {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
-                          шапки, но шапка — ОДИН раз на шаг (у первой ◈-группы), а
-                          table-fixed берёт ширины колонок из первой строки СВОЕЙ
-                          таблицы, а не соседней. Без общего <colgroup> у 2-й+
-                          группы колонки поплыли бы — здесь общий источник ширин
-                          для ВСЕХ таблиц шага, выровненных между группами.
+                    {/* Task 4: панель вокруг таблицы — фон/обводка/радиус,
+                        overflow-hidden обрезает углы строк и шапки под
+                        rounded-[10px] (иначе прямоугольные ячейки торчали бы
+                        за скруглением панели). */}
+                    <div
+                      data-testid="table-panel"
+                      className="overflow-hidden rounded-[10px] border border-scenario-rail bg-scenario-panel"
+                    >
+                      <table className="w-full table-fixed border-collapse text-left">
+                        {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
+                            шапки, но шапка — ОДИН раз на шаг (у первой ◈-группы), а
+                            table-fixed берёт ширины колонок из первой строки СВОЕЙ
+                            таблицы, а не соседней. Без общего <colgroup> у 2-й+
+                            группы колонки поплыли бы — здесь общий источник ширин
+                            для ВСЕХ таблиц шага, выровненных между группами.
 
-                          Значения сняты замером на живой карточке (таблица 602px):
-                          имя шаблона в одну строку требует до 178px («Звонок —
-                          приветствие»; типичные — 165–175), кнопка предпросмотра
-                          — 116px. 26% под шаблон (157px) рвали имя на два ряда, и
-                          пилюля читалась блоком-кнопкой, а не чипом строки; 7rem
-                          под кнопку были УЖЕ самой кнопки, и «Предпросмотр»
-                          вылезал за правый край таблицы. Место им отдала колонка
-                          контента: её текст всё равно ограничен двумя строками
-                          (`line-clamp-2`). «Коммуникация» НЕ ужимается, хотя
-                          канал в ней короткий (Email — 35px): ширину колонки
-                          держит её собственная шапка (98px), и на меньшем
-                          подпись «Коммуникация» слипалась бы с «Шаблоном». */}
-                      <colgroup>
-                        <col className="w-[18%]" />
-                        <col className="w-[32%]" />
-                        <col />
-                        <col className="w-[7.5rem]" />
-                      </colgroup>
-                      {/* Шапку несёт КАЖДАЯ таблица шага, но видимая — только у
-                          первой ◈-группы: визуально повторять подписи колонок над
-                          каждой веткой незачем, а вот без `<thead>` вторая и
-                          третья таблицы приходили к скринридеру полностью
-                          неподписанными сетками данных. `sr-only` снимает ровно
-                          визуальную половину проблемы, не трогая семантику. */}
-                      <thead className={gi === 0 ? undefined : "sr-only"}>
-                        <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
-                          <th scope="col" className="pb-1 font-normal">Коммуникация</th>
-                          <th scope="col" className="pb-1 font-normal">Шаблон</th>
-                          <th scope="col" className="pb-1 font-normal">Контент шаблона</th>
-                          {/* Колонка кнопки предпросмотра остаётся без подписи:
-                              сама кнопка уже несёт полный aria-label
-                              («Предпросмотр — SMS, Первое касание»), и заголовок
-                              колонки только удваивал бы его при чтении ячейки. */}
-                          <th scope="col" className="pb-1 font-normal" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.rows.map((row) => (
-                          <tr key={row.nodeId} className="align-top">
-                            <td className="py-1.5 pr-2 font-medium">{row.channel}</td>
-                            <td className="py-1.5 pr-2">
-                              {row.templateTag && (
-                                <DescriptionTagPill
-                                  tag={row.templateTag}
-                                  onActivate={onTagActivate}
-                                  nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
-                                  // Чип строки таблицы, а не слово прозы: длинное
-                                  // имя усекается многоточием (полное — в
-                                  // подсказке), но никогда не переносится.
-                                  truncateLabel
-                                />
-                              )}
-                            </td>
-                            <td className="py-1.5 pr-2 text-muted-foreground">
-                              {/* Без кавычек и без меток «Тема:»/«Текст:» —
-                                  контент читается как факт таблицы, не цитата. */}
-                              <span className="line-clamp-2">
-                                {row.contentTitle && (
-                                  <span className="text-foreground">{row.contentTitle}</span>
-                                )}
-                                {row.contentTitle && <br />}
-                                {row.contentText}
-                              </span>
-                            </td>
-                            {/* Кнопка прижата к правому краю таблицы и не
-                                переносится: подпись «Предпросмотр» — одно слово,
-                                разорванное посередине, читалось бы как две
-                                строки-обрывка. */}
-                            <td className="py-1.5 text-right whitespace-nowrap">
-                              <PreviewButton
-                                row={row}
-                                nodeParams={nodeParams}
-                                stageHeading={stage.heading}
-                                stageId={
-                                  ambiguousHeadings.has(stage.heading) ? stage.id : undefined
-                                }
-                                groupLabel={group.label}
-                                rowLabel={distinctions.get(row.nodeId)}
-                              />
-                            </td>
+                            Значения — Task 4, макет: 110px / 196px / авто / 52px.
+                            Колонка кнопки сузилась с прежних 7.5rem (120px) до
+                            52px: кнопка предпросмотра стала квадратной иконкой без
+                            подписи (28px кнопки + по 12px паддинга ячейки с
+                            каждой стороны) — подписи «Предпросмотр» не осталось
+                            вовсе, вылезать за край больше нечему. Контент —
+                            по-прежнему без фиксированной ширины (авто): его текст
+                            и так ограничен двумя строками (`line-clamp-2`), а
+                            освободившееся место у колонки кнопки лучше отдать
+                            ему, чем раздувать соседние колонки. */}
+                        <colgroup>
+                          <col className="w-[110px]" />
+                          <col className="w-[196px]" />
+                          <col />
+                          <col className="w-[52px]" />
+                        </colgroup>
+                        {/* Шапку несёт КАЖДАЯ таблица шага, но видимая — только у
+                            первой ◈-группы: визуально повторять подписи колонок над
+                            каждой веткой незачем, а вот без `<thead>` вторая и
+                            третья таблицы приходили к скринридеру полностью
+                            неподписанными сетками данных. `sr-only` снимает ровно
+                            визуальную половину проблемы, не трогая семантику. */}
+                        <thead className={gi === 0 ? undefined : "sr-only"}>
+                          <tr className="border-b border-scenario-rail text-[10px] font-medium uppercase tracking-wide text-scenario-th">
+                            <th scope="col" className="px-3 py-1.5">Коммуникация</th>
+                            <th scope="col" className="px-3 py-1.5">Шаблон</th>
+                            <th scope="col" className="px-3 py-1.5">Контент шаблона</th>
+                            {/* Колонка кнопки предпросмотра остаётся без подписи:
+                                сама кнопка уже несёт полный aria-label
+                                («Предпросмотр — SMS, Первое касание»), и заголовок
+                                колонки только удваивал бы его при чтении ячейки. */}
+                            <th scope="col" className="px-3 py-1.5" />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {group.rows.map((row) => (
+                            // border-collapse на <table> выше — необходимое условие,
+                            // чтобы браузер вообще учитывал border у <tr> (в
+                            // раздельной модели границ бордер строки игнорируется
+                            // полностью, см. CSS2.1 §17.6.1). last:border-b-0 —
+                            // Tailwind-эквивалент :last-child, снимает разделитель у
+                            // последней строки без сравнения индекса в JS.
+                            <tr key={row.nodeId} className="border-b border-scenario-rail align-top last:border-b-0">
+                              <td className="px-3 py-2.5 font-medium">{row.channel}</td>
+                              <td className="px-3 py-2.5">
+                                {row.templateTag && (
+                                  <DescriptionTagPill
+                                    tag={row.templateTag}
+                                    onActivate={onTagActivate}
+                                    nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
+                                    // Чип строки таблицы, а не слово прозы: длинное
+                                    // имя усекается многоточием (полное — в
+                                    // подсказке), но никогда не переносится.
+                                    truncateLabel
+                                  />
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-muted-foreground">
+                                {/* Без кавычек и без меток «Тема:»/«Текст:» —
+                                    контент читается как факт таблицы, не цитата. */}
+                                <span className="line-clamp-2">
+                                  {row.contentTitle && (
+                                    <span className="text-foreground">{row.contentTitle}</span>
+                                  )}
+                                  {row.contentTitle && <br />}
+                                  {row.contentText}
+                                </span>
+                              </td>
+                              {/* Кнопка прижата к правому краю таблицы — квадратная
+                                  иконка (Task 4), переносить больше нечему. */}
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                                <PreviewButton
+                                  row={row}
+                                  nodeParams={nodeParams}
+                                  stageHeading={stage.heading}
+                                  stageId={
+                                    ambiguousHeadings.has(stage.heading) ? stage.id : undefined
+                                  }
+                                  groupLabel={group.label}
+                                  rowLabel={distinctions.get(row.nodeId)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               })}
