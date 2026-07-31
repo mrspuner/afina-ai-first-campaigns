@@ -104,6 +104,32 @@ interface DescriptionTagPillProps {
    *  state. Без пропа (или пустого списка) — деградация к обычной
    *  кнопке-тултипу, как и `node-fields` без резолвнутых params. */
   domains?: { domain: string; status: DomainStatus }[];
+  /**
+   * Пилюля живёт в ячейке таблицы, а не в строке прозы: имя не переносится, а
+   * усекается многоточием по ширине ячейки. Без этого русские названия
+   * шаблонов («Персональный оффер», «Push — возвращение») разворачивали пилюлю
+   * в двухрядный блок, и она читалась как кнопка, а не как чип строки. Флагом,
+   * а не постоянным поведением: в прозе пилюля обязана переноситься вместе с
+   * текстом. Полное имя усечённой пилюли уезжает в подсказку (`hint` ниже) —
+   * иначе прочитать его было бы негде.
+   */
+  truncateLabel?: boolean;
+}
+
+/**
+ * Подсказка на наведении: «Нажмите для изменения» плюс — если есть — само
+ * значение. Одна композиция на оба пути (поповерная пилюля и обычная
+ * кнопка-тултип): разъехавшись, они дали бы усечённой пилюле подсказку с
+ * именем в одном месте и без имени в другом.
+ */
+function tooltipBody(hint: string | undefined) {
+  if (!hint) return "Нажмите для изменения";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span>{hint}</span>
+      <span className="text-background/70">Нажмите для изменения</span>
+    </div>
+  );
 }
 
 /**
@@ -118,20 +144,28 @@ export function DescriptionTagPill({
   nodeType,
   waitParams,
   domains,
+  truncateLabel,
 }: DescriptionTagPillProps) {
   const { className, style, Icon } = resolveVisual(tag, nodeType);
-  const title = tag.hoverList?.join(", ");
+  // Обычно подсказка — остаток схлопнутого перечисления (`hoverList`). У
+  // усекаемой пилюли она обязана нести ПОЛНОЕ значение: имя, обрезанное
+  // многоточием, иначе нечем прочитать целиком.
+  const hint = tag.hoverList?.join(", ") ?? (truncateLabel ? tag.label : undefined);
+  // `max-w-full` держит пилюлю внутри своей ячейки, `min-w-0` разрешает
+  // подписи сжаться (флекс-элемент по умолчанию не уже своего содержимого —
+  // без этого `truncate` не сработал бы вовсе).
+  const pillClass = cn(PILL_BASE, className, truncateLabel && "max-w-full");
 
   const content = (
     <>
       {Icon && <Icon className="h-3 w-3 shrink-0 self-center" aria-hidden />}
-      <span>{tag.label}</span>
+      <span className={truncateLabel ? "min-w-0 truncate" : undefined}>{tag.label}</span>
     </>
   );
 
   if (tag.target.kind === "none") {
     return (
-      <span className={cn(PILL_BASE, className)} style={style} title={title}>
+      <span className={pillClass} style={style} title={hint}>
         {content}
       </span>
     );
@@ -147,9 +181,9 @@ export function DescriptionTagPill({
         nodeId={tag.target.nodeId}
         nodeType={nodeType}
         selectedName={tag.label}
-        className={cn(PILL_BASE, className)}
+        className={pillClass}
         style={style}
-        title={title}
+        hint={hint}
       >
         {content}
       </TemplateTagPopover>
@@ -166,9 +200,9 @@ export function DescriptionTagPill({
       <WaitFieldsTagPopover
         nodeId={tag.target.nodeId}
         params={waitParams}
-        className={cn(PILL_BASE, className)}
+        className={pillClass}
         style={style}
-        title={title}
+        hint={hint}
       >
         {content}
       </WaitFieldsTagPopover>
@@ -184,16 +218,16 @@ export function DescriptionTagPill({
     return (
       <DomainsTagPopover
         domains={domains}
-        className={cn(PILL_BASE, className)}
+        className={pillClass}
         style={style}
-        title={title}
+        hint={hint}
       >
         {content}
       </DomainsTagPopover>
     );
   }
 
-  // Item 4 (финальное ревью): раньше `title` (остаток схлопнутого
+  // Item 4 (финальное ревью): раньше `hint` (остаток схлопнутого
   // перечисления, «ещё N триггерам») сидел на ТОМ ЖЕ узле, что оборачивает
   // base-ui's Tooltip — наведение показывало ДВА конкурирующих оверлея:
   // нативный `title` браузера и тултип «Нажмите для изменения». Остаток
@@ -206,7 +240,7 @@ export function DescriptionTagPill({
         render={
           <button
             type="button"
-            className={cn(PILL_BASE, className)}
+            className={pillClass}
             style={style}
             onClick={() => onActivate?.(tag)}
           />
@@ -214,16 +248,7 @@ export function DescriptionTagPill({
       >
         {content}
       </TooltipTrigger>
-      <TooltipContent>
-        {title ? (
-          <div className="flex flex-col gap-0.5">
-            <span>{title}</span>
-            <span className="text-background/70">Нажмите для изменения</span>
-          </div>
-        ) : (
-          "Нажмите для изменения"
-        )}
-      </TooltipContent>
+      <TooltipContent>{tooltipBody(hint)}</TooltipContent>
     </Tooltip>
   );
 }
@@ -242,13 +267,18 @@ export function DescriptionTagPill({
  * единственного `TooltipProvider delay={1000}`, которым `WorkflowDescription`
  * оборачивает всё описание целиком (спека §2.4/AC17 — тултип обязателен у
  * ЛЮБОГО интерактивного тега, поповерные — не исключение).
+ *
+ * `hint` (полное значение усечённой пилюли) идёт в СОДЕРЖИМОЕ тултипа, а не в
+ * нативный `title` триггера: на этом узле уже висит тултип, и второй,
+ * браузерный, оверлей поверх него — ровно тот дефект, который Item 4 закрыл в
+ * соседней ветке рендера.
  */
 function TagPopoverShell({
   open,
   onOpenChange,
   className,
   style,
-  title,
+  hint,
   children,
   contentClassName,
   content,
@@ -257,7 +287,7 @@ function TagPopoverShell({
   onOpenChange: (open: boolean) => void;
   className: string;
   style?: CSSProperties;
-  title?: string;
+  hint?: string;
   children: ReactNode;
   contentClassName: string;
   content: ReactNode;
@@ -265,12 +295,10 @@ function TagPopoverShell({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <Tooltip>
-        <TooltipTrigger
-          render={<PopoverTrigger className={className} style={style} title={title} />}
-        >
+        <TooltipTrigger render={<PopoverTrigger className={className} style={style} />}>
           {children}
         </TooltipTrigger>
-        <TooltipContent>Нажмите для изменения</TooltipContent>
+        <TooltipContent>{tooltipBody(hint)}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" className={contentClassName}>
         {content}
@@ -302,7 +330,7 @@ function TemplateTagPopover({
   selectedName,
   className,
   style,
-  title,
+  hint,
   children,
 }: {
   nodeId: string;
@@ -310,7 +338,7 @@ function TemplateTagPopover({
   selectedName: string;
   className: string;
   style?: CSSProperties;
-  title?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -328,7 +356,7 @@ function TemplateTagPopover({
       onOpenChange={setOpen}
       className={className}
       style={style}
-      title={title}
+      hint={hint}
       contentClassName="w-72 p-0"
       content={
         <NodeTemplateList
@@ -393,14 +421,14 @@ function WaitFieldsTagPopover({
   params,
   className,
   style,
-  title,
+  hint,
   children,
 }: {
   nodeId: string;
   params: WaitParams;
   className: string;
   style?: CSSProperties;
-  title?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -411,7 +439,7 @@ function WaitFieldsTagPopover({
       onOpenChange={setOpen}
       className={className}
       style={style}
-      title={title}
+      hint={hint}
       contentClassName="w-72 p-2.5"
       content={
         <div className="flex flex-col gap-0.5">
@@ -436,13 +464,13 @@ function DomainsTagPopover({
   domains,
   className,
   style,
-  title,
+  hint,
   children,
 }: {
   domains: { domain: string; status: DomainStatus }[];
   className: string;
   style?: CSSProperties;
-  title?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -453,7 +481,7 @@ function DomainsTagPopover({
       onOpenChange={setOpen}
       className={className}
       style={style}
-      title={title}
+      hint={hint}
       contentClassName="w-72 p-2"
       content={
         <div className="flex flex-col gap-1.5">

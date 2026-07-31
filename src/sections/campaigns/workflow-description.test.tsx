@@ -339,6 +339,80 @@ describe("таблица коммуникаций", () => {
     expect(heads.slice(1).every((head) => head!.className.includes("sr-only"))).toBe(true);
   });
 
+  /**
+   * Найдено глазами на живой карточке: русские имена шаблонов («Персональный
+   * оффер», «Push — возвращение») не влезали в колонку и переносились ВНУТРИ
+   * пилюли — та вырастала в два ряда и читалась крупным блоком-кнопкой, а не
+   * чипом строки. Замер на карточке: имя в одну строку требует до 178px, в
+   * колонке было 157px. Лечится парой — усечением у пилюли и шириной у
+   * колонки; порознь ни одно не даёт однострочного чипа.
+   */
+  it("пилюля шаблона в таблице усекается, а не переносится, и не вылезает из ячейки", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const pill = container.querySelector("tbody tr td:nth-child(2) > *") as HTMLElement;
+    const label = pill.querySelector("span") as HTMLElement;
+    expect(label.className).toContain("truncate");
+    // Без min-w-0 флекс-элемент не сжимается уже своего содержимого, и
+    // усечение не срабатывает вовсе.
+    expect(label.className).toContain("min-w-0");
+    expect(pill.className).toContain("max-w-full");
+  });
+
+  it("усечённая пилюля отдаёт полное имя подсказкой — иначе его негде прочитать", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    // Пилюля запущенной кампании (`none`) — обычный span: подсказка нативная.
+    expect(screen.getByText("Горячий оффер").closest("[title]")?.getAttribute("title"))
+      .toBe("Горячий оффер");
+  });
+
+  it("пилюля в ПРОЗЕ усечение не получает — там она переносится вместе с текстом", () => {
+    const { container } = render(
+      <WorkflowDescription
+        stages={[
+          {
+            id: "start",
+            kind: "start",
+            heading: "Скоринг базы",
+            body: [
+              { kind: "text", text: "Домены " },
+              { kind: "tag", tag: { id: "d", label: "a.ru", target: { kind: "domains" } } },
+              { kind: "text", text: " на модерации." },
+            ],
+          },
+        ]}
+      />,
+    );
+    const prose = container.querySelectorAll("p")[1];
+    expect(prose.textContent).toContain("a.ru");
+    expect(prose.innerHTML).not.toContain("truncate");
+    expect(prose.innerHTML).not.toContain("max-w-full");
+  });
+
+  /**
+   * Ширины колонок — единственный источник на ВСЕ таблицы шага: `table-fixed`
+   * берёт их из первой строки СВОЕЙ таблицы, поэтому разъехавшийся `<colgroup>`
+   * сдвинул бы колонки таблицы повтора относительно таблицы касания. Значения
+   * подобраны замером (см. комментарий у `<colgroup>`), поэтому тест сторожит
+   * и их: колонка шаблона шире колонки канала, а колонка кнопки не уже самой
+   * кнопки («Предпросмотр» вылезал за правый край таблицы при 7rem).
+   */
+  it("colgroup одинаков у всех таблиц шага и несёт подобранные замером ширины", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const widths = [...container.querySelectorAll("table")].map((table) =>
+      [...table.querySelectorAll("col")].map((col) => col.className),
+    );
+    expect(widths).toHaveLength(2);
+    expect(widths[0]).toEqual(widths[1]);
+    expect(widths[0]).toEqual(["w-[18%]", "w-[32%]", "", "w-[7.5rem]"]);
+  });
+
+  it("колонка предпросмотра прижимает кнопку к правому краю и не переносит подпись", () => {
+    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const cell = container.querySelector("tbody tr td:nth-child(4)") as HTMLElement;
+    expect(cell.className).toContain("text-right");
+    expect(cell.className).toContain("whitespace-nowrap");
+  });
+
   it("ячейки шапки объявлены заголовками КОЛОНОК (scope=col)", () => {
     const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     const ths = [...container.querySelectorAll("th")];
