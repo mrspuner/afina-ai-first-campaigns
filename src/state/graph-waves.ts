@@ -41,7 +41,14 @@ export interface Wave {
   forkKind?: "condition" | "split";
   /** Пауза, отделяющая волну от предыдущей. */
   waitBefore?: WorkflowNode;
-  /** Содержимое волны совпало с предыдущей — это повтор, а не новое касание. */
+  /**
+   * Содержимое волны совпало с предыдущей — независимо от того, есть ли между
+   * ними пауза. Слабее `repeatsPrevious` и нужен отдельно: волна с тем же
+   * содержанием, но без паузы, «Паузой и повтором» не становится, а вот
+   * называть её серию ДРУГОЙ описание всё равно не вправе.
+   */
+  sameContentAsPrevious: boolean;
+  /** Содержимое совпало И волны разделены паузой — это повтор, а не касание. */
   repeatsPrevious: boolean;
 }
 
@@ -167,6 +174,7 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
       .map((group) => groupKey(group.nodes))
       .sort()
       .join(GROUP_SEP);
+    const sameContent = key === previousKey;
     steps.push({
       kind: "wave",
       wave: {
@@ -174,12 +182,14 @@ export function segmentWaves(graph: WaveGraph): GraphWaves {
         groups,
         ...(fork ? { forkNode: fork.node, forkKind: fork.kind } : {}),
         ...(waitBefore ? { waitBefore } : {}),
+        sameContentAsPrevious: sameContent,
         // Спека §2 п.5: повтор — волна с ключом предыдущей, «которую от неё
         // отделяет `wait`». Разделяющая пауза входит в определение, а не
         // прилагается к нему: без неё две одинаковые волны, разделённые лишь
         // проверкой, становились бы «Паузой и повтором» при отсутствующей
-        // паузе. Совпал ключ, но паузы нет — это новое касание.
-        repeatsPrevious: key === previousKey && waitBefore !== undefined,
+        // паузе. Совпал ключ, но паузы нет — это новое касание; повторённость
+        // содержания при этом не теряется — её несёт `sameContentAsPrevious`.
+        repeatsPrevious: sameContent && waitBefore !== undefined,
       },
     });
     previousKey = key;

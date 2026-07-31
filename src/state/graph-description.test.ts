@@ -379,6 +379,58 @@ describe("describeWorkflow", () => {
         expect(segmentsText(second.body)).not.toContain("другими каналами");
       });
 
+      /**
+       * Обратная сторона критерия приёмки 8: описание не должно утверждать
+       * «другими сообщениями» над двумя ИДЕНТИЧНЫМИ таблицами. Волна с тем же
+       * содержанием, но БЕЗ разделяющей паузы, повтором (`repeatsPrevious`) не
+       * считается — и раньше проваливалась в ветку расхождения, где каналы
+       * совпали и оставалось только соврать про «другие сообщения».
+       *
+       * Форма достижима правкой графа (условие без паузы), а не шаблоном
+       * репозитория, поэтому граф собран руками — но именно графом, не
+       * рукотворным массивом этапов.
+       */
+      it("то же письмо без разделяющей паузы — повтор серии, а не «другие сообщения»", () => {
+        const letter = (id: string) =>
+          node(id, "email", {
+            kind: "email", subject: "Ваше предложение", body: "Подробности на сайте",
+            sender: "care@brand.com",
+          });
+        const graph = {
+          nodes: [
+            node("signal", "source"),
+            letter("first"),
+            node("react", "condition", { kind: "condition", trigger: "opened" }),
+            node("win", "success"),
+            letter("again"),
+          ],
+          edges: [
+            edge("signal", "first"),
+            edge("first", "react"),
+            edge("react", "win", "ДА"),
+            edge("react", "again", "НЕТ"),
+          ],
+        };
+
+        const stages = describeWorkflow(graph, T);
+        const touches = stages.filter((s) => s.kind === "touch");
+        // Тест ловит реальный кейс, а не проходит вхолостую: вторая волна
+        // существует, повтором её никто не пометил, и содержание совпадает.
+        expect(touches).toHaveLength(2);
+        expect(stages.some((s) => s.kind === "retry")).toBe(false);
+        expect(touches[1].groups![0].rows.map((r) => r.contentText))
+          .toEqual(touches[0].groups![0].rows.map((r) => r.contentText));
+
+        const body = segmentsText(touches[1].body);
+        expect(body).not.toContain("другими сообщениями");
+        expect(body).not.toContain("другими каналами");
+        expect(body).toContain("повторяет ту же серию");
+        // Паузы в графе нет — фраза не имеет права её выдумывать.
+        expect(body).not.toContain("выжидает");
+        // И это не «Пауза и повтор»: заголовок остаётся заголовком касания.
+        expect(touches[1].heading).toBe("Повторное касание");
+      });
+
       it("другой канал → «другими каналами и шаблонами»", () => {
         const stages = describeWorkflow(
           {
