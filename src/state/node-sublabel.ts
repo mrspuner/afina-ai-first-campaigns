@@ -2,8 +2,18 @@ import type { NodeParams, WorkflowNode } from "@/types/workflow";
 import { splitSummary } from "./split-segments";
 import { pluralRu } from "@/lib/plural-ru";
 
-/** «Открыто»/«Кликнуто»/«Доставлено» из события-триггера condition (12c). */
-function conditionTriggerLabel(t: string): string {
+/**
+ * «Открыто»/«Кликнуто»/«Доставлено» из события-триггера condition (12c).
+ *
+ * Экспортирована (V-Task 3 review): раньше существовала в приватной копии ЗДЕСЬ
+ * и в `node-card-content.tsx` — карточка кампании (`description-tag.tsx`,
+ * поповер условия) стала бы третьим потребителем/третьей копией, поэтому обе
+ * копии сведены к одной, а `node-card-content.tsx` теперь импортирует отсюда.
+ * Единственный источник перевода легаси-кода триггера («opened» → «Открыто») —
+ * без него поповер условия показывал бы сырой английский код (баг: расходится
+ * с тем же значением на канвасе, который его уже переводил).
+ */
+export function conditionTriggerLabel(t: string): string {
   switch (t) {
     case "delivered": return "Доставлено";
     case "not_delivered": return "Не доставлено";

@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DescriptionTag } from "@/state/graph-description";
+import { conditionTriggerLabel } from "@/state/node-sublabel";
 import type { ConditionParams, NodeParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
 import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
@@ -637,6 +638,19 @@ function WaitFieldsTagPopover({
  * правит их только ИИ-дровер, которого на карточке нет (см. комментарий в
  * `graph-description.ts` у `forkBody`) — заводить здесь второй компонент
  * поповера было бы нечем наполнить.
+ *
+ * `value={conditionTriggerLabel(params.trigger)}` (V-Task 3 review, Important
+ * — было найдено на канвасе, а не тут: `trigger` во всех живых шаблонах хранит
+ * легаси-код события («opened», «clicked», …), не готовую фразу. Тот же
+ * комбобокс на канвасе (`node-card-content.tsx`) уже переводит значение перед
+ * показом — без перевода здесь поповер оказался бы единственным местом
+ * продукта, где сквозь русский интерфейс проступает английский технический
+ * код (нарушает и «магия скрыта», и «кириллица first-class» из PRODUCT.md).
+ * `conditionTriggerLabel` — общая с `node-sublabel.ts`/`node-card-content.tsx`
+ * функция (третьей копии не заведено, вторая, бывшая в `node-card-content.tsx`,
+ * удалена в этом же раунде). Перевод — только для ОТОБРАЖЕНИЯ: `onSelect`
+ * пишет выбранное значение как есть (`next`) — справочник `eventCatalog` и так
+ * выдаёт готовую русскую фразу («Письмо открыто»), переводить нечего.
  */
 function ConditionTagPopover({
   nodeId,
@@ -667,7 +681,7 @@ function ConditionTagPopover({
       content={
         <NodeFieldCombobox
           label="Событие"
-          value={params.trigger}
+          value={conditionTriggerLabel(params.trigger)}
           optionsKey="eventCatalog"
           isDirty={false}
           onSelect={(next) =>

@@ -5,6 +5,7 @@ import { AlertTriangle, Eye, Plus, X } from "lucide-react";
 import Image from "next/image";
 import type { NodeParams, WorkflowNodeData } from "@/types/workflow";
 import { getFieldMeta } from "@/state/node-field-editability";
+import { conditionTriggerLabel } from "@/state/node-sublabel";
 import { rngFor, seededInt } from "@/state/metrics";
 import { usePromptChips } from "@/state/prompt-chips-context";
 import type { NodeTagPayload } from "@/state/prompt-chips-context";
@@ -105,25 +106,6 @@ function formatDuration(hours: number): string {
   if (hours < 24) return `${hours} ч`;
   const days = Math.round(hours / 24);
   return `${days} ${days === 1 ? "день" : days < 5 ? "дня" : "дней"}`;
-}
-
-function conditionTriggerLabel(t: string): string {
-  switch (t) {
-    case "delivered":
-      return "Доставлено";
-    case "not_delivered":
-      return "Не доставлено";
-    case "opened":
-      return "Открыто";
-    case "not_opened":
-      return "Не открыто";
-    case "clicked":
-      return "Кликнуто";
-    case "not_clicked":
-      return "Не кликнуто";
-    default:
-      return t;
-  }
 }
 
 export function getParamRows(params: NodeParams): ParamRow[] {

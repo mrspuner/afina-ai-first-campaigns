@@ -435,6 +435,19 @@ describe("DescriptionTagPill — поповер условия у тега зн�
     );
   }
 
+  // V-Task 3 review, Important: `ConditionParams.trigger` во всех живых
+  // шаблонах хранит легаси-код («opened», «clicked», …), не готовую русскую
+  // фразу — комбобокс не должен рисовать его сырым. Тот же трюк уже сделан на
+  // канвасе (`node-card-content.tsx`, поле «Событие» ноды `condition`): текущее
+  // значение показывается ПЕРЕВЕДЁННЫМ (`conditionTriggerLabel`), а пишется
+  // выбранное значение как есть (справочник и так даёт готовую русскую фразу).
+  it("текущее значение показывает переведённую подпись «Открыто», а не сырой код «opened»", () => {
+    renderConditionPill();
+    fireEvent.click(screen.getByRole("button", { name: /открыл письмо/ }));
+    expect(screen.getByText("Открыто")).toBeInTheDocument();
+    expect(screen.queryByText("opened")).not.toBeInTheDocument();
+  });
+
   it("поповер условия предлагает события справочника", async () => {
     // Первый клик раскрывает NodeFieldCombobox-строку «Событие» (тот же
     // двухшаговый паттерн, что и у комбобокса «Событие» внутри поповера
