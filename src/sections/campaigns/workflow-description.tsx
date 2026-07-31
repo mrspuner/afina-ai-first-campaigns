@@ -325,8 +325,16 @@ export function WorkflowDescription({
           leading-relaxed (1.625 → 22.75px) — в абзаце с несколькими тегами
           (напр. перечисление триггеров в «Старте») соседние обёрнутые строки
           соприкасаются пилюлями. 1.75 подобрано глазом на реальной карточке —
-          даёт видимый зазор, не раздувая текст; трогаем только контейнер
-          описания, не глобальную типографику. */}
+          давало видимый зазор при пилюле ~23.6px, не раздувая текст; трогаем
+          только контейнер описания, не глобальную типографику.
+
+          Правка 6 (владелец продукта, py-1 у PILL_BASE в description-tag.tsx):
+          пилюля подросла до ~33px — ВЫШЕ, чем 24.5px (14px×1.75), которые даёт
+          ЭТОТ leading. На плотном случае (несколько пилюль-триггеров,
+          перенос строки) соседние строки снова стыкуются впритык (0px зазора,
+          замерено Playwright'ом) — тот самый регресс, от которого 1.75 когда-то
+          спасал. `leading` НЕ подгоняем молча (прямое указание правки 6) —
+          см. отчёт правок, известный компромисс. */}
       <ol className="flex flex-col gap-5 text-sm leading-[1.75] text-foreground">
         {stages.map((stage, i) => (
           // relative — контейнер позиционирования для сегмента рельса ниже:
@@ -380,10 +388,18 @@ export function WorkflowDescription({
               <p className="text-[15.5px] font-semibold text-scenario-heading">{stage.heading}</p>
               <p>{renderSegments(stage.body)}</p>
               {stage.settings?.length ? (
-                <dl data-testid="stage-settings" className="mt-0.5 flex flex-col gap-1">
+                // Правка 5 (владелец продукта): зазор между строками списка настроек
+                // доведён до 8px (`gap-2`, было `gap-1` = 4px).
+                <dl data-testid="stage-settings" className="mt-0.5 flex flex-col gap-2">
                   {stage.settings.map((s) => (
                     <div key={s.id} className="flex items-baseline gap-2">
-                      <dt className="shrink-0 text-muted-foreground">{s.label}</dt>
+                      {/* Правка 1: фиксированная ширина подписи — без неё «База»/
+                          «Режим» короче «Сценарий»/«Триггеры», и теги-значения
+                          в соседних строках начинались на разной горизонтали
+                          (список читался «рваным»). 92px — самая длинная подпись
+                          («Сценарий», «Триггеры») уместилась без переноса
+                          (замерено Playwright'ом на реальном шрифте/рендере). */}
+                      <dt className="w-[92px] shrink-0 text-muted-foreground">{s.label}</dt>
                       <dd className="min-w-0">{renderSegments(s.value)}</dd>
                     </div>
                   ))}
@@ -495,14 +511,12 @@ export function WorkflowDescription({
                               <td className="px-2 py-2.5 font-medium">{row.channel}</td>
                               <td className="px-2 py-2.5">
                                 {row.templateTag && (
+                                  // Усечение (правка 4) теперь общее свойство пилюли —
+                                  // отдельный `truncateLabel`-флаг здесь больше не нужен.
                                   <DescriptionTagPill
                                     tag={row.templateTag}
                                     onActivate={onTagActivate}
                                     nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
-                                    // Чип строки таблицы, а не слово прозы: длинное
-                                    // имя усекается многоточием (полное — в
-                                    // подсказке), но никогда не переносится.
-                                    truncateLabel
                                   />
                                 )}
                               </td>

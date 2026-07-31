@@ -273,6 +273,30 @@ describe("нумерованный таймлайн", () => {
     );
     expect(container.querySelector("[data-testid='stage-settings']")).toBeNull();
   });
+
+  // Правка 1 (владелец продукта, разбор живой карточки): подписи занимали
+  // каждая свою ширину — теги-значения соседних строк начинались на разной
+  // горизонтали, список читался «рваным». Фиксированная ширина у ВСЕХ `dt`
+  // выравнивает старт значений по одной вертикали.
+  it("подписи настроек фиксированной ширины — значения выстраиваются по одной вертикали", () => {
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    const labels = [...container.querySelectorAll("[data-testid='stage-settings'] dt")];
+    expect(labels.length).toBeGreaterThan(0);
+    for (const dt of labels) {
+      expect((dt as HTMLElement).className).toContain("w-[92px]");
+    }
+  });
+
+  // Правка 5: зазор между строками списка настроек доведён до 8px (`gap-2`,
+  // было `gap-1` = 4px).
+  it("зазор между строками списка настроек — 8px (gap-2)", () => {
+    const { container } = render(<WorkflowDescription stages={STAGES} />);
+    const list = container.querySelector("[data-testid='stage-settings']") as HTMLElement;
+    expect(list.className).toContain("gap-2");
+    // Wildcard-безопасная проверка: `gap-1` не должен остаться отдельным
+    // словом-классом (не подстрокой внутри `gap-1.5` и т.п., которых тут нет).
+    expect(list.className).not.toMatch(/(?:^|\s)gap-1(?:\s|$)/);
+  });
 });
 
 /**
@@ -389,6 +413,9 @@ describe("таблица коммуникаций", () => {
    * колонке было 157px. Лечится парой — усечением у пилюли и шириной у
    * колонки; порознь ни одно не даёт однострочного чипа.
    */
+  // Правка 4 (владелец продукта, разбор живой карточки): потолок ширины стал
+  // символьным (`max-w-[20ch]`) и общим для ВСЕХ пилюль — раньше здесь была
+  // табличная особенность `max-w-full`, завязанная на ширину колонки.
   it("пилюля шаблона в таблице усекается, а не переносится, и не вылезает из ячейки", () => {
     const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     const pill = container.querySelector("tbody tr td:nth-child(2) > *") as HTMLElement;
@@ -397,7 +424,7 @@ describe("таблица коммуникаций", () => {
     // Без min-w-0 флекс-элемент не сжимается уже своего содержимого, и
     // усечение не срабатывает вовсе.
     expect(label.className).toContain("min-w-0");
-    expect(pill.className).toContain("max-w-full");
+    expect(pill.className).toContain("max-w-[20ch]");
   });
 
   it("усечённая пилюля отдаёт полное имя подсказкой — иначе его негде прочитать", () => {
@@ -407,7 +434,13 @@ describe("таблица коммуникаций", () => {
       .toBe("Горячий оффер");
   });
 
-  it("пилюля в ПРОЗЕ усечение не получает — там она переносится вместе с текстом", () => {
+  // Правка 4 (владелец продукта, разбор живой карточки): усечение перестало
+  // быть табличной особенностью — это ТА ЖЕ механика у ЛЮБОЙ пилюли, включая
+  // теги ПРОЗЫ (например, перечисление триггеров в «Скоринге базы»). Короткий
+  // домен «a.ru» (4 симв.) не достигает потолка `max-w-[20ch]` и визуально не
+  // усекается, но несёт ТЕ ЖЕ классы механики, что и табличная пилюля выше —
+  // раньше (при флаге `truncateLabel`) их у прозы не было вовсе.
+  it("пилюля в прозе несёт ту же механику усечения, что и табличная", () => {
     const { container } = render(
       <WorkflowDescription
         stages={[
@@ -426,8 +459,38 @@ describe("таблица коммуникаций", () => {
     );
     const prose = container.querySelectorAll("p")[1];
     expect(prose.textContent).toContain("a.ru");
-    expect(prose.innerHTML).not.toContain("truncate");
-    expect(prose.innerHTML).not.toContain("max-w-full");
+    expect(prose.innerHTML).toContain("truncate");
+    expect(prose.innerHTML).toContain("max-w-[20ch]");
+  });
+
+  // Покрытие для самой правки 4: метка ДЛИННЕЕ 20 символов в прозе получает
+  // усекающие классы (jsdom не считает layout/эллипсис — реальный рендер
+  // проверен Playwright'ом отдельно, см. отчёт), а её полное значение не
+  // теряется — уходит в `title` (демоция `none` отдаёт подсказку нативным
+  // атрибутом, см. тест выше про «Горячий оффер»).
+  it("длинная пилюля в прозе усекается многоточием, полное значение остаётся в подсказке", () => {
+    const longLabel = "оченьдлинноеимятриггерадлятеста"; // 30 симв. — длиннее 20ch
+    render(
+      <WorkflowDescription
+        stages={[
+          {
+            id: "start",
+            kind: "start",
+            heading: "Скоринг базы",
+            body: [
+              { kind: "text", text: "Триггеры: " },
+              { kind: "tag", tag: { id: "d2", label: longLabel, target: { kind: "none" } } },
+            ],
+          },
+        ]}
+      />,
+    );
+    const label = screen.getByText(longLabel);
+    expect(label.className).toContain("truncate");
+    expect(label.className).toContain("min-w-0");
+    const pill = label.parentElement as HTMLElement;
+    expect(pill.className).toContain("max-w-[20ch]");
+    expect(pill.getAttribute("title")).toBe(longLabel);
   });
 
   /**

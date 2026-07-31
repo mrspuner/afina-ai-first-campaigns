@@ -43,6 +43,7 @@
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-muted: var(--brand-muted);
   --color-scenario-tag-bg: var(--scenario-tag-bg);
+  --color-scenario-tag-border: var(--scenario-tag-border);
   --color-scenario-tag-hover: var(--scenario-tag-hover);
   --color-scenario-badge-bg: var(--scenario-badge-bg);
   --color-scenario-badge-border: var(--scenario-badge-border);
@@ -182,13 +183,18 @@
      тёмное (см. AGENTS.md/PRODUCT.md), :root-паре нет смысла. Значения — хексы
      из макета, конвертировать в oklch не нужно: хекс валиден как значение
      CSS-переменной. */
-  --scenario-tag-bg: #4C4C4E;
+  /* Правка 2 (владелец продукта, разбор живой карточки): тег-настройка читался
+     слишком контрастно к панели таблицы — приглушаем фон и меняем белую
+     обводку макета на серую (свой токен, а не хардкод в NEUTRAL_CLASS). */
+  --scenario-tag-bg: #474749;
+  --scenario-tag-border: #9D9D9F;
   --scenario-tag-hover: #8B8B8D;
   --scenario-badge-bg: #17171A;
   --scenario-badge-border: #2A2A30;
   --scenario-badge-text: #9596A0;
   --scenario-rail: #212127;
-  --scenario-panel: #101012;
+  /* Правка 3: панель таблицы темнее — тон, ближе к фону карточки. */
+  --scenario-panel: #0C0C0B;
   --scenario-th: #6D6E78;
   --scenario-heading: #ECECED;
 }

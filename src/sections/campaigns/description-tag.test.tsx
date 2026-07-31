@@ -675,25 +675,41 @@ describe("вид пилюли", () => {
     expect(cls(dead)).toContain("bg-scenario-tag-bg");
     expect(cls(live)).toContain("bg-scenario-tag-bg");
   });
+
+  // Правка 6 (владелец продукта): было `py-0` — пилюля читалась приплюснутой
+  // рядом с текстом строки. `py-1` = 4px по вертикали — минимум, который
+  // просила правка.
+  it("несёт минимум 4px вертикального паддинга (py-1, не py-0)", () => {
+    render(<DescriptionTagPill tag={{ id: "t", label: "186 255 строк", target: { kind: "none" } }} />);
+    const box = screen.getByText("186 255 строк").parentElement as HTMLElement;
+    expect(box.className).toContain("py-1");
+    expect(box.className).not.toContain("py-0");
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Task 2 — вид тега-настройки: серая подложка макета (`--scenario-tag-bg`) с
-// белой обводкой вместо старой светлой заливки (`bg-foreground`). Дублирует
-// часть смысла блока «вид пилюли» выше (тот уже переведён на новые классы) —
-// оставлено отдельным блоком, т.к. это буквальные кейсы брифа Task 2.
+// обводкой (Task 2 — белой, правка 2 владельца продукта — токеном
+// `--scenario-tag-border`) вместо старой светлой заливки (`bg-foreground`).
+// Дублирует часть смысла блока «вид пилюли» выше (тот уже переведён на новые
+// классы) — оставлено отдельным блоком, т.к. это буквальные кейсы брифа Task 2.
 // ---------------------------------------------------------------------------
 describe("тег-параметр: вид", () => {
   // Проверки ниже спрашивают ИМЕННО базовый токен (`bg-scenario-tag-bg`), а не
   // префикс `bg-scenario-tag` (финальное ревью, Minor): тот матчится и
   // hover-токеном `bg-scenario-tag-hover`, поэтому пилюля, потерявшая базовый
   // фон, но сохранившая hover-подсветку, проходила бы тест насквозь.
-  it("несёт фон макета и белую обводку, а не светлую заливку", () => {
+  it("несёт фон макета и токенную обводку, а не светлую заливку", () => {
     render(<DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "none" } }} />);
     const box = screen.getByText("разовый").parentElement as HTMLElement;
     expect(box.className).toContain("bg-scenario-tag-bg");
     expect(box.className).not.toContain("bg-foreground");
     expect(box.className).toContain("font-semibold");
+    // Правка 2 (владелец продукта): обводка макета читалась слишком
+    // контрастно рядом с приглушённым фоном — заменена токеном
+    // `--scenario-tag-border`, хардкод `border-white` не остаётся.
+    expect(box.className).toContain("border-scenario-tag-border");
+    expect(box.className).not.toContain("border-white");
   });
 
   it("демоция не меняет фон — только интерактив", () => {
