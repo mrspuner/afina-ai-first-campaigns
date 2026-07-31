@@ -627,6 +627,94 @@ describe("таблица коммуникаций — уникальный aria-
     expect(labels.filter((l) => l?.startsWith("Предпросмотр — SMS, Пауза и повтор,"))).toHaveLength(2);
   });
 
+  /**
+   * Дыра, оставшаяся после правки ключа сравнения писем: две строки ОДНОГО
+   * канала внутри ОДНОЙ группы. Канал, заголовок этапа и метка ветки у них
+   * общие — различать нечем. Форма реальная: ключ сравнения читает тему И
+   * тело, поэтому два письма с одной темой и разными телами доходят до таблицы
+   * обе, а показывается у обеих одна и та же тема.
+   */
+  const twoInOneGroup = (first: NodeParams, second: NodeParams) => {
+    const graph = {
+      nodes: [node("signal", "source"), node("m1", first.kind, first), node("m2", second.kind, second)],
+      edges: [
+        { id: "e1", source: "signal", target: "m1" },
+        { id: "e2", source: "m1", target: "m2" },
+      ],
+    };
+    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
+    const nodeParams = new Map(
+      graph.nodes.filter((n) => n.data.params).map((n) => [n.id, n.data.params!] as const),
+    );
+    return { stages, nodeParams };
+  };
+
+  it("две строки одного канала в ОДНОЙ группе различаются началом своего контента", () => {
+    const { stages, nodeParams } = twoInOneGroup(
+      { kind: "sms", text: "Первый заход", alphaName: "BRAND", scheduledAt: "immediate" },
+      { kind: "sms", text: "Второй заход", alphaName: "BRAND", scheduledAt: "immediate" },
+    );
+    // Тест ловит реальный кейс: обе строки — в одной группе одного этапа.
+    const groups = stages.find((s) => s.kind === "touch")!.groups!;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].rows).toHaveLength(2);
+
+    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
+    expect(
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Первый заход" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Второй заход" }),
+    ).toBeInTheDocument();
+  });
+
+  it("два письма с ОДНОЙ темой и разными телами всё равно различимы — номером строки", () => {
+    const { stages, nodeParams } = twoInOneGroup(
+      { kind: "email", subject: "Ваше предложение", body: "Первый вариант", sender: "a@brand.com" },
+      { kind: "email", subject: "Ваше предложение", body: "Второй вариант", sender: "a@brand.com" },
+    );
+    // Тест ловит реальный кейс: видимый контент обеих строк ОДИНАКОВ (таблица
+    // показывает у письма одну тему) — содержательного различителя нет.
+    const rows = stages.find((s) => s.kind === "touch")!.groups![0].rows;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].contentText).toBe(rows[1].contentText);
+
+    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
+    const labels = screen
+      .getAllByRole("button", { name: /предпросмотр/i })
+      .map((btn) => btn.getAttribute("aria-label"));
+    expect(new Set(labels).size).toBe(labels.length);
+    // Номер уникален по построению, но канал и этап ярлык не теряет.
+    expect(labels).toEqual([
+      "Предпросмотр — Email, Первое касание, сообщение 1",
+      "Предпросмотр — Email, Первое касание, сообщение 2",
+    ]);
+  });
+
+  it("строки с ПУСТЫМ контентом получают номер, а не одинаковый пустой хвост", () => {
+    const { stages, nodeParams } = twoInOneGroup(
+      { kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" },
+      { kind: "sms", text: " ", alphaName: "BRAND", scheduledAt: "immediate" },
+    );
+    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
+    const labels = screen
+      .getAllByRole("button", { name: /предпросмотр/i })
+      .map((btn) => btn.getAttribute("aria-label"));
+    expect(labels).toEqual([
+      "Предпросмотр — SMS, Первое касание, сообщение 1",
+      "Предпросмотр — SMS, Первое касание, сообщение 2",
+    ]);
+  });
+
+  it("единственная строка канала хвоста не получает — ярлык остаётся коротким", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(
+      screen.getByRole("button", {
+        name: "Предпросмотр — Email, Первое касание, Высокая склонность",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("группа без метки ветки — ярлык несёт канал и этап, без хвоста группы", () => {
     const stage: DescriptionStage = {
       ...GROUP_STAGE,

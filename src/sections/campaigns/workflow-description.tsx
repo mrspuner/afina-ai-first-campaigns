@@ -87,6 +87,11 @@ function waitParamsForTag(
  * (`touch-1`, `retry-1`, `retry-2`), поэтому он и дописывается хвостом — но
  * ТОЛЬКО когда заголовки реально совпали (проп приходит `undefined` в обычном
  * случае), иначе ярлык терял бы читаемость на всех нормальных карточках.
+ *
+ * `rowLabel` — различитель ДВУХ строк одного канала внутри ОДНОЙ группы (см.
+ * `rowDistinctions`): ни канал, ни заголовок этапа, ни метка ветки их не
+ * различают. Приходит `undefined` в обычном случае — по той же причине, что и
+ * `stageId`.
  */
 function PreviewButton({
   row,
@@ -94,12 +99,14 @@ function PreviewButton({
   stageHeading,
   stageId,
   groupLabel,
+  rowLabel,
 }: {
   row: DescriptionCommunication;
   nodeParams?: Map<string, NodeParams>;
   stageHeading: string;
   stageId?: string;
   groupLabel?: string;
+  rowLabel?: string;
 }) {
   const { openTemplatePreview } = useChat();
   const params = nodeParams?.get(row.nodeId);
@@ -110,6 +117,7 @@ function PreviewButton({
     row.channel,
     stageHeading,
     ...(groupLabel ? [groupLabel] : []),
+    ...(rowLabel ? [rowLabel] : []),
     ...(stageId ? [stageId] : []),
   ];
   const label = `Предпросмотр — ${parts.join(", ")}`;
@@ -124,6 +132,55 @@ function PreviewButton({
       <span className="text-xs">Предпросмотр</span>
     </button>
   );
+}
+
+/** Сколько символов контента строки уходит в её ярлык предпросмотра: фраза
+ *  должна опознаваться на слух, а не зачитываться целым сообщением. */
+const ROW_LABEL_LIMIT = 40;
+
+/** Начало контента строки — ровно то, что видно в её ячейке. */
+function contentSnippet(row: DescriptionCommunication): string {
+  const text = (row.contentTitle ?? row.contentText).replace(/\s+/g, " ").trim();
+  return text.length > ROW_LABEL_LIMIT
+    ? `${text.slice(0, ROW_LABEL_LIMIT).trimEnd()}…`
+    : text;
+}
+
+/**
+ * Различители строк ВНУТРИ одной ◈-группы: nodeId → добавка к `aria-label`.
+ *
+ * Канал + заголовок этапа (+ метка ветки) не различают ДВЕ строки ОДНОГО
+ * канала в одной группе — например два письма с разными телами: ключ сравнения
+ * коммуникаций читает тему И тело (`graph-waves.ts`), поэтому в таблицу они
+ * попадают обе, а показывается у письма одна тема.
+ *
+ * Ведущий различитель — содержательный: начало контента строки. Оно
+ * произносится и что-то значит для слушателя, в отличие от технического
+ * `row.nodeId`. Но уникальным по построению оно НЕ является (те самые два
+ * письма с одной темой), поэтому там, где контент пуст или совпал, идёт
+ * порядковый номер строки среди строк своего канала — он уникален всегда.
+ * Добавка выдаётся ТОЛЬКО строкам спорного канала: на обычной карточке (по
+ * одной строке на канал) ярлык остаётся коротким — тот же принцип, что и у
+ * хвоста `stage.id`.
+ */
+function rowDistinctions(rows: DescriptionCommunication[]): Map<string, string> {
+  const byChannel = new Map<string, DescriptionCommunication[]>();
+  for (const row of rows) {
+    const list = byChannel.get(row.channel);
+    if (list) list.push(row);
+    else byChannel.set(row.channel, [row]);
+  }
+  const distinctions = new Map<string, string>();
+  for (const list of byChannel.values()) {
+    if (list.length < 2) continue;
+    const snippets = list.map(contentSnippet);
+    list.forEach((row, i) => {
+      const snippet = snippets[i];
+      const distinct = snippet !== "" && snippets.filter((s) => s === snippet).length === 1;
+      distinctions.set(row.nodeId, distinct ? snippet : `сообщение ${i + 1}`);
+    });
+  }
+  return distinctions;
 }
 
 /** Знаки, которые в тексте описания всегда стоят СРАЗУ за предыдущим словом,
@@ -273,112 +330,116 @@ export function WorkflowDescription({
                   Та же серия, что в шаге «{stage.sameAsHeading}»
                 </p>
               )}
-              {stage.groups?.map((group, gi) => (
-                <div key={group.id} className={gi > 0 ? "mt-3" : undefined}>
-                  {group.label && (
-                    <p
-                      data-testid="group-label"
-                      className="mb-1.5 font-medium text-foreground"
-                    >
-                      {/* Глиф — маркер списка ветвей, а не слово: без
-                          aria-hidden скринридер зачитывал бы его перед каждым
-                          названием потока («ромб чёрный, Высокая склонность»). */}
-                      <span aria-hidden>◈</span> {group.label}
-                    </p>
-                  )}
-                  <table className="w-full table-fixed border-collapse text-left">
-                    {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
-                        шапки, но шапка — ОДИН раз на шаг (у первой ◈-группы), а
-                        table-fixed берёт ширины колонок из первой строки СВОЕЙ
-                        таблицы, а не соседней. Без общего <colgroup> у 2-й+
-                        группы колонки поплыли бы — здесь общий источник ширин
-                        для ВСЕХ таблиц шага, выровненных между группами.
+              {stage.groups?.map((group, gi) => {
+                const distinctions = rowDistinctions(group.rows);
+                return (
+                  <div key={group.id} className={gi > 0 ? "mt-3" : undefined}>
+                    {group.label && (
+                      <p
+                        data-testid="group-label"
+                        className="mb-1.5 font-medium text-foreground"
+                      >
+                        {/* Глиф — маркер списка ветвей, а не слово: без
+                            aria-hidden скринридер зачитывал бы его перед каждым
+                            названием потока («ромб чёрный, Высокая склонность»). */}
+                        <span aria-hidden>◈</span> {group.label}
+                      </p>
+                    )}
+                    <table className="w-full table-fixed border-collapse text-left">
+                      {/* colgroup — фикс эскиза брифа: там ширины сидели на <th>
+                          шапки, но шапка — ОДИН раз на шаг (у первой ◈-группы), а
+                          table-fixed берёт ширины колонок из первой строки СВОЕЙ
+                          таблицы, а не соседней. Без общего <colgroup> у 2-й+
+                          группы колонки поплыли бы — здесь общий источник ширин
+                          для ВСЕХ таблиц шага, выровненных между группами.
 
-                        Значения сняты замером на живой карточке (таблица 602px):
-                        имя шаблона в одну строку требует до 178px («Звонок —
-                        приветствие»; типичные — 165–175), кнопка предпросмотра
-                        — 116px. 26% под шаблон (157px) рвали имя на два ряда, и
-                        пилюля читалась блоком-кнопкой, а не чипом строки; 7rem
-                        под кнопку были УЖЕ самой кнопки, и «Предпросмотр»
-                        вылезал за правый край таблицы. Место им отдала колонка
-                        контента: её текст всё равно ограничен двумя строками
-                        (`line-clamp-2`). «Коммуникация» НЕ ужимается, хотя
-                        канал в ней короткий (Email — 35px): ширину колонки
-                        держит её собственная шапка (98px), и на меньшем
-                        подпись «Коммуникация» слипалась бы с «Шаблоном». */}
-                    <colgroup>
-                      <col className="w-[18%]" />
-                      <col className="w-[32%]" />
-                      <col />
-                      <col className="w-[7.5rem]" />
-                    </colgroup>
-                    {/* Шапку несёт КАЖДАЯ таблица шага, но видимая — только у
-                        первой ◈-группы: визуально повторять подписи колонок над
-                        каждой веткой незачем, а вот без `<thead>` вторая и
-                        третья таблицы приходили к скринридеру полностью
-                        неподписанными сетками данных. `sr-only` снимает ровно
-                        визуальную половину проблемы, не трогая семантику. */}
-                    <thead className={gi === 0 ? undefined : "sr-only"}>
-                      <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
-                        <th scope="col" className="pb-1 font-normal">Коммуникация</th>
-                        <th scope="col" className="pb-1 font-normal">Шаблон</th>
-                        <th scope="col" className="pb-1 font-normal">Контент шаблона</th>
-                        {/* Колонка кнопки предпросмотра остаётся без подписи:
-                            сама кнопка уже несёт полный aria-label
-                            («Предпросмотр — SMS, Первое касание»), и заголовок
-                            колонки только удваивал бы его при чтении ячейки. */}
-                        <th scope="col" className="pb-1 font-normal" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.rows.map((row) => (
-                        <tr key={row.nodeId} className="align-top">
-                          <td className="py-1.5 pr-2 font-medium">{row.channel}</td>
-                          <td className="py-1.5 pr-2">
-                            {row.templateTag && (
-                              <DescriptionTagPill
-                                tag={row.templateTag}
-                                onActivate={onTagActivate}
-                                nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
-                                // Чип строки таблицы, а не слово прозы: длинное
-                                // имя усекается многоточием (полное — в
-                                // подсказке), но никогда не переносится.
-                                truncateLabel
-                              />
-                            )}
-                          </td>
-                          <td className="py-1.5 pr-2 text-muted-foreground">
-                            {/* Без кавычек и без меток «Тема:»/«Текст:» —
-                                контент читается как факт таблицы, не цитата. */}
-                            <span className="line-clamp-2">
-                              {row.contentTitle && (
-                                <span className="text-foreground">{row.contentTitle}</span>
-                              )}
-                              {row.contentTitle && <br />}
-                              {row.contentText}
-                            </span>
-                          </td>
-                          {/* Кнопка прижата к правому краю таблицы и не
-                              переносится: подпись «Предпросмотр» — одно слово,
-                              разорванное посередине, читалось бы как две
-                              строки-обрывка. */}
-                          <td className="py-1.5 text-right whitespace-nowrap">
-                            <PreviewButton
-                              row={row}
-                              nodeParams={nodeParams}
-                              stageHeading={stage.heading}
-                              stageId={
-                                ambiguousHeadings.has(stage.heading) ? stage.id : undefined
-                              }
-                              groupLabel={group.label}
-                            />
-                          </td>
+                          Значения сняты замером на живой карточке (таблица 602px):
+                          имя шаблона в одну строку требует до 178px («Звонок —
+                          приветствие»; типичные — 165–175), кнопка предпросмотра
+                          — 116px. 26% под шаблон (157px) рвали имя на два ряда, и
+                          пилюля читалась блоком-кнопкой, а не чипом строки; 7rem
+                          под кнопку были УЖЕ самой кнопки, и «Предпросмотр»
+                          вылезал за правый край таблицы. Место им отдала колонка
+                          контента: её текст всё равно ограничен двумя строками
+                          (`line-clamp-2`). «Коммуникация» НЕ ужимается, хотя
+                          канал в ней короткий (Email — 35px): ширину колонки
+                          держит её собственная шапка (98px), и на меньшем
+                          подпись «Коммуникация» слипалась бы с «Шаблоном». */}
+                      <colgroup>
+                        <col className="w-[18%]" />
+                        <col className="w-[32%]" />
+                        <col />
+                        <col className="w-[7.5rem]" />
+                      </colgroup>
+                      {/* Шапку несёт КАЖДАЯ таблица шага, но видимая — только у
+                          первой ◈-группы: визуально повторять подписи колонок над
+                          каждой веткой незачем, а вот без `<thead>` вторая и
+                          третья таблицы приходили к скринридеру полностью
+                          неподписанными сетками данных. `sr-only` снимает ровно
+                          визуальную половину проблемы, не трогая семантику. */}
+                      <thead className={gi === 0 ? undefined : "sr-only"}>
+                        <tr className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
+                          <th scope="col" className="pb-1 font-normal">Коммуникация</th>
+                          <th scope="col" className="pb-1 font-normal">Шаблон</th>
+                          <th scope="col" className="pb-1 font-normal">Контент шаблона</th>
+                          {/* Колонка кнопки предпросмотра остаётся без подписи:
+                              сама кнопка уже несёт полный aria-label
+                              («Предпросмотр — SMS, Первое касание»), и заголовок
+                              колонки только удваивал бы его при чтении ячейки. */}
+                          <th scope="col" className="pb-1 font-normal" />
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
+                      </thead>
+                      <tbody>
+                        {group.rows.map((row) => (
+                          <tr key={row.nodeId} className="align-top">
+                            <td className="py-1.5 pr-2 font-medium">{row.channel}</td>
+                            <td className="py-1.5 pr-2">
+                              {row.templateTag && (
+                                <DescriptionTagPill
+                                  tag={row.templateTag}
+                                  onActivate={onTagActivate}
+                                  nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
+                                  // Чип строки таблицы, а не слово прозы: длинное
+                                  // имя усекается многоточием (полное — в
+                                  // подсказке), но никогда не переносится.
+                                  truncateLabel
+                                />
+                              )}
+                            </td>
+                            <td className="py-1.5 pr-2 text-muted-foreground">
+                              {/* Без кавычек и без меток «Тема:»/«Текст:» —
+                                  контент читается как факт таблицы, не цитата. */}
+                              <span className="line-clamp-2">
+                                {row.contentTitle && (
+                                  <span className="text-foreground">{row.contentTitle}</span>
+                                )}
+                                {row.contentTitle && <br />}
+                                {row.contentText}
+                              </span>
+                            </td>
+                            {/* Кнопка прижата к правому краю таблицы и не
+                                переносится: подпись «Предпросмотр» — одно слово,
+                                разорванное посередине, читалось бы как две
+                                строки-обрывка. */}
+                            <td className="py-1.5 text-right whitespace-nowrap">
+                              <PreviewButton
+                                row={row}
+                                nodeParams={nodeParams}
+                                stageHeading={stage.heading}
+                                stageId={
+                                  ambiguousHeadings.has(stage.heading) ? stage.id : undefined
+                                }
+                                groupLabel={group.label}
+                                rowLabel={distinctions.get(row.nodeId)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
             </div>
           </li>
         ))}
