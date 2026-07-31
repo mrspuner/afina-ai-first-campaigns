@@ -47,7 +47,7 @@ import { DomainStatusBadge } from "@/sections/settings/domains-block";
  * задокументировано как известный компромисс, а не тихо подогнано.
  */
 const PILL_BASE =
-  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-1 align-baseline text-[0.95em] font-semibold";
+  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 align-baseline text-[0.95em] font-semibold";
 
 /**
  * Тег читается как отдельный элемент, а не как часть карточки: серая
