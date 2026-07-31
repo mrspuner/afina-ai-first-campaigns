@@ -311,6 +311,16 @@ export function DescriptionTagPill({
  * нативный `title` триггера: на этом узле уже висит тултип, и второй,
  * браузерный, оверлей поверх него — ровно тот дефект, который Item 4 закрыл в
  * соседней ветке рендера.
+ *
+ * `tooltipContent` (fix round, V-Task 2, Important) переопределяет содержимое
+ * тултипа для тех целей, кому дефолтная подпись «Нажмите для изменения» стала
+ * неправдой (шаг визарда — клик теперь раскрывает поповер-подтверждение, а не
+ * сразу редактор): `null` снимает тултип ЦЕЛИКОМ (триггер рендерится без
+ * Tooltip-обёртки — заменить подпись нечем и незачем), любой другой ReactNode
+ * замещает `tooltipBody(hint)` содержимым вызывающего (например, только
+ * остатком свёрнутого перечисления, без строки-подтверждения). Не передан
+ * (`undefined`, три существующих поповера — шаблон/пауза/домены) —
+ * поведение прежнее: `tooltipBody(hint)`.
  */
 function TagPopoverShell({
   open,
@@ -321,6 +331,7 @@ function TagPopoverShell({
   children,
   contentClassName,
   content,
+  tooltipContent,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -330,15 +341,22 @@ function TagPopoverShell({
   children: ReactNode;
   contentClassName: string;
   content: ReactNode;
+  tooltipContent?: ReactNode | null;
 }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <Tooltip>
-        <TooltipTrigger render={<PopoverTrigger className={className} style={style} />}>
+      {tooltipContent === null ? (
+        <PopoverTrigger className={className} style={style}>
           {children}
-        </TooltipTrigger>
-        <TooltipContent>{tooltipBody(hint)}</TooltipContent>
-      </Tooltip>
+        </PopoverTrigger>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger render={<PopoverTrigger className={className} style={style} />}>
+            {children}
+          </TooltipTrigger>
+          <TooltipContent>{tooltipContent ?? tooltipBody(hint)}</TooltipContent>
+        </Tooltip>
+      )}
       <PopoverContent align="start" className={contentClassName}>
         {content}
       </PopoverContent>
@@ -358,6 +376,15 @@ function TagPopoverShell({
  * Название шага — из `STEP_LABELS` (`campaign-stepper.tsx`), парного
  * `STEP_ICON`, который файл уже импортирует оттуда же (единственный источник
  * подписей шагов визарда — вторую карту не заводим).
+ *
+ * `tooltipContent` (fix round, V-Task 2, Important): подпись «Нажмите для
+ * изменения» тут стала неправдой — клик больше не ведёт сразу к правке, а
+ * раскрывает вот этот самый поповер-подтверждение. Но `tag.hoverList`
+ * (остаток свёрнутого перечисления — «ещё N триггерам» → «Вторичка, Аренда»)
+ * кроме тултипа читать НЕГДЕ, поэтому снимаем не тултип целиком, а только
+ * строку-подтверждение: с `hoverList` тултип остаётся и несёт ТОЛЬКО остаток;
+ * без него (обычный шаговый тег) тултипа нет вовсе — его роль полностью взял
+ * поповер.
  */
 function WizardStepTagPopover({
   tag,
@@ -377,6 +404,8 @@ function WizardStepTagPopover({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const tooltipContent =
+    tag.hoverList && tag.hoverList.length > 0 ? tag.hoverList.join(", ") : null;
 
   return (
     <TagPopoverShell
@@ -385,6 +414,7 @@ function WizardStepTagPopover({
       className={className}
       style={style}
       hint={hint}
+      tooltipContent={tooltipContent}
       contentClassName="w-64 p-2.5"
       content={
         <div className="flex flex-col gap-2">

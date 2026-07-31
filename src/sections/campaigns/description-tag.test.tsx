@@ -123,7 +123,13 @@ describe("DescriptionTagPill", () => {
   // триггерам» показывало ДВА конкурирующих оверлея (нативный title ОС и
   // тултип «Нажмите для изменения»). Остаток теперь живёт ВНУТРИ содержимого
   // тултипа — единственная поверхность на наведение, несущая оба факта.
-  it("схлопка перечисления показывает остаток и «Нажмите для изменения» ОДНИМ тултипом, без конкурирующего native title", () => {
+  //
+  // Fix round (V-Task 2, Important): после того как клик по wizard-step тегу
+  // стал раскрывать поповер-подтверждение (а не сразу редактор), подпись
+  // «Нажмите для изменения» у ЭТОЙ цели стала неправдой. Но `hoverList` кроме
+  // тултипа читать негде — снимаем не тултип целиком, а только строку
+  // подтверждения; тултип остаётся и несёт ТОЛЬКО остаток перечисления.
+  it("схлопка перечисления показывает остаток БЕЗ «Нажмите для изменения», без конкурирующего native title", () => {
     vi.useFakeTimers();
     try {
       renderPillWithProviders({
@@ -138,7 +144,29 @@ describe("DescriptionTagPill", () => {
         vi.advanceTimersByTime(1000);
       });
       expect(screen.getByText("Вторичка, Аренда")).toBeInTheDocument();
-      expect(screen.getByText("Нажмите для изменения")).toBeInTheDocument();
+      expect(screen.queryByText("Нажмите для изменения")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Fix round (V-Task 2, Important): без hoverList шаговому тегу заменить
+  // «Нажмите для изменения» нечем (его роль полностью взял поповер) — тултипа
+  // тут нет вовсе, а не пустого/усечённого. Проверяем строже, чем отсутствие
+  // конкретного текста: узла тултипа не существует ни с каким содержимым.
+  it("шаговый тег БЕЗ hoverList: тултипа нет вовсе — его роль полностью взял поповер", () => {
+    vi.useFakeTimers();
+    try {
+      renderPillWithProviders({ tag: stepTag });
+      const trigger = screen.getByRole("button", { name: /база на 12 000 строк/ });
+
+      fireEvent.mouseEnter(trigger);
+      fireEvent.mouseMove(trigger);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByText("Нажмите для изменения")).not.toBeInTheDocument();
+      expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -487,6 +515,23 @@ describe("тег-параметр: вид", () => {
     const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-']") as HTMLElement).className;
     expect(cls(dead)).toContain("bg-scenario-tag");
     expect(cls(live)).toContain("bg-scenario-tag");
+  });
+
+  // Minor (ревью V-Task 2): ничего в файле раньше не закрепляло, что
+  // hover-подсветка (`NEUTRAL_HOVER_CLASS`) есть ТОЛЬКО у кликабельного пути —
+  // без этого теста следующий рефакторинг мог бы молча унести её на
+  // демотированную ветку (или потерять у живой), не завалив ни один
+  // существующий тест: оба варианта используют один и тот же `NEUTRAL_CLASS`.
+  it("hover-класс есть у интерактивного пути и отсутствует у демотированного", () => {
+    const { container: live } = render(
+      <DescriptionTagPill tag={{ id: "a", label: "разовый", target: { kind: "wizard-step", step: "analysis" } }} />,
+    );
+    const { container: dead } = render(
+      <DescriptionTagPill tag={{ id: "b", label: "разовый", target: { kind: "none", step: "analysis" } }} />,
+    );
+    const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-']") as HTMLElement).className;
+    expect(cls(live)).toContain("hover:bg-scenario-tag-hover");
+    expect(cls(dead)).not.toContain("hover:bg-scenario-tag-hover");
   });
 });
 
