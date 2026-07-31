@@ -99,10 +99,16 @@ const valueTag: DescriptionTag = {
 };
 
 describe("DescriptionTagPill", () => {
-  it("тег с целью — кнопка, клик поднимает наверх", () => {
+  // Task 2: клик по тегу-настройке больше НЕ зовёт onActivate напрямую — он
+  // раскрывает поповер «Изменить» (защита от случайного ухода с карточки).
+  // Тест сохраняет ту же гарантию, что и раньше (диспатч дойдёт, с ТЕМ ЖЕ
+  // тегом), но добавляет промежуточный клик по кнопке подтверждения.
+  it("тег с целью — кнопка, клик раскрывает поповер, «Изменить» поднимает наверх", async () => {
     const onActivate = vi.fn();
     render(<DescriptionTagPill tag={stepTag} onActivate={onActivate} />);
     fireEvent.click(screen.getByRole("button", { name: /база на 12 000 строк/ }));
+    expect(onActivate).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
     expect(onActivate).toHaveBeenCalledWith(stepTag);
   });
 
@@ -411,12 +417,15 @@ describe("DescriptionTagPill — поповер доменов (Task 8)", () => 
 });
 
 // ---------------------------------------------------------------------------
-// Task 6 — нейтральная пилюля читается как отдельный элемент на карточке
-// (светлый фон, не тон карточки), значение внутри — жирным. Демоция в `none`
-// не имеет права гасить этот цвет — она снимает только интерактив.
+// Task 6 (обновлено Task 2) — нейтральная пилюля читается как отдельный
+// элемент на карточке — серая подложка макета с белой обводкой, не тон
+// карточки, значение внутри — жирным. Демоция в `none` не имеет права гасить
+// этот цвет — она снимает только интерактив. Класс сменился с
+// `bg-foreground`/`rounded-md` (Task 6) на `bg-scenario-tag-bg`/`rounded-[7px]`
+// (Task 2, макет) — проверки ниже переведены на новые значения.
 // ---------------------------------------------------------------------------
 describe("вид пилюли", () => {
-  it("нейтральная пилюля — на светлом фоне, значение жирным", () => {
+  it("нейтральная пилюля — на фоне макета, значение жирным", () => {
     render(<DescriptionTagPill tag={{ id: "t", label: "186 255 строк", target: { kind: "none" } }} />);
     const pill = screen.getByText("186 255 строк");
     // `font-semibold` сидит на `PILL_BASE` бокса, а не на текстовом
@@ -427,7 +436,7 @@ describe("вид пилюли", () => {
     // см. description-tag.tsx), который непосредственно оборачивает значение.
     const box = pill.parentElement as HTMLElement;
     expect(box.className).toContain("font-semibold");
-    expect(box.className).toContain("bg-foreground");
+    expect(box.className).toContain("bg-scenario-tag-bg");
     expect(box.className).not.toContain("bg-card");
   });
 
@@ -438,11 +447,101 @@ describe("вид пилюли", () => {
     const { container: dead } = render(
       <DescriptionTagPill tag={{ id: "b", label: "разовый", target: { kind: "none", step: "analysis" } }} />,
     );
-    // Бокс пилюли — узел с pill-геометрией (`rounded-md`): `<button>` у
-    // кликабельной цели, `<span>` у демотированной в `none`. `closest` ищет
-    // ВВЕРХ от корня контейнера, поэтому берём сам корень через querySelector.
-    const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-md']") as HTMLElement).className;
-    expect(cls(dead)).toContain("bg-foreground");
-    expect(cls(live)).toContain("bg-foreground");
+    // Бокс пилюли — узел с pill-геометрией (`rounded-[7px]`): `<button>`
+    // (триггер поповера) у кликабельной цели, `<span>` у демотированной в
+    // `none`. `querySelector` не матчит сам узел-владелец, только потомков —
+    // передаём КОНТЕЙНЕР рендера (не корневой узел), тогда сам бокс пилюли
+    // (прямой потомок контейнера) виден для поиска. Wildcard `rounded-` (не
+    // `rounded-md`) — класс теперь arbitrary-value `rounded-[7px]`.
+    const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-']") as HTMLElement).className;
+    expect(cls(dead)).toContain("bg-scenario-tag-bg");
+    expect(cls(live)).toContain("bg-scenario-tag-bg");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 — вид тега-настройки: серая подложка макета (`--scenario-tag-bg`) с
+// белой обводкой вместо старой светлой заливки (`bg-foreground`). Дублирует
+// часть смысла блока «вид пилюли» выше (тот уже переведён на новые классы) —
+// оставлено отдельным блоком, т.к. это буквальные кейсы брифа Task 2.
+// ---------------------------------------------------------------------------
+describe("тег-параметр: вид", () => {
+  it("несёт фон макета и белую обводку, а не светлую заливку", () => {
+    render(<DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "none" } }} />);
+    const box = screen.getByText("разовый").parentElement as HTMLElement;
+    expect(box.className).toContain("bg-scenario-tag");
+    expect(box.className).not.toContain("bg-foreground");
+    expect(box.className).toContain("font-semibold");
+  });
+
+  it("демоция не меняет фон — только интерактив", () => {
+    const { container: live } = render(
+      <DescriptionTagPill tag={{ id: "a", label: "разовый", target: { kind: "wizard-step", step: "analysis" } }} />,
+    );
+    const { container: dead } = render(
+      <DescriptionTagPill tag={{ id: "b", label: "разовый", target: { kind: "none", step: "analysis" } }} />,
+    );
+    // Как и в блоке «вид пилюли» выше: querySelector не матчит сам
+    // узел-владелец, только потомков — передаём КОНТЕЙНЕР рендера, а не
+    // `.firstChild` (у него бокс пилюли — сам корень, не потомок корня).
+    const cls = (c: HTMLElement) => (c.querySelector("[class*='rounded-']") as HTMLElement).className;
+    expect(cls(dead)).toContain("bg-scenario-tag");
+    expect(cls(live)).toContain("bg-scenario-tag");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 — поповер «Изменить» у тега-настройки (target.kind === "wizard-step"):
+// клик по пилюле больше не зовёт onActivate напрямую — раскрывает поповер
+// (через TagPopoverShell, как и три соседних поповера), и только кнопка
+// «Изменить» внутри него зовёт onActivate и закрывает поповер. Защищает от
+// случайного ухода с карточки по промах-клику. `@testing-library/user-event`
+// в проекте не установлен (не используется ни в одном тесте репозитория) —
+// используем `fireEvent` + `findBy*`, как и остальные поповерные тесты этого
+// файла (домены/шаблон/пауза выше).
+// ---------------------------------------------------------------------------
+describe("тег-параметр: поповер «Изменить»", () => {
+  it("клик по тегу не уводит сразу — он раскрывает поповер", async () => {
+    const onActivate = vi.fn();
+    render(
+      <DescriptionTagPill
+        tag={{ id: "t", label: "разовый", target: { kind: "wizard-step", step: "analysis" } }}
+        onActivate={onActivate}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /разовый/ }));
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Изменить" })).toBeTruthy();
+  });
+
+  it("«Изменить» в поповере уводит на шаг визарда", async () => {
+    const onActivate = vi.fn();
+    render(
+      <DescriptionTagPill
+        tag={{ id: "t", label: "разовый", target: { kind: "wizard-step", step: "analysis" } }}
+        onActivate={onActivate}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /разовый/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(onActivate.mock.calls[0][0].target).toEqual({ kind: "wizard-step", step: "analysis" });
+  });
+
+  it("у запущенной кампании поповера нет вовсе", async () => {
+    render(<DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "none", step: "analysis" } }} />);
+    fireEvent.click(screen.getByText("разовый"));
+    expect(screen.queryByRole("button", { name: "Изменить" })).toBeNull();
+  });
+
+  it("поповер несёт подпись «Настройка · <шаг>» с человекочитаемым названием из STEP_LABELS", async () => {
+    render(
+      <DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "wizard-step", step: "file" } }} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /разовый/ }));
+    // "Файл" — STEP_LABELS.file (campaign-stepper.tsx), тот же источник, что
+    // и STEP_ICON, который файл уже импортирует — новую карту названий не
+    // заводим (требование брифа).
+    expect(await screen.findByText("Настройка · Файл")).toBeInTheDocument();
   });
 });

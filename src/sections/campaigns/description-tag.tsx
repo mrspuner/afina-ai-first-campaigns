@@ -4,10 +4,12 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { Globe, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DescriptionTag } from "@/state/graph-description";
 import type { NodeParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
+import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
 import { useChat } from "@/state/chat-context";
 import {
@@ -15,7 +17,7 @@ import {
   templateOptionsForKind,
   templateParamKeyForKind,
 } from "@/state/node-template-options";
-import { STEP_ICON } from "./wizard/campaign-stepper";
+import { STEP_ICON, STEP_LABELS } from "./wizard/campaign-stepper";
 import { NODE_ICON, NODE_STYLES } from "./node-visuals";
 import { NodeTemplateList } from "./node-template-select";
 import { WaitFields } from "./wait-fields";
@@ -30,13 +32,25 @@ const PILL_BASE =
   "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 align-baseline text-[0.95em] font-semibold";
 
 /**
- * Тег читается как отдельный элемент, а не как часть карточки: светлая
- * подложка на тёплой тьме. Демоция в `none` (кампания запущена / шага нет в
- * визарде) остаётся ЭТИМ ЖЕ классом — она снимает интерактив, а не цвет:
- * серая read-only-пилюля прятала значение ровно там, где его только и можно
- * прочитать.
+ * Тег читается как отдельный элемент, а не как часть карточки: серая
+ * подложка макета (`--scenario-tag-bg`, Task 1) с белой обводкой — не светлая
+ * заливка Task 6. Радиус/паддинг переопределены под макет (7px) — `cn` в
+ * `pillClass` ниже мёржит их через `twMerge`, поэтому `rounded-md`/`px-1.5` из
+ * `PILL_BASE` не остаются в финальном классе. Демоция в `none` (кампания
+ * запущена / шага нет в визарде) остаётся ЭТИМ ЖЕ классом — она снимает
+ * интерактив, а не цвет: серая read-only-пилюля прятала бы значение ровно
+ * там, где его только и можно прочитать.
  */
-const NEUTRAL_CLASS = "border-transparent bg-foreground text-background";
+const NEUTRAL_CLASS =
+  "rounded-[7px] border border-white bg-scenario-tag-bg px-[7px] text-white";
+
+/**
+ * Hover-подсветка нейтральной пилюли — ТОЛЬКО у кликабельного пути. Не часть
+ * `NEUTRAL_CLASS`, потому что тот же класс несёт и демотированная в `none`
+ * пилюля (см. выше): она больше не кнопка, курсор над ней ничего не нажимает,
+ * и подсвечивать её как «можно нажать» было бы враньём.
+ */
+const NEUTRAL_HOVER_CLASS = "hover:bg-scenario-tag-hover";
 
 interface ResolvedVisual {
   className: string;
@@ -63,10 +77,10 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
   const target = tag.target;
   switch (target.kind) {
     case "wizard-step":
-      return { className: NEUTRAL_CLASS, Icon: STEP_ICON[target.step] };
+      return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: STEP_ICON[target.step] };
     case "template":
     case "node-fields": {
-      if (!nodeType) return { className: NEUTRAL_CLASS };
+      if (!nodeType) return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS) };
       const s = NODE_STYLES[nodeType];
       return {
         className: "",
@@ -75,7 +89,7 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
       };
     }
     case "domains":
-      return { className: NEUTRAL_CLASS, Icon: Globe };
+      return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: Globe };
     case "none":
       return {
         className: NEUTRAL_CLASS,
@@ -171,6 +185,26 @@ export function DescriptionTagPill({
     );
   }
 
+  // Настройка шага визарда (Task 2): раньше клик по тегу сразу звал
+  // onActivate и уводил с карточки — случайный клик (например, промах при
+  // попытке навести и прочитать тултип) необратимо снимал карточку. Поповер
+  // добавляет подтверждающий шаг — и только его кнопка «Изменить» поднимает
+  // клик наверх.
+  if (tag.target.kind === "wizard-step") {
+    return (
+      <WizardStepTagPopover
+        tag={tag}
+        step={tag.target.step}
+        onActivate={onActivate}
+        className={pillClass}
+        style={style}
+        hint={hint}
+      >
+        {content}
+      </WizardStepTagPopover>
+    );
+  }
+
   // Шаблон (Task 7): поповер раскрывается прямо у пилюли, клик наверх
   // (onActivate) не поднимается — спека §2.12 велит `template` оставаться на
   // карточке. Без известного nodeType (лукап не нашёл ноду) деградируем к
@@ -227,6 +261,11 @@ export function DescriptionTagPill({
     );
   }
 
+  // Общий фолбэк: прямая кнопка-тултип БЕЗ поповера — сюда доходят только
+  // деградации template/node-fields/domains (нода не нашлась / params не
+  // резолвнулись / список пуст). `wizard-step` сюда больше не попадает (Task 2
+  // выше перехватывает её своим поповером) — эта ветка их не обрабатывает.
+  //
   // Item 4 (финальное ревью): раньше `hint` (остаток схлопнутого
   // перечисления, «ещё N триггерам») сидел на ТОМ ЖЕ узле, что оборачивает
   // base-ui's Tooltip — наведение показывало ДВА конкурирующих оверлея:
@@ -304,6 +343,70 @@ function TagPopoverShell({
         {content}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * Поповер тега-настройки шага визарда (Task 2). Клик по тегу раньше сразу
+ * звал `onActivate` — необратимо уводил с карточки на промах-клик (например,
+ * при попытке навести и прочитать тултип). Поповер добавляет подтверждающий
+ * шаг: подпись «Настройка · <шаг>» + кнопка «Изменить» — и ТОЛЬКО она зовёт
+ * `onActivate(tag)` и закрывает поповер. Собран через `TagPopoverShell`, как и
+ * три соседних поповера (шаблон/пауза/домены) — четвёртой композиции
+ * тултип+поповер не заводим.
+ *
+ * Название шага — из `STEP_LABELS` (`campaign-stepper.tsx`), парного
+ * `STEP_ICON`, который файл уже импортирует оттуда же (единственный источник
+ * подписей шагов визарда — вторую карту не заводим).
+ */
+function WizardStepTagPopover({
+  tag,
+  step,
+  onActivate,
+  className,
+  style,
+  hint,
+  children,
+}: {
+  tag: DescriptionTag;
+  step: WizardStepId;
+  onActivate?: (tag: DescriptionTag) => void;
+  className: string;
+  style?: CSSProperties;
+  hint?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      hint={hint}
+      contentClassName="w-64 p-2.5"
+      content={
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">
+            Настройка · {STEP_LABELS[step]}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              onActivate?.(tag);
+              setOpen(false);
+            }}
+          >
+            Изменить
+          </Button>
+        </div>
+      }
+    >
+      {children}
+    </TagPopoverShell>
   );
 }
 

@@ -269,9 +269,14 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     expect(screen.queryByRole("button", { name: /^Изменить шаблон/ })).toBeNull();
   });
 
-  it("клик по кликабельному тегу диспатчит campaign_step_edit_requested и уводит с карточки", () => {
+  // Task 2: клик по тегу-настройке больше не диспатчит сразу — раскрывает
+  // поповер «Изменить», и уже кнопка внутри него зовёт активацию. Тест
+  // по-прежнему обязан поймать ТОТ ЖЕ диспатч и уход с карточки — просто
+  // клик по кнопке подтверждения добавлен ПЕРЕД проверкой.
+  it("клик по кликабельному тегу раскрывает поповер, а «Изменить» диспатчит campaign_step_edit_requested и уводит с карточки", async () => {
     renderCampaign(draftCampaign);
     fireEvent.click(screen.getByRole("button", { name: /строк/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
     // campaign_step_edit_requested меняет view на "guided-campaign" —
     // CampaignScreen перестаёт видеть кампанию как view.kind==="campaign" и
     // рендерит null (карточка снята, изолированный шаг визарда открыт).
