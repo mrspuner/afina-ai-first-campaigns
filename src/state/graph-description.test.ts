@@ -56,6 +56,40 @@ function forkThenTouchGraph(): DescribableGraph {
   };
 }
 
+/**
+ * Развилка условия: signal → email → condition("opened") → ДА:email / НЕТ:sms.
+ * Та же форма графа, что уже проверяет `graph-waves.test.ts` («condition с
+ * разными сообщениями в ветках») — тестовые фикстуры графов не шарятся между
+ * файлами, поэтому собрана здесь заново. Ветки нарочно РАЗНЫМ каналом
+ * (email/sms) и разным текстом — тексты обязаны различаться (Task 3 brief),
+ * иначе `segmentWaves` схлопнул бы их в одну группу без метки, и развилки не
+ * получилось бы вовсе: тест на цель тега проверял бы обычное касание, а не
+ * развилку.
+ */
+function conditionForkGraph(): DescribableGraph {
+  return {
+    nodes: [
+      node("signal", "source"),
+      node("first", "email", {
+        kind: "email", subject: "Первое письмо", body: "Знакомство", sender: "care@brand.com",
+      }),
+      node("react", "condition", { kind: "condition", trigger: "opened" }),
+      node("offer", "email", {
+        kind: "email", subject: "Оффер −10%", body: "Скидка тем, кто открыл", sender: "promo@brand.com",
+      }),
+      node("nudge", "sms", {
+        kind: "sms", text: "Короткое напоминание", alphaName: "BRAND", scheduledAt: "immediate",
+      }),
+    ],
+    edges: [
+      edge("signal", "first"),
+      edge("first", "react"),
+      edge("react", "offer", "ДА"),
+      edge("react", "nudge", "НЕТ"),
+    ],
+  };
+}
+
 /** Однонодовый граф для точечных тестов на резолв шаблона коммуникации — без
  *  scoring/wait, которые describeWorkflow не требует для строки «Первого
  *  касания». */
@@ -469,39 +503,45 @@ describe("describeWorkflow", () => {
     });
 
     it("condition с разными сообщениями в ветках — «Развилка по реакции» с подписями «сделал/не сделал»", () => {
-      // Ни один шаблон репозитория такой формы не даёт — граф собран руками.
-      const graph = {
-        nodes: [
-          node("signal", "source"),
-          node("first", "email", {
-            kind: "email", subject: "Первое письмо", body: "Знакомство",
-            sender: "care@brand.com",
-          }),
-          node("react", "condition", { kind: "condition", trigger: "opened" }),
-          node("offer", "email", {
-            kind: "email", subject: "Оффер −10%", body: "Скидка тем, кто открыл",
-            sender: "promo@brand.com",
-          }),
-          node("nudge", "sms", {
-            kind: "sms", text: "Короткое напоминание", alphaName: "BRAND",
-            scheduledAt: "immediate",
-          }),
-        ],
-        edges: [
-          edge("signal", "first"),
-          edge("first", "react"),
-          edge("react", "offer", "ДА"),
-          edge("react", "nudge", "НЕТ"),
-        ],
-      };
-
-      const fork = describeWorkflow(graph, T).find((s) => s.kind === "fork")!;
+      const fork = describeWorkflow(conditionForkGraph(), T).find((s) => s.kind === "fork")!;
       expect(fork.heading).toBe("Развилка по реакции");
       expect(fork.groups!.map((g) => g.label)).toEqual(["Открыл письмо", "Не открыл письмо"]);
       expect(fork.groups!.map((g) => g.rows.map((r) => r.contentText))).toEqual([
         ["Оффер −10%"], ["Короткое напоминание"],
       ]);
       expect(segmentsText(fork.body)).toContain("расходится по условию открыл письмо?");
+    });
+
+    // Task 3: условие правится прямо с карточки, пока граф ещё черновик —
+    // деление на потоки остаётся некликабельным НАВСЕГДА (поля сплиттера
+    // правит только ИИ-дровер, которого на карточке нет).
+    describe("Тег условия кликабелен, пока граф правится (Task 3)", () => {
+      it("пилюля условия кликабельна, пока граф правится", () => {
+        const stages = describeWorkflow(conditionForkGraph(), T, {
+          pending: [], editableSteps: [], graphEditable: true,
+        });
+        const fork = stages.find((s) => s.kind === "fork")!;
+        const tag = fork.body.find((s) => s.kind === "tag")!;
+        expect(tag.kind === "tag" && tag.tag.target).toEqual({ kind: "node-fields", nodeId: "react" });
+      });
+
+      it("после запуска пилюля условия теряет клик, но не личность", () => {
+        const stages = describeWorkflow(conditionForkGraph(), T, {
+          pending: [], editableSteps: [], graphEditable: false,
+        });
+        const fork = stages.find((s) => s.kind === "fork")!;
+        const tag = fork.body.find((s) => s.kind === "tag")!;
+        expect(tag.kind === "tag" && tag.tag.target).toEqual({ kind: "none", nodeId: "react" });
+      });
+
+      it("пилюля деления некликабельна всегда — поля сплиттера правит только ИИ", () => {
+        const stages = describeWorkflow(TEMPLATE_BY_TYPE["Удержание"](), T, {
+          pending: [], editableSteps: [], graphEditable: true,
+        });
+        const fork = stages.find((s) => s.kind === "fork")!;
+        const tag = fork.body.find((s) => s.kind === "tag")!;
+        expect(tag.kind === "tag" && tag.tag.target.kind).toBe("none");
+      });
     });
 
     it("развилка ТРАТИТ номер касания: следующая волна — «Повторное касание», и она про неотреагировавших", () => {

@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DescriptionTag } from "@/state/graph-description";
-import type { NodeParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
+import type { ConditionParams, NodeParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
 import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import { useAppState, useAppDispatch } from "@/state/app-state-context";
@@ -21,6 +21,7 @@ import { STEP_ICON, STEP_LABELS } from "./wizard/campaign-stepper";
 import { NODE_ICON, NODE_STYLES } from "./node-visuals";
 import { NodeTemplateList } from "./node-template-select";
 import { WaitFields } from "./wait-fields";
+import { NodeFieldCombobox } from "./node-field-combobox";
 import { DomainStatusBadge } from "@/sections/settings/domains-block";
 
 /**
@@ -112,6 +113,15 @@ interface DescriptionTagPillProps {
    * поповера.
    */
   waitParams?: WaitParams;
+  /**
+   * Параметры ноды условия для цели `node-fields` (Task 3) — резолвятся
+   * вызывающим ТЕМ ЖЕ путём, что и `waitParams` выше (`workflow-description.tsx`,
+   * `nodeParams: Map<string, NodeParams>` из `launchGraph.nodes`). Без пропа
+   * (нода не нашлась) или при несовпадении `kind` (`params.kind !==
+   * "condition"`) пилюля деградирует к обычной кнопке-тултипу — как и
+   * `waitParams` без резолва.
+   */
+  conditionParams?: ConditionParams;
   /** Все домены триггеров кампании со статусами — содержимое поповера цели
    *  `domains` (Task 8). Приходит от `WorkflowDescription` (тот же проп, что
    *  описание уже несёт как `facts.domains`), не читается пилюлей из module
@@ -157,6 +167,7 @@ export function DescriptionTagPill({
   onActivate,
   nodeType,
   waitParams,
+  conditionParams,
   domains,
   truncateLabel,
 }: DescriptionTagPillProps) {
@@ -240,6 +251,26 @@ export function DescriptionTagPill({
       >
         {content}
       </WaitFieldsTagPopover>
+    );
+  }
+
+  // Условие (Task 3): содержимое поповера — тот же NodeFieldCombobox над
+  // полем «Событие», что нодо-блок графа несёт для condition
+  // (NODE_FIELD_EDITABILITY.condition). Без резолвнутых conditionParams (нода
+  // не найдена, либо это не condition-нода — params.kind !== "condition")
+  // падаем ниже, к обычной кнопке-тултипу без поповера — тот же приём, что и
+  // у node-fields без waitParams выше.
+  if (tag.target.kind === "node-fields" && conditionParams) {
+    return (
+      <ConditionTagPopover
+        nodeId={tag.target.nodeId}
+        params={conditionParams}
+        className={pillClass}
+        style={style}
+        hint={hint}
+      >
+        {content}
+      </ConditionTagPopover>
     );
   }
 
@@ -578,6 +609,75 @@ function WaitFieldsTagPopover({
         <div className="flex flex-col gap-0.5">
           <WaitFields nodeId={nodeId} params={params} readOnly={false} />
         </div>
+      }
+    >
+      {children}
+    </TagPopoverShell>
+  );
+}
+
+/**
+ * Поповер условия у тега значения развилки (Task 3). Содержимое — тот же
+ * `NodeFieldCombobox` над полем «Событие», что нодо-блок графа несёт для
+ * condition (`NODE_FIELD_EDITABILITY.condition`: `optionsKey: "eventCatalog"`,
+ * `paramKey: "trigger"`) — единый контрол поля, не собственная форма. Выбор
+ * диспатчит `workflow_node_field_set` напрямую (компонент самодостаточен, как
+ * и поповер паузы выше) — та же цепочка headless-апплаер→версия кэша→редрей
+ * описания, что и у поповеров шаблона/паузы, второго пути применения нет.
+ *
+ * `onAiHandoff` НЕ передаётся вовсе — тот же принцип, что и `onEventAiHandoff`
+ * у поповера паузы (round 1, Finding 2): на карточке кампании нет сайдбара
+ * ИИ-редактирования поля (это функция канвасной ноды), поэтому отсутствие
+ * колбэка само сигналит `NodeFieldCombobox` «передать некуда» — пункт
+ * «Сформировать с помощью ИИ» тогда не рендерится вовсе, а не рендерится
+ * кнопкой, которая молча ничего не делает по клику.
+ *
+ * Деление на потоки (`split`) СВОЕГО поповера не получает — и не получит:
+ * `NODE_FIELD_EDITABILITY.split` помечает поля сплиттера `editability: "ai"`,
+ * правит их только ИИ-дровер, которого на карточке нет (см. комментарий в
+ * `graph-description.ts` у `forkBody`) — заводить здесь второй компонент
+ * поповера было бы нечем наполнить.
+ */
+function ConditionTagPopover({
+  nodeId,
+  params,
+  className,
+  style,
+  hint,
+  children,
+}: {
+  nodeId: string;
+  params: ConditionParams;
+  className: string;
+  style?: CSSProperties;
+  hint?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const dispatch = useAppDispatch();
+
+  return (
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      hint={hint}
+      contentClassName="w-72 p-2.5"
+      content={
+        <NodeFieldCombobox
+          label="Событие"
+          value={params.trigger}
+          optionsKey="eventCatalog"
+          isDirty={false}
+          onSelect={(next) =>
+            dispatch({
+              type: "workflow_node_field_set",
+              nodeId,
+              patch: { trigger: next } as Partial<NodeParams>,
+            })
+          }
+        />
       }
     >
       {children}

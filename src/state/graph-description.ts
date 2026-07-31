@@ -310,34 +310,52 @@ function valueSegments(withTags: boolean, tag: DescriptionTag): DescriptionSegme
 /**
  * Тело этапа-развилки.
  *
- * Пилюля развилки — носитель значения без цели (`none`): поповера у
- * `condition`/`split` не существует, а кликабельная пилюля без поповера была бы
- * мёртвой кнопкой. `nodeId` на `none` переносится ради иконки узла, как у
- * демотированных шаблона и паузы.
+ * `condition` (Task 3) — пилюля со значением ведёт на поповер `node-fields`
+ * («Событие» — combo-поле из `NODE_FIELD_EDITABILITY.condition`), ПОКА граф
+ * ещё правится; после запуска — та же демоция в `none`, что и у шаблона/паузы
+ * (§2.12), с тем же переносом `nodeId` ради иконки узла (fix round 2,
+ * Finding 2).
+ *
+ * `split` остаётся `none` НАВСЕГДА, независимо от `graphEditable`:
+ * `NODE_FIELD_EDITABILITY.split` помечает оба поля сплиттера («По»/«Ветки»)
+ * `editability: "ai"` — их правит только ИИ-дровер (функция канвасной ноды),
+ * которого на карточке кампании нет. Кликабельная пилюля без работающего
+ * редактора была бы мёртвой кнопкой — хуже, чем нейтральный носитель значения.
  */
-function forkBody(wave: Wave, groupCount: number, withTags: boolean): DescriptionSegment[] {
+function forkBody(
+  wave: Wave,
+  groupCount: number,
+  withTags: boolean,
+  graphEditable: boolean,
+): DescriptionSegment[] {
   const fork = wave.forkNode;
-  const params = fork?.data.params;
-  const forkTag = (label: string): DescriptionSegment[] =>
-    fork
-      ? valueSegments(withTags, {
-          id: `fork-${fork.id}`,
-          label,
-          target: { kind: "none", nodeId: fork.id },
-        })
-      : [t(label)];
 
   if (wave.forkKind === "condition") {
-    if (params?.kind !== "condition") return [t("Дальше путь расходится по условию:")];
+    const params = fork?.data.params;
+    if (!fork || params?.kind !== "condition") return [t("Дальше путь расходится по условию:")];
+    const conditionTarget: TagTarget = graphEditable
+      ? { kind: "node-fields", nodeId: fork.id }
+      : { kind: "none", nodeId: fork.id };
     return [
       t("Дальше путь расходится по условию "),
-      ...forkTag(conditionQuestionLabel(params.trigger)),
+      ...valueSegments(withTags, {
+        id: `fork-${fork.id}`,
+        label: conditionQuestionLabel(params.trigger),
+        target: conditionTarget,
+      }),
       t(":"),
     ];
   }
+
   return [
     t(`Аудитория делится на ${groupCount} ${pluralRu(groupCount, ["поток", "потока", "потоков"])} по `),
-    ...forkTag("уровню склонности"),
+    ...(fork
+      ? valueSegments(withTags, {
+          id: `fork-${fork.id}`,
+          label: "уровню склонности",
+          target: { kind: "none", nodeId: fork.id },
+        })
+      : [t("уровню склонности")]),
     t(", каждый получает своё:"),
   ];
 }
@@ -705,7 +723,7 @@ export function describeWorkflow(
 
     let waveBody: DescriptionSegment[];
     if (isFork) {
-      waveBody = forkBody(wave, groups.length, hasFacts);
+      waveBody = forkBody(wave, groups.length, hasFacts, graphEditable);
     } else if (waveOrdinal === 1) {
       const rowCount = groups.reduce((n, group) => n + group.rows.length, 0);
       // «Поток» в этом блоке принадлежит СЕГМЕНТУ аудитории: этап развилки

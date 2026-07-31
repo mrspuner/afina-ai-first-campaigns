@@ -2,10 +2,10 @@ import { beforeAll, describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { DescriptionTagPill } from "./description-tag";
 import type { DescriptionTag } from "@/state/graph-description";
-import { AppStateProvider } from "@/state/app-state-context";
+import { AppStateProvider, useAppState } from "@/state/app-state-context";
 import { ChatProvider, useChat } from "@/state/chat-context";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { WaitParams, WorkflowNodeType } from "@/types/workflow";
+import type { ConditionParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
 
 afterEach(cleanup);
@@ -63,11 +63,13 @@ function renderPillWithProviders({
   tag,
   nodeType = "sms",
   waitParams = DEFAULT_WAIT_PARAMS,
+  conditionParams,
   domains,
 }: {
   tag: DescriptionTag;
   nodeType?: WorkflowNodeType;
   waitParams?: WaitParams;
+  conditionParams?: ConditionParams;
   domains?: { domain: string; status: DomainStatus }[];
 }) {
   return render(
@@ -78,6 +80,7 @@ function renderPillWithProviders({
             tag={tag}
             nodeType={nodeType}
             waitParams={waitParams}
+            conditionParams={conditionParams}
             domains={domains}
           />
         </TooltipProvider>
@@ -379,6 +382,118 @@ describe("DescriptionTagPill — поповер паузы у тега длит�
       await screen.findByRole("button", { name: "Изменить поле «Событие»" }),
     );
     expect(screen.queryByText("Сформировать с помощью ИИ")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 — поповер условия у тега значения развилки (target.kind ===
+// "node-fields", резолв через conditionParams — тот же путь, что и waitParams
+// выше, но по params.kind === "condition"). Содержимое — тот же
+// NodeFieldCombobox над полем «Событие» (optionsKey: eventCatalog, paramKey:
+// trigger), что несёт нодо-блок графа для condition
+// (NODE_FIELD_EDITABILITY.condition) — единый контрол поля, не собственная
+// форма. Пилюля сама params не читает — conditionParams приходит пропом.
+// ---------------------------------------------------------------------------
+describe("DescriptionTagPill — поповер условия у тега значения развилки (Task 3)", () => {
+  const conditionTag: DescriptionTag = {
+    id: "fork-react",
+    label: "открыл письмо?",
+    target: { kind: "node-fields", nodeId: "react" },
+  };
+
+  /** Читает мейлбокс-слот `workflowNodeFieldPatch` — единственный наблюдаемый
+   *  эффект дозвона `workflow_node_field_set` без монтирования headless-
+   *  апплаера (тот же приём, что `use-campaign-graph-applier.test.tsx`
+   *  использует для этого же действия с card-view). */
+  function FieldPatchProbe() {
+    const { workflowNodeFieldPatch } = useAppState();
+    return <span data-testid="field-patch">{JSON.stringify(workflowNodeFieldPatch)}</span>;
+  }
+
+  /**
+   * `renderPillWithProviders` дефолтит `waitParams` — явный `undefined` в
+   * аргументе от дефолта деструктуризации не спасает (JS подставляет дефолт
+   * на `undefined` независимо от того, передан он явно или пропущен вовсе).
+   * Оба targeta делят `node-fields`, а ветка `waitParams` в `DescriptionTagPill`
+   * проверяется ПЕРВОЙ — унаследованный дефолт-фикстура паузы перехватил бы
+   * условие. Рендерим напрямую, без хелпера, как и «без резолвнутых
+   * conditionParams» ниже.
+   */
+  function renderConditionPill() {
+    return render(
+      <AppStateProvider>
+        <ChatProvider>
+          <TooltipProvider delay={1000}>
+            <DescriptionTagPill
+              tag={conditionTag}
+              nodeType="condition"
+              conditionParams={{ kind: "condition", trigger: "opened" }}
+            />
+          </TooltipProvider>
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+  }
+
+  it("поповер условия предлагает события справочника", async () => {
+    // Первый клик раскрывает NodeFieldCombobox-строку «Событие» (тот же
+    // двухшаговый паттерн, что и у комбобокса «Событие» внутри поповера
+    // паузы, Task 8, строка 372) — второй клик открывает его СОБСТВЕННЫЙ
+    // попап со списком справочника.
+    renderConditionPill();
+    fireEvent.click(screen.getByRole("button", { name: /открыл письмо/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Событие»" }),
+    );
+    expect(await screen.findByText("Письмо открыто")).toBeInTheDocument();
+  });
+
+  // fix round 1, Finding 2 (тот же принцип, что и у поповера паузы): карточка
+  // не несёт сайдбара ИИ-редактирования поля — `onAiHandoff` не передаётся
+  // вовсе, и пункт «Сформировать с помощью ИИ» не должен рендериться
+  // заглушкой, которая по клику молча ничего не делает.
+  it("комбобокс события в поповере условия НЕ несёт «Сформировать с помощью ИИ»", async () => {
+    renderConditionPill();
+    fireEvent.click(screen.getByRole("button", { name: /открыл письмо/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Событие»" }),
+    );
+    expect(screen.queryByText("Сформировать с помощью ИИ")).not.toBeInTheDocument();
+  });
+
+  it("выбор события диспатчит workflow_node_field_set на trigger ноды условия", async () => {
+    render(
+      <AppStateProvider>
+        <ChatProvider>
+          <TooltipProvider delay={1000}>
+            <DescriptionTagPill
+              tag={conditionTag}
+              nodeType="condition"
+              conditionParams={{ kind: "condition", trigger: "opened" }}
+            />
+          </TooltipProvider>
+          <FieldPatchProbe />
+        </ChatProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /открыл письмо/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Изменить поле «Событие»" }),
+    );
+    fireEvent.click(await screen.findByText("Письмо открыто"));
+    expect(screen.getByTestId("field-patch").textContent).toBe(
+      JSON.stringify({ nodeId: "react", patch: { trigger: "Письмо открыто" } }),
+    );
+  });
+
+  // Резолвер (WorkflowDescription/CampaignScreen) передаёт conditionParams
+  // undefined, когда нода не нашлась ИЛИ её params.kind !== "condition" —
+  // пилюля обязана деградировать к обычной кнопке БЕЗ поповера, как и у
+  // node-fields без резолвнутых waitParams (Task 8).
+  it("без резолвнутых conditionParams (нода не найдена или это не condition-нода) — кнопка без поповера", () => {
+    render(<DescriptionTagPill tag={conditionTag} nodeType="condition" />);
+    fireEvent.click(screen.getByRole("button", { name: /открыл письмо/ }));
+    expect(screen.queryByText("Событие")).not.toBeInTheDocument();
   });
 });
 

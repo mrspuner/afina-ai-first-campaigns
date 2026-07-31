@@ -59,6 +59,22 @@ function waitParamsForTag(
 }
 
 /**
+ * Параметры ноды условия для цели `node-fields` (Task 3) — расширение ТОГО ЖЕ
+ * пути, что и `waitParamsForTag` выше: тот же `nodeParams`-лукап (не третий,
+ * второй лукап уже есть — `nodeTypes`), тот же приём фильтрации по `kind`,
+ * только `"condition"` вместо `"wait"`. `undefined`, если ноду не нашли ИЛИ
+ * она не «condition» — пилюля рендерится без поповера, а не с пустым.
+ */
+function conditionParamsForTag(
+  tag: DescriptionTag,
+  nodeParams: Map<string, NodeParams> | undefined,
+) {
+  if (tag.target.kind !== "node-fields") return undefined;
+  const params = nodeParams?.get(tag.target.nodeId);
+  return params?.kind === "condition" ? params : undefined;
+}
+
+/**
  * Кнопка 4-й колонки таблицы коммуникаций (Task 8). Тот же механизм, что
  * «глаз» в селекте шаблонов ноды (`node-card-content.tsx`): резолвнутый
  * шаблон открывается по id, а нерезолвнутый — синтетическим шаблоном из
@@ -219,9 +235,10 @@ interface WorkflowDescriptionProps {
   /** nodeId → nodeType — красит пилюли `template`/`node-fields` под цвет узла
    *  графа (Task 6). Без пропа все пилюли этих целей остаются нейтральными. */
   nodeTypes?: Map<string, WorkflowNodeType>;
-  /** nodeId → params ноды — содержимое поповера паузы (Task 8), резолвится
-   *  ТЕМ ЖЕ лукапом, что и `nodeTypes` (из `launchGraph.nodes` в
-   *  `CampaignScreen`). Без пропа пилюля `node-fields` остаётся без поповера. */
+  /** nodeId → params ноды — содержимое поповера паузы (Task 8) и условия
+   *  (Task 3), резолвится ТЕМ ЖЕ лукапом, что и `nodeTypes` (из
+   *  `launchGraph.nodes` в `CampaignScreen`). Без пропа пилюля `node-fields`
+   *  остаётся без поповера. */
   nodeParams?: Map<string, NodeParams>;
   /** Все домены триггеров кампании со статусами — содержимое поповера
    *  доменов (Task 8), тот же `facts.domains`, что уже строит
@@ -284,6 +301,7 @@ export function WorkflowDescription({
           onActivate={onTagActivate}
           nodeType={nodeTypeForTag(segment.tag, nodeTypes)}
           waitParams={waitParamsForTag(segment.tag, nodeParams)}
+          conditionParams={conditionParamsForTag(segment.tag, nodeParams)}
           domains={domains}
         />
       ),
