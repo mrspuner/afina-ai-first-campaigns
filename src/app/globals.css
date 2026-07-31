@@ -42,6 +42,15 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-muted: var(--brand-muted);
+  --color-scenario-tag-bg: var(--scenario-tag-bg);
+  --color-scenario-tag-hover: var(--scenario-tag-hover);
+  --color-scenario-badge-bg: var(--scenario-badge-bg);
+  --color-scenario-badge-border: var(--scenario-badge-border);
+  --color-scenario-badge-text: var(--scenario-badge-text);
+  --color-scenario-rail: var(--scenario-rail);
+  --color-scenario-panel: var(--scenario-panel);
+  --color-scenario-th: var(--scenario-th);
+  --color-scenario-heading: var(--scenario-heading);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -168,6 +177,20 @@
   --brand: oklch(0.943 0.196 102.85);
   --brand-foreground: oklch(0.205 0.006 102);
   --brand-muted: oklch(0.943 0.196 102.85 / 14%);
+
+  /* Токены макета сценарий-блока (Task 1). Только .dark — приложение всегда
+     тёмное (см. AGENTS.md/PRODUCT.md), :root-паре нет смысла. Значения — хексы
+     из макета, конвертировать в oklch не нужно: хекс валиден как значение
+     CSS-переменной. */
+  --scenario-tag-bg: #4C4C4E;
+  --scenario-tag-hover: #8B8B8D;
+  --scenario-badge-bg: #17171A;
+  --scenario-badge-border: #2A2A30;
+  --scenario-badge-text: #9596A0;
+  --scenario-rail: #212127;
+  --scenario-panel: #101012;
+  --scenario-th: #6D6E78;
+  --scenario-heading: #ECECED;
 }
 
 @layer base {

@@ -71,3 +71,49 @@ describe("signal node icon (spec C)", () => {
     expect(NODE_ICON.signal).toBe(Radar);
   });
 });
+
+// Динамический импорт (а не статический сверху файла) — намеренно: этот файл
+// мокает `react-dom/server` и объявляет `renderSpy` уже ПОСЛЕ импортов из
+// vitest, но ДО импорта node-visuals (который тянет react-dom/server внутрь
+// себя). Статический `import { NODE_STYLES } from "./node-visuals"` хойстится
+// выше объявления `renderSpy`, и мок-фабрика падает с
+// "Cannot access 'renderSpy' before initialization". Остальные describe-блоки
+// этого файла по той же причине импортируют node-visuals динамически внутри
+// теста — здесь та же схема.
+describe("NODE_STYLES — палитра каналов", () => {
+  it("каналы различаются по цвету и совпадают с макетом", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    expect(NODE_STYLES.sms.color).toBe("#8ff0c4");
+    expect(NODE_STYLES.push.color).toBe("#a9caff");
+    expect(NODE_STYLES.email.color).toBe("#d6bcff");
+    expect(NODE_STYLES.ivr.color).toBe("#ffcf9e");
+  });
+
+  it("email больше не циан — прямой анти-референс PRODUCT.md", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    expect(NODE_STYLES.email.color).not.toBe("#67e8f9");
+  });
+
+  it("ни один канал не повторяет цвет другого", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    const colors = ["sms", "push", "email", "ivr"].map((k) => NODE_STYLES[k as "sms"].color);
+    expect(new Set(colors).size).toBe(colors.length);
+  });
+
+  it("легаси channel держит палитру sms — он её дубль", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    expect(NODE_STYLES.channel).toEqual(NODE_STYLES.sms);
+  });
+
+  it("условие и деление красятся одинаково розовым", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    expect(NODE_STYLES.condition.color).toBe("#e08bd0");
+    expect(NODE_STYLES.split.color).toBe("#e08bd0");
+  });
+
+  it("пауза — янтарь макета, не брендовый жёлтый", async () => {
+    const { NODE_STYLES } = await import("./node-visuals");
+    expect(NODE_STYLES.wait.color).toBe("#f2b34a");
+    expect(NODE_STYLES.wait.color).not.toBe("#FFEC00");
+  });
+});
