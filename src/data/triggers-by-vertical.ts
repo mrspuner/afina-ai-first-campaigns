@@ -10,10 +10,10 @@ export const VERTICALS: Vertical[] = [
         label: "Кредитование",
         verticalId: "finance",
         triggers: [
-          { id: "credit-banks", label: "Посещение сайтов банков с предложениями кредитов" },
-          { id: "credit-aggregators", label: "Посещение агрегаторов кредитов и сравнения ставок" },
-          { id: "credit-mfo", label: "Посещение сайтов МФО" },
-          { id: "credit-brokers", label: "Посещение сайтов кредитных брокеров" },
+          { id: "credit-banks", label: "Посещение сайтов банков с предложениями кредитов", shortLabel: "Банки-кредиты" },
+          { id: "credit-aggregators", label: "Посещение агрегаторов кредитов и сравнения ставок", shortLabel: "Агрегаторы кредитов" },
+          { id: "credit-mfo", label: "Посещение сайтов МФО", shortLabel: "МФО" },
+          { id: "credit-brokers", label: "Посещение сайтов кредитных брокеров", shortLabel: "Кредитные брокеры" },
         ],
       },
       {
@@ -21,8 +21,8 @@ export const VERTICALS: Vertical[] = [
         label: "Рассрочка и BNPL",
         verticalId: "finance",
         triggers: [
-          { id: "bnpl-services", label: "Посещение сайтов сервисов рассрочки" },
-          { id: "bnpl-ecommerce", label: "Использование BNPL в e-commerce" },
+          { id: "bnpl-services", label: "Посещение сайтов сервисов рассрочки", shortLabel: "Рассрочка" },
+          { id: "bnpl-ecommerce", label: "Использование BNPL в e-commerce", shortLabel: "BNPL в e-commerce" },
         ],
       },
       {
@@ -30,9 +30,9 @@ export const VERTICALS: Vertical[] = [
         label: "Ипотека",
         verticalId: "finance",
         triggers: [
-          { id: "mortgage-bank-programs", label: "Посещение сайтов ипотечных программ банков" },
-          { id: "mortgage-calculators", label: "Посещение ипотечных калькуляторов и агрегаторов" },
-          { id: "mortgage-developers", label: "Посещение сайтов застройщиков и риелторов" },
+          { id: "mortgage-bank-programs", label: "Посещение сайтов ипотечных программ банков", shortLabel: "Ипотека банков" },
+          { id: "mortgage-calculators", label: "Посещение ипотечных калькуляторов и агрегаторов", shortLabel: "Ипотечные калькуляторы" },
+          { id: "mortgage-developers", label: "Посещение сайтов застройщиков и риелторов", shortLabel: "Застройщики" },
         ],
       },
       {
@@ -40,9 +40,9 @@ export const VERTICALS: Vertical[] = [
         label: "Инвестиции и накопления",
         verticalId: "finance",
         triggers: [
-          { id: "investments-brokers", label: "Посещение сайтов брокеров и инвестплатформ" },
-          { id: "investments-education", label: "Посещение сайтов с обучением инвестированию" },
-          { id: "investments-deposits", label: "Посещение сайтов банков в разделах вкладов и накоплений" },
+          { id: "investments-brokers", label: "Посещение сайтов брокеров и инвестплатформ", shortLabel: "Брокеры" },
+          { id: "investments-education", label: "Посещение сайтов с обучением инвестированию", shortLabel: "Обучение инвестициям" },
+          { id: "investments-deposits", label: "Посещение сайтов банков в разделах вкладов и накоплений", shortLabel: "Вклады" },
         ],
       },
       {
@@ -50,8 +50,8 @@ export const VERTICALS: Vertical[] = [
         label: "Страхование",
         verticalId: "finance",
         triggers: [
-          { id: "insurance-companies", label: "Посещение сайтов страховых компаний" },
-          { id: "insurance-aggregators", label: "Посещение агрегаторов страховых продуктов" },
+          { id: "insurance-companies", label: "Посещение сайтов страховых компаний", shortLabel: "Страховые компании" },
+          { id: "insurance-aggregators", label: "Посещение агрегаторов страховых продуктов", shortLabel: "Агрегаторы страховок" },
         ],
       },
     ],
@@ -65,9 +65,9 @@ export const VERTICALS: Vertical[] = [
         label: "Покупка нового авто",
         verticalId: "auto",
         triggers: [
-          { id: "new-car-dealers", label: "Посещение сайтов автодилеров" },
-          { id: "new-car-manufacturers", label: "Посещение официальных сайтов автопроизводителей" },
-          { id: "new-car-marketplaces", label: "Посещение крупных автомаркетплейсов с фильтром на новые" },
+          { id: "new-car-dealers", label: "Посещение сайтов автодилеров", shortLabel: "Автодилеры" },
+          { id: "new-car-manufacturers", label: "Посещение официальных сайтов автопроизводителей", shortLabel: "Автопроизводители" },
+          { id: "new-car-marketplaces", label: "Посещение крупных автомаркетплейсов с фильтром на новые", shortLabel: "Автомаркетплейсы" },
         ],
       },
       {
@@ -75,9 +75,9 @@ export const VERTICALS: Vertical[] = [
         label: "Покупка б/у авто",
         verticalId: "auto",
         triggers: [
-          { id: "used-car-listings", label: "Посещение сайтов с объявлениями о продаже авто" },
-          { id: "used-car-history", label: "Посещение сайтов проверки истории авто" },
-          { id: "used-car-tradein", label: "Посещение сайтов автосалонов с trade-in" },
+          { id: "used-car-listings", label: "Посещение сайтов с объявлениями о продаже авто", shortLabel: "Объявления авто" },
+          { id: "used-car-history", label: "Посещение сайтов проверки истории авто", shortLabel: "Проверка истории" },
+          { id: "used-car-tradein", label: "Посещение сайтов автосалонов с trade-in", shortLabel: "Trade-in" },
         ],
       },
       {
@@ -85,8 +85,8 @@ export const VERTICALS: Vertical[] = [
         label: "Автокредит и автолизинг",
         verticalId: "auto",
         triggers: [
-          { id: "auto-credit-banks", label: "Посещение сайтов банков в разделах автокредитования" },
-          { id: "auto-credit-leasing", label: "Посещение сайтов лизинговых компаний" },
+          { id: "auto-credit-banks", label: "Посещение сайтов банков в разделах автокредитования", shortLabel: "Автокредиты" },
+          { id: "auto-credit-leasing", label: "Посещение сайтов лизинговых компаний", shortLabel: "Автолизинг" },
         ],
       },
       {
@@ -94,8 +94,8 @@ export const VERTICALS: Vertical[] = [
         label: "Сервис и обслуживание",
         verticalId: "auto",
         triggers: [
-          { id: "auto-service-shops", label: "Посещение сайтов автосервисов и СТО" },
-          { id: "auto-service-parts", label: "Посещение сайтов запчастей и магазинов автотоваров" },
+          { id: "auto-service-shops", label: "Посещение сайтов автосервисов и СТО", shortLabel: "Автосервисы" },
+          { id: "auto-service-parts", label: "Посещение сайтов запчастей и магазинов автотоваров", shortLabel: "Запчасти" },
         ],
       },
       {
@@ -103,8 +103,8 @@ export const VERTICALS: Vertical[] = [
         label: "ОСАГО и КАСКО",
         verticalId: "auto",
         triggers: [
-          { id: "osago-insurers", label: "Посещение сайтов страховых с автостраховыми продуктами" },
-          { id: "osago-calculators", label: "Посещение калькуляторов и агрегаторов автостраховки" },
+          { id: "osago-insurers", label: "Посещение сайтов страховых с автостраховыми продуктами", shortLabel: "Автостраховка" },
+          { id: "osago-calculators", label: "Посещение калькуляторов и агрегаторов автостраховки", shortLabel: "Калькуляторы ОСАГО" },
         ],
       },
     ],
@@ -118,8 +118,8 @@ export const VERTICALS: Vertical[] = [
         label: "Смена сотового оператора",
         verticalId: "telecom",
         triggers: [
-          { id: "mobile-competitors", label: "Посещение сайтов конкурирующих операторов" },
-          { id: "mobile-tariff-compare", label: "Посещение сайтов с тарифами и сравнением операторов" },
+          { id: "mobile-competitors", label: "Посещение сайтов конкурирующих операторов", shortLabel: "Операторы-конкуренты" },
+          { id: "mobile-tariff-compare", label: "Посещение сайтов с тарифами и сравнением операторов", shortLabel: "Сравнение тарифов" },
         ],
       },
       {
@@ -127,8 +127,8 @@ export const VERTICALS: Vertical[] = [
         label: "Домашний интернет и ТВ",
         verticalId: "telecom",
         triggers: [
-          { id: "home-isp", label: "Посещение сайтов провайдеров домашнего интернета" },
-          { id: "home-isp-reviews", label: "Посещение сайтов с обзорами тарифов и провайдеров" },
+          { id: "home-isp", label: "Посещение сайтов провайдеров домашнего интернета", shortLabel: "Интернет-провайдеры" },
+          { id: "home-isp-reviews", label: "Посещение сайтов с обзорами тарифов и провайдеров", shortLabel: "Обзоры провайдеров" },
         ],
       },
       {
@@ -136,8 +136,8 @@ export const VERTICALS: Vertical[] = [
         label: "Мобильные устройства",
         verticalId: "telecom",
         triggers: [
-          { id: "phone-manufacturers", label: "Посещение сайтов производителей смартфонов" },
-          { id: "phone-electronics-shops", label: "Посещение сайтов магазинов электроники в разделах мобильной техники" },
+          { id: "phone-manufacturers", label: "Посещение сайтов производителей смартфонов", shortLabel: "Производители смартфонов" },
+          { id: "phone-electronics-shops", label: "Посещение сайтов магазинов электроники в разделах мобильной техники", shortLabel: "Магазины электроники" },
         ],
       },
     ],
@@ -151,9 +151,9 @@ export const VERTICALS: Vertical[] = [
         label: "Покупка квартиры",
         verticalId: "real-estate",
         triggers: [
-          { id: "apartment-listings", label: "Посещение сайтов с объявлениями о продаже квартир" },
-          { id: "apartment-developers", label: "Посещение сайтов застройщиков" },
-          { id: "apartment-agencies", label: "Посещение сайтов агентств недвижимости" },
+          { id: "apartment-listings", label: "Посещение сайтов с объявлениями о продаже квартир", shortLabel: "Объявления квартир" },
+          { id: "apartment-developers", label: "Посещение сайтов застройщиков", shortLabel: "Застройщики" },
+          { id: "apartment-agencies", label: "Посещение сайтов агентств недвижимости", shortLabel: "Агентства недвижимости" },
         ],
       },
       {
@@ -161,8 +161,8 @@ export const VERTICALS: Vertical[] = [
         label: "Аренда жилья",
         verticalId: "real-estate",
         triggers: [
-          { id: "rent-listings", label: "Посещение сайтов аренды жилья" },
-          { id: "rent-realtors", label: "Посещение сайтов риелторов с разделами аренды" },
+          { id: "rent-listings", label: "Посещение сайтов аренды жилья", shortLabel: "Аренда жилья" },
+          { id: "rent-realtors", label: "Посещение сайтов риелторов с разделами аренды", shortLabel: "Риелторы (аренда)" },
         ],
       },
       {
@@ -170,8 +170,8 @@ export const VERTICALS: Vertical[] = [
         label: "Загородная недвижимость",
         verticalId: "real-estate",
         triggers: [
-          { id: "country-listings", label: "Посещение сайтов с объявлениями о продаже домов и участков" },
-          { id: "country-villages", label: "Посещение сайтов коттеджных посёлков" },
+          { id: "country-listings", label: "Посещение сайтов с объявлениями о продаже домов и участков", shortLabel: "Дома и участки" },
+          { id: "country-villages", label: "Посещение сайтов коттеджных посёлков", shortLabel: "Коттеджные посёлки" },
         ],
       },
       {
@@ -179,8 +179,8 @@ export const VERTICALS: Vertical[] = [
         label: "Коммерческая недвижимость",
         verticalId: "real-estate",
         triggers: [
-          { id: "commercial-listings", label: "Посещение сайтов с коммерческой арендой и продажей" },
-          { id: "commercial-brokers", label: "Посещение сайтов брокеров коммерческой недвижимости" },
+          { id: "commercial-listings", label: "Посещение сайтов с коммерческой арендой и продажей", shortLabel: "Коммерция: аренда" },
+          { id: "commercial-brokers", label: "Посещение сайтов брокеров коммерческой недвижимости", shortLabel: "Брокеры коммерции" },
         ],
       },
     ],
@@ -194,8 +194,8 @@ export const VERTICALS: Vertical[] = [
         label: "Покупка электроники",
         verticalId: "retail",
         triggers: [
-          { id: "electronics-marketplaces", label: "Посещение крупных маркетплейсов в разделах электроники" },
-          { id: "electronics-brand-stores", label: "Посещение сайтов производителей и брендовых магазинов" },
+          { id: "electronics-marketplaces", label: "Посещение крупных маркетплейсов в разделах электроники", shortLabel: "Маркетплейсы электроники" },
+          { id: "electronics-brand-stores", label: "Посещение сайтов производителей и брендовых магазинов", shortLabel: "Брендовые магазины" },
         ],
       },
       {
@@ -203,8 +203,8 @@ export const VERTICALS: Vertical[] = [
         label: "Покупка одежды и обуви",
         verticalId: "retail",
         triggers: [
-          { id: "fashion-marketplaces", label: "Посещение сайтов фэшн-маркетплейсов" },
-          { id: "fashion-brand-stores", label: "Посещение сайтов брендовых магазинов одежды" },
+          { id: "fashion-marketplaces", label: "Посещение сайтов фэшн-маркетплейсов", shortLabel: "Фэшн-маркетплейсы" },
+          { id: "fashion-brand-stores", label: "Посещение сайтов брендовых магазинов одежды", shortLabel: "Магазины одежды" },
         ],
       },
       {
@@ -212,8 +212,8 @@ export const VERTICALS: Vertical[] = [
         label: "Товары для дома и ремонт",
         verticalId: "retail",
         triggers: [
-          { id: "home-goods-furniture", label: "Посещение сайтов мебели и DIY" },
-          { id: "home-goods-construction", label: "Посещение сайтов сантехники и стройматериалов" },
+          { id: "home-goods-furniture", label: "Посещение сайтов мебели и DIY", shortLabel: "Мебель и DIY" },
+          { id: "home-goods-construction", label: "Посещение сайтов сантехники и стройматериалов", shortLabel: "Стройматериалы" },
         ],
       },
       {
@@ -221,8 +221,8 @@ export const VERTICALS: Vertical[] = [
         label: "Продукты и доставка еды",
         verticalId: "retail",
         triggers: [
-          { id: "food-delivery-services", label: "Посещение сайтов сервисов доставки еды" },
-          { id: "food-grocery", label: "Посещение сайтов продуктовых ретейлеров" },
+          { id: "food-delivery-services", label: "Посещение сайтов сервисов доставки еды", shortLabel: "Доставка еды" },
+          { id: "food-grocery", label: "Посещение сайтов продуктовых ретейлеров", shortLabel: "Продукты" },
         ],
       },
     ],
@@ -236,8 +236,8 @@ export const VERTICALS: Vertical[] = [
         label: "Высшее образование",
         verticalId: "education",
         triggers: [
-          { id: "higher-edu-universities", label: "Посещение сайтов вузов" },
-          { id: "higher-edu-aggregators", label: "Посещение агрегаторов вузов и программ" },
+          { id: "higher-edu-universities", label: "Посещение сайтов вузов", shortLabel: "Вузы" },
+          { id: "higher-edu-aggregators", label: "Посещение агрегаторов вузов и программ", shortLabel: "Агрегаторы вузов" },
         ],
       },
       {
@@ -245,8 +245,8 @@ export const VERTICALS: Vertical[] = [
         label: "Курсы и онлайн-обучение",
         verticalId: "education",
         triggers: [
-          { id: "courses-edtech", label: "Посещение сайтов EdTech-платформ" },
-          { id: "courses-professional", label: "Посещение сайтов профессиональных курсов" },
+          { id: "courses-edtech", label: "Посещение сайтов EdTech-платформ", shortLabel: "EdTech-платформы" },
+          { id: "courses-professional", label: "Посещение сайтов профессиональных курсов", shortLabel: "Профкурсы" },
         ],
       },
       {
@@ -254,8 +254,8 @@ export const VERTICALS: Vertical[] = [
         label: "Детское образование",
         verticalId: "education",
         triggers: [
-          { id: "child-edu-centers", label: "Посещение сайтов детских развивающих центров" },
-          { id: "child-edu-tutors", label: "Посещение сайтов школ и репетиторов" },
+          { id: "child-edu-centers", label: "Посещение сайтов детских развивающих центров", shortLabel: "Детские центры" },
+          { id: "child-edu-tutors", label: "Посещение сайтов школ и репетиторов", shortLabel: "Школы и репетиторы" },
         ],
       },
     ],
@@ -269,8 +269,8 @@ export const VERTICALS: Vertical[] = [
         label: "Медицинские услуги",
         verticalId: "health",
         triggers: [
-          { id: "medical-private-clinics", label: "Посещение сайтов частных клиник" },
-          { id: "medical-diagnostics", label: "Посещение сайтов диагностических центров и лабораторий" },
+          { id: "medical-private-clinics", label: "Посещение сайтов частных клиник", shortLabel: "Частные клиники" },
+          { id: "medical-diagnostics", label: "Посещение сайтов диагностических центров и лабораторий", shortLabel: "Диагностика" },
         ],
       },
       {
@@ -278,8 +278,8 @@ export const VERTICALS: Vertical[] = [
         label: "Аптеки и фарма",
         verticalId: "health",
         triggers: [
-          { id: "pharma-chains", label: "Посещение сайтов аптечных сетей" },
-          { id: "pharma-online", label: "Посещение сайтов с покупкой лекарств онлайн" },
+          { id: "pharma-chains", label: "Посещение сайтов аптечных сетей", shortLabel: "Аптечные сети" },
+          { id: "pharma-online", label: "Посещение сайтов с покупкой лекарств онлайн", shortLabel: "Аптеки онлайн" },
         ],
       },
       {
@@ -287,8 +287,8 @@ export const VERTICALS: Vertical[] = [
         label: "Фитнес и спорт",
         verticalId: "health",
         triggers: [
-          { id: "fitness-clubs", label: "Посещение сайтов фитнес-клубов" },
-          { id: "fitness-equipment", label: "Посещение сайтов спортивных товаров" },
+          { id: "fitness-clubs", label: "Посещение сайтов фитнес-клубов", shortLabel: "Фитнес-клубы" },
+          { id: "fitness-equipment", label: "Посещение сайтов спортивных товаров", shortLabel: "Спорттовары" },
         ],
       },
     ],
@@ -302,8 +302,8 @@ export const VERTICALS: Vertical[] = [
         label: "Корпоративный софт и SaaS",
         verticalId: "b2b",
         triggers: [
-          { id: "saas-platforms", label: "Посещение сайтов SaaS-платформ" },
-          { id: "saas-crm", label: "Посещение сайтов CRM и систем автоматизации" },
+          { id: "saas-platforms", label: "Посещение сайтов SaaS-платформ", shortLabel: "SaaS-платформы" },
+          { id: "saas-crm", label: "Посещение сайтов CRM и систем автоматизации", shortLabel: "CRM-системы" },
         ],
       },
       {
@@ -311,8 +311,8 @@ export const VERTICALS: Vertical[] = [
         label: "Бухгалтерия и финансы для бизнеса",
         verticalId: "b2b",
         triggers: [
-          { id: "biz-accounting", label: "Посещение сайтов сервисов бухучёта" },
-          { id: "biz-banks", label: "Посещение сайтов банков в разделах для бизнеса" },
+          { id: "biz-accounting", label: "Посещение сайтов сервисов бухучёта", shortLabel: "Бухучёт" },
+          { id: "biz-banks", label: "Посещение сайтов банков в разделах для бизнеса", shortLabel: "Банки для бизнеса" },
         ],
       },
       {
@@ -320,8 +320,8 @@ export const VERTICALS: Vertical[] = [
         label: "HR и подбор персонала",
         verticalId: "b2b",
         triggers: [
-          { id: "hr-job-boards", label: "Посещение сайтов джоб-сайтов и HR-платформ" },
-          { id: "hr-candidate-search", label: "Посещение сайтов с поиском соискателей" },
+          { id: "hr-job-boards", label: "Посещение сайтов джоб-сайтов и HR-платформ", shortLabel: "Джоб-сайты" },
+          { id: "hr-candidate-search", label: "Посещение сайтов с поиском соискателей", shortLabel: "Поиск соискателей" },
         ],
       },
       {
@@ -329,8 +329,8 @@ export const VERTICALS: Vertical[] = [
         label: "Закупки и поставщики",
         verticalId: "b2b",
         triggers: [
-          { id: "procurement-marketplaces", label: "Посещение b2b-маркетплейсов" },
-          { id: "procurement-suppliers", label: "Посещение сайтов отраслевых поставщиков" },
+          { id: "procurement-marketplaces", label: "Посещение b2b-маркетплейсов", shortLabel: "B2B-маркетплейсы" },
+          { id: "procurement-suppliers", label: "Посещение сайтов отраслевых поставщиков", shortLabel: "Поставщики" },
         ],
       },
     ],
@@ -359,6 +359,23 @@ export function getTriggerById(id: string): Trigger | undefined {
 
 export function getInterestForTrigger(triggerId: string): Interest | undefined {
   return TRIGGER_INDEX.get(triggerId)?.interest;
+}
+
+/**
+ * Короткое имя триггера по его ПОЛНОМУ label. Кампания хранит триггеры именно
+ * полными label'ами (см. `Campaign.triggers` — массив строк-названий, не id),
+ * поэтому карта строится label → shortLabel, а не по id. Неизвестный label
+ * (произвольный триггер, добавленный пользователем; тестовые фикстуры) выдаёт
+ * сам себя — тег тогда покажет то, что есть, а не пустоту.
+ */
+const SHORT_LABEL_BY_LABEL: Map<string, string> = new Map(
+  VERTICALS.flatMap((v) =>
+    v.interests.flatMap((i) => i.triggers.map((t) => [t.label, t.shortLabel] as const))
+  )
+);
+
+export function getTriggerShortLabel(label: string): string {
+  return SHORT_LABEL_BY_LABEL.get(label) ?? label;
 }
 
 export const INTERESTS: Interest[] = VERTICALS.flatMap((v) => v.interests);
