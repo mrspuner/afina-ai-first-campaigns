@@ -13,6 +13,7 @@ import type { MessageTemplate } from "./app-state";
 import type { WizardStepId } from "@/sections/campaigns/wizard/wizard-steps";
 import type { DomainStatus } from "@/types/account-settings";
 import type { Channel, AnalysisMode } from "@/types/campaign";
+import { getTriggerShortLabel } from "@/data/triggers-by-vertical";
 
 /**
  * Детерминированное описание workflow-графа человеческим текстом.
@@ -493,14 +494,24 @@ export function describeWorkflow(
   const hasBase = facts?.baseRows !== undefined;
   const hasTriggers = triggersList.length > 0;
 
-  /** Перечисление тегов триггеров: первые два именем, остаток — схлопка. */
+  /**
+   * Перечисление тегов триггеров: первые два именем, остаток — схлопка. В
+   * пилюлю идёт КОРОТКОЕ имя триггера (`getTriggerShortLabel`) — полное
+   * («Посещение сайтов банков…») в узкой пилюле всё равно режется многоточием;
+   * полное остаётся подсказкой на наведении (`hoverList: [full]`). Остаток
+   * схлопки — тоже короткими именами: тултип перечисляет их через запятую.
+   */
   const triggerTagList = (): DescriptionSegment[] => {
     const [first, second, ...rest] = triggersList;
-    const segs: DescriptionSegment[] = [stepTag("start-trigger-0", first, "interests", editableSteps)];
+    const segs: DescriptionSegment[] = [
+      stepTag("start-trigger-0", getTriggerShortLabel(first), "interests", editableSteps, [first]),
+    ];
     if (second) {
       segs.push(
         t(rest.length ? ", " : " и "),
-        stepTag("start-trigger-1", second, "interests", editableSteps),
+        stepTag("start-trigger-1", getTriggerShortLabel(second), "interests", editableSteps, [
+          second,
+        ]),
       );
     }
     if (rest.length) {
@@ -511,7 +522,7 @@ export function describeWorkflow(
           `ещё ${rest.length} ${pluralRu(rest.length, ["триггеру", "триггерам", "триггерам"])}`,
           "interests",
           editableSteps,
-          rest,
+          rest.map(getTriggerShortLabel),
         ),
       );
     }

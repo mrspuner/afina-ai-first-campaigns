@@ -7,6 +7,7 @@ import {
   getInterestById,
   getTriggerById,
   getInterestForTrigger,
+  getTriggerShortLabel,
 } from "./triggers-by-vertical";
 
 describe("data foundations contract", () => {
@@ -71,5 +72,31 @@ describe("data foundations contract", () => {
     for (const i of INTERESTS) {
       expect(i.triggers.length, `interest ${i.id} has no triggers`).toBeGreaterThan(0);
     }
+  });
+
+  it("every trigger has a short label that is shorter than the full one and fits a tag", () => {
+    for (const i of INTERESTS) {
+      for (const t of i.triggers) {
+        expect(t.shortLabel.trim(), `trigger ${t.id} has empty shortLabel`).not.toBe("");
+        // Тег в описании режется на 20 символах (max-w-[20ch] в description-tag.tsx),
+        // короткое имя должно помещаться без многоточия.
+        expect(t.shortLabel.length, `trigger ${t.id} shortLabel too long`).toBeLessThanOrEqual(24);
+        expect(
+          t.shortLabel.length,
+          `trigger ${t.id} shortLabel not shorter than full label`
+        ).toBeLessThan(t.label.length);
+      }
+    }
+  });
+
+  it("getTriggerShortLabel maps a full label to its short form and falls back to the input", () => {
+    for (const i of INTERESTS) {
+      for (const t of i.triggers) {
+        expect(getTriggerShortLabel(t.label)).toBe(t.shortLabel);
+      }
+    }
+    // Неизвестный label выдаёт сам себя — произвольные/пользовательские триггеры
+    // тег показывает как есть, а не пустотой.
+    expect(getTriggerShortLabel("Произвольный триггер")).toBe("Произвольный триггер");
   });
 });
