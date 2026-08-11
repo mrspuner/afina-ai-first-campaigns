@@ -37,6 +37,7 @@ const STAGES: DescriptionStage[] = [
   {
     id: "start",
     kind: "start",
+    block: "signal",
     heading: "Скоринг базы",
     body: t("Загруженная база проходит скоринг."),
     settings: [
@@ -47,10 +48,17 @@ const STAGES: DescriptionStage[] = [
   {
     id: "touch-1",
     kind: "touch",
+    block: "communication",
     heading: "Первое касание",
     body: t("Каждому контакту уходит первое сообщение:"),
   },
-  { id: "outcome", kind: "outcome", heading: "Итог", body: t("Остальные завершают путь без конверсии.") },
+  {
+    id: "outcome",
+    kind: "outcome",
+    block: "outcome",
+    heading: "Итог",
+    body: t("Остальные завершают путь без конверсии."),
+  },
 ];
 
 describe("WorkflowDescription", () => {
@@ -100,6 +108,7 @@ describe("WorkflowDescription", () => {
         {
           id: "start",
           kind: "start",
+          block: "signal",
           heading: "Старт",
           body: [
             { kind: "text", text: "Домены " },
@@ -128,6 +137,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Сценарий — " },
@@ -146,6 +156,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "first-touch",
         kind: "touch",
+        block: "communication",
         heading: "Первое касание.",
         body: [
           { kind: "tag", tag: { id: "trig", label: "Ипотека", target: { kind: "none" } } },
@@ -165,6 +176,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "tag", tag: { id: "scenario", label: "Апсейл", target: { kind: "none" } } },
@@ -184,6 +196,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Слово" },
@@ -221,7 +234,7 @@ describe("нумерованный таймлайн", () => {
   // Соединять нечего — линия рисуется ТОЛЬКО между соседними бейджами.
   it("одинокий шаг линии не рисует", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "outcome", block: "outcome", heading: "Итог", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-rail']")).toBeNull();
   });
@@ -269,7 +282,7 @@ describe("нумерованный таймлайн", () => {
 
   it("шаг без настроек не рендерит пустой список", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "outcome", block: "outcome", heading: "Итог", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-settings']")).toBeNull();
   });
@@ -315,6 +328,7 @@ const wrap = (ui: ReactElement) =>
 const GROUP_STAGE: DescriptionStage = {
   id: "touch-1",
   kind: "touch",
+  block: "communication",
   heading: "Первое касание",
   body: t("Аудитория делится по каналам — каждому своё сообщение:"),
   groups: [
@@ -447,6 +461,7 @@ describe("таблица коммуникаций", () => {
           {
             id: "start",
             kind: "start",
+            block: "signal",
             heading: "Скоринг базы",
             body: [
               { kind: "text", text: "Домены " },
@@ -476,6 +491,7 @@ describe("таблица коммуникаций", () => {
           {
             id: "start",
             kind: "start",
+            block: "signal",
             heading: "Скоринг базы",
             body: [
               { kind: "text", text: "Триггеры: " },
@@ -532,6 +548,7 @@ describe("таблица коммуникаций", () => {
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
+      block: "communication",
       heading: "Первое касание",
       body: t("Каждому контакту уходит первое сообщение:"),
       groups: [{ id: "g1", rows: [{ nodeId: "n-empty", channel: "SMS", contentText: "" }] }],
@@ -662,6 +679,7 @@ describe("таблица коммуникаций — уникальный aria-
   const sameChannelStage: DescriptionStage = {
     id: "touch-1",
     kind: "touch",
+    block: "communication",
     heading: "Первое касание",
     body: t("Аудитория делится по каналам — каждому своё сообщение:"),
     groups: [
@@ -854,6 +872,7 @@ describe("таблица коммуникаций — кнопка предпр�
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
+      block: "communication",
       heading: "Первое касание",
       body: t("Аудитория делится по каналам — каждому своё сообщение:"),
       groups: [
@@ -893,6 +912,7 @@ describe("таблица коммуникаций — кнопка предпр�
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
+      block: "communication",
       heading: "Первое касание",
       body: t("Аудитория делится по каналам — каждому своё сообщение:"),
       groups: [
@@ -951,6 +971,7 @@ describe("таблица коммуникаций — пилюля шаблон�
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
+      block: "communication",
       heading: "Первое касание",
       body: t("Аудитория делится по каналам — каждому своё сообщение:"),
       groups: [
