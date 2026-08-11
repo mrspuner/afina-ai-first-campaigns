@@ -1,13 +1,15 @@
 import { beforeAll, describe, it, expect, vi, afterEach } from "vitest";
+import { useEffect } from "react";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { DescriptionTagPill } from "./description-tag";
 import { NODE_STYLES } from "./node-visuals";
 import type { DescriptionTag } from "@/state/graph-description";
-import { AppStateProvider, useAppState } from "@/state/app-state-context";
+import { AppStateProvider, useAppState, useAppDispatch } from "@/state/app-state-context";
 import { ChatProvider, useChat } from "@/state/chat-context";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { ConditionParams, WaitParams, WorkflowNodeType } from "@/types/workflow";
+import type { ConditionParams, WaitParams, WorkflowNodeType, CampaignFile } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
+import type { Campaign, Preset } from "@/state/app-state";
 
 afterEach(cleanup);
 
@@ -90,10 +92,16 @@ function renderPillWithProviders({
   );
 }
 
+// Task 12: step "budget", НЕ "file" — эти теги проверяют ОБЩУЮ механику
+// WizardStepTagPopover (клик раскрывает поповер, «Изменить» поднимает наверх,
+// схлопка hoverList и т.д.), а `step === "file"` с Task 12 перехватывается
+// отдельным BaseFilesTagPopover (см. блок «поповер базы» ниже) — не той
+// веткой, что эти тесты проверяют. Название `stepTag` и текст лейбла
+// («база на …») исторические, только id/label — они мехнику не завязывают.
 const stepTag: DescriptionTag = {
   id: "start-base",
   label: "база на 12 000 строк",
-  target: { kind: "wizard-step", step: "file" },
+  target: { kind: "wizard-step", step: "budget" },
 };
 
 const valueTag: DescriptionTag = {
@@ -792,14 +800,138 @@ describe("тег-параметр: поповер «Изменить»", () => {
     expect(screen.queryByRole("button", { name: "Изменить" })).toBeNull();
   });
 
+  // step: "budget", а не "file" — шаг «Файл» с Task 12 больше не проходит
+  // через WizardStepTagPopover вовсе (перехвачен BaseFilesTagPopover, см.
+  // блок «поповер базы» ниже); эта проверка про формулировку подписи для
+  // ЛЮБОГО обычного шагового тега — "budget" ей подходит так же, как раньше
+  // подходил "file".
   it("поповер несёт подпись «Настройка · <шаг>» с человекочитаемым названием из STEP_LABELS", async () => {
     render(
-      <DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "wizard-step", step: "file" } }} />,
+      <DescriptionTagPill tag={{ id: "t", label: "разовый", target: { kind: "wizard-step", step: "budget" } }} />,
     );
     fireEvent.click(screen.getByRole("button", { name: /разовый/ }));
-    // "Файл" — STEP_LABELS.file (campaign-stepper.tsx), тот же источник, что
-    // и STEP_ICON, который файл уже импортирует — новую карту названий не
+    // "Бюджет" — STEP_LABELS.budget (campaign-stepper.tsx), тот же источник,
+    // что и STEP_ICON, который файл уже импортирует — новую карту названий не
     // заводим (требование брифа).
-    expect(await screen.findByText("Настройка · Файл")).toBeInTheDocument();
+    expect(await screen.findByText("Настройка · Бюджет")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 12 — поповер базы (target.kind === "wizard-step", step === "file"):
+// BaseFilesTagPopover перехватывает эту ветку раньше общего
+// WizardStepTagPopover (см. правку в DescriptionTagPill) и читает
+// campaign.files САМА из useAppState() по открытой карточке
+// (view.kind === "campaign"), а не пропом — сидуем кампанию тем же путём, что
+// use-campaign-graph-applier.test.tsx (preset_applied → campaign_opened),
+// другого харнесса для campaigns+view в этом файле нет.
+// ---------------------------------------------------------------------------
+describe("DescriptionTagPill — поповер базы (Task 12)", () => {
+  const baseFileTag: DescriptionTag = {
+    id: "start-base",
+    label: "база на 2 файлах",
+    target: { kind: "wizard-step", step: "file" },
+  };
+
+  interface DispatchApi {
+    dispatch: ReturnType<typeof useAppDispatch>;
+  }
+
+  /** Тот же приём, что Controller в use-campaign-graph-applier.test.tsx —
+   *  соседний компонент внутри ТОГО ЖЕ AppStateProvider, отдающий dispatch
+   *  наружу через onReady, чтобы сидовать campaigns/view СНАРУЖИ render(). */
+  function DispatchProbe({ onReady }: { onReady: (api: DispatchApi) => void }) {
+    const dispatch = useAppDispatch();
+    useEffect(() => {
+      onReady({ dispatch });
+    }, [dispatch, onReady]);
+    return null;
+  }
+
+  function seedCampaign(campaignId: string, files: CampaignFile[]): Campaign {
+    return {
+      id: campaignId,
+      name: "Тестовая кампания",
+      status: "draft",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      files,
+    };
+  }
+
+  /** Рендерит DescriptionTagPill тега «База» внутри AppStateProvider, сидует
+   *  переданную кампанию (с её files) через preset_applied и открывает её
+   *  карточку через campaign_opened — переводит view в { kind: "campaign" },
+   *  который и читает BaseFilesTagPopover. */
+  function renderBaseFilesPill(files: CampaignFile[]) {
+    const campaignId = "cmp_base_files";
+    let api: DispatchApi | undefined;
+    const utils = render(
+      <AppStateProvider>
+        <DispatchProbe onReady={(a) => (api = a)} />
+        <TooltipProvider delay={1000}>
+          <DescriptionTagPill tag={baseFileTag} />
+        </TooltipProvider>
+      </AppStateProvider>,
+    );
+    const preset: Preset = {
+      key: "full",
+      label: "test",
+      campaigns: [seedCampaign(campaignId, files)],
+      artifacts: [],
+    };
+    act(() => api!.dispatch({ type: "preset_applied", preset }));
+    act(() => api!.dispatch({ type: "campaign_opened", id: campaignId }));
+    return { ...utils, campaignId };
+  }
+
+  it("два файла: клик по «База» раскрывает поповер с обоими именами, «Добавить файл» и ДВУМЯ кнопками «Удалить файл»", async () => {
+    renderBaseFilesPill([
+      { name: "clients.csv", rowCount: 12000 },
+      { name: "leads.csv", rowCount: 500 },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /база на 2 файлах/ }));
+    expect(await screen.findByText("clients.csv")).toBeInTheDocument();
+    expect(screen.getByText("leads.csv")).toBeInTheDocument();
+    expect(screen.getByText("+ Добавить файл")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Удалить файл:/ })).toHaveLength(2);
+  });
+
+  it("один файл: поповер показывает файл, но БЕЗ кнопки «Удалить файл» — последнюю базу снять нельзя", async () => {
+    renderBaseFilesPill([{ name: "clients.csv", rowCount: 12000 }]);
+    fireEvent.click(screen.getByRole("button", { name: /база на 2 файлах/ }));
+    expect(await screen.findByText("clients.csv")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Удалить файл:/ })).toBeNull();
+  });
+
+  // jsdom допускает подмену `input.files` через defineProperty + ручной
+  // fireEvent.change — стандартный RTL-приём для file-инпутов без реального
+  // системного пикера.
+  it("выбор файла в скрытом инпуте дописывает CampaignFile через campaign_file_added", async () => {
+    renderBaseFilesPill([{ name: "clients.csv", rowCount: 12000 }]);
+    fireEvent.click(screen.getByRole("button", { name: /база на 2 файлах/ }));
+    fireEvent.click(await screen.findByText("+ Добавить файл"));
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    const file = new File(["a,b\n1,2"], "extra.csv", { type: "text/csv" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    fireEvent.change(input);
+
+    expect(await screen.findByText("extra.csv")).toBeInTheDocument();
+    // Теперь два файла — «Удалить файл» доступно у обоих.
+    expect(screen.getAllByRole("button", { name: /^Удалить файл:/ })).toHaveLength(2);
+  });
+
+  it("клик по «Удалить файл» диспатчит campaign_file_removed по индексу и снимает строку из поповера", async () => {
+    renderBaseFilesPill([
+      { name: "clients.csv", rowCount: 12000 },
+      { name: "leads.csv", rowCount: 500 },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /база на 2 файлах/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить файл: leads.csv" }));
+    expect(screen.queryByText("leads.csv")).not.toBeInTheDocument();
+    expect(screen.getByText("clients.csv")).toBeInTheDocument();
+    // Остался один файл — кнопки удаления больше нет вовсе.
+    expect(screen.queryByRole("button", { name: /^Удалить файл:/ })).toBeNull();
   });
 });
