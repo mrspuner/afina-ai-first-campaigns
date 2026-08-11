@@ -424,21 +424,36 @@ const GROUP_STAGE: DescriptionStage = {
   ],
 };
 
-describe("таблица коммуникаций", () => {
-  it("рендерит канал, шаблон и контент строкой таблицы", () => {
+describe("коммуникации — текст-стори вместо таблицы (Task 9)", () => {
+  it("рендерит канал и пилюлю шаблона строкой — контента инлайн больше нет", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     expect(screen.getByText("Email")).toBeTruthy();
     expect(screen.getByText("Горячий оффер")).toBeTruthy();
-    expect(screen.getByText("Ваше предложение готово")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Предпросмотр/ })[0]).toBeInTheDocument();
   });
 
-  // Task 4: таблица лежит в обрамлённой панели — фон, обводка, скруглённые
-  // углы, overflow: hidden (иначе строки/шапка вылезали бы за радиус).
-  it("таблица лежит в обрамлённой панели", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const panel = container.querySelector("[data-testid='table-panel']") as HTMLElement;
-    expect(panel.className).toContain("rounded-[10px]");
-    expect(panel.className).toContain("overflow-hidden");
+  // Task 9: раньше содержимое сообщения («Ваше предложение готово», заголовок
+  // + текст push) выводилось прямо в ячейке таблицы (отдельной колонкой
+  // «Контент шаблона»). Теперь строка несёт только канал, пилюлю шаблона и
+  // кнопку предпросмотра — контент читается ТОЛЬКО через дровер, который
+  // открывает эта кнопка (👁), инлайн он не рендерится нигде.
+  it("контент сообщения (тема/текст) не рендерится инлайн — виден только через кнопку предпросмотра", () => {
+    const nodeParams = new Map<string, NodeParams>([
+      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
+    ]);
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} nodeParams={nodeParams} />);
+    expect(screen.queryByText("Ваше предложение готово")).toBeNull();
+    expect(screen.queryByText("Напоминание")).toBeNull();
+    expect(screen.queryByText("У нас есть кое-что для вас.")).toBeNull();
+    // Кнопка предпросмотра при этом есть у КАЖДОЙ строки (обе).
+    expect(screen.getAllByRole("button", { name: /предпросмотр/i })).toHaveLength(2);
+  });
+
+  // Task 9: коммуникации больше не таблица — ни `<table>`, ни `<thead>`, ни
+  // `role="table"` в дереве доступности для них не строится.
+  it("не рендерит таблицу — коммуникации теперь текст-стори", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    expect(screen.queryByRole("table")).toBeNull();
   });
 
   // Task 4: кнопка предпросмотра теряет видимую подпись «Предпросмотр», но не
@@ -451,56 +466,22 @@ describe("таблица коммуникаций", () => {
     expect(btn.getAttribute("title")).toMatch(/Предпросмотр/);
   });
 
-  it("контент без кавычек и без меток «Тема»/«Текст»", () => {
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const cell = screen.getByText("Ваше предложение готово");
-    expect(cell.textContent).not.toContain("«");
-    expect(cell.textContent).not.toContain("Тема:");
-  });
-
-  it("push показывает заголовок и текст двумя строками ячейки", () => {
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    expect(screen.getByText("Напоминание")).toBeTruthy();
-    expect(screen.getByText("У нас есть кое-что для вас.")).toBeTruthy();
-  });
-
-  // Финальное ревью: прежний вариант считал `<thead>` и требовал ровно один на
-  // шаг — визуально верно, но вторая и последующие ◈-таблицы оставались
-  // полностью НЕПОДПИСАННЫМИ сетками данных для скринридера. Тест переписан на
-  // то, что он на самом деле охраняет: ВИДИМАЯ шапка одна на шаг, у остальных
-  // таблиц шапка есть, но только для скринридера.
-  it("видимая шапка — одна на шаг; у последующих ◈-таблиц шапка только для скринридера", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const tables = [...container.querySelectorAll("table")];
-    expect(tables).toHaveLength(2);
-
-    const heads = tables.map((table) => table.querySelector("thead"));
-    // Ни одна таблица данных не остаётся без подписей колонок.
-    expect(heads.every((head) => head !== null)).toBe(true);
-    // Но видимая ровно одна — у первой группы; остальные скрыты визуально.
-    expect(heads[0]!.className).not.toContain("sr-only");
-    expect(heads.slice(1).every((head) => head!.className.includes("sr-only"))).toBe(true);
-  });
-
   /**
-   * Найдено глазами на живой карточке: русские имена шаблонов («Персональный
-   * оффер», «Push — возвращение») не влезали в колонку и переносились ВНУТРИ
-   * пилюли — та вырастала в два ряда и читалась крупным блоком-кнопкой, а не
-   * чипом строки. Замер на карточке: имя в одну строку требует до 178px, в
-   * колонке было 157px. Лечится парой — усечением у пилюли и шириной у
-   * колонки; порознь ни одно не даёт однострочного чипа.
+   * Найдено глазами на живой карточке (ещё в табличной вёрстке): русские
+   * имена шаблонов («Персональный оффер», «Push — возвращение») не влезали в
+   * колонку и переносились ВНУТРИ пилюли — та вырастала в два ряда и
+   * читалась крупным блоком-кнопкой, а не чипом строки. Механика усечения
+   * (правка 4) — общее свойство ЛЮБОЙ пилюли, а не табличная особенность, и
+   * остаётся в силе у пилюли строки текст-стори.
    */
-  // Правка 4 (владелец продукта, разбор живой карточки): потолок ширины стал
-  // символьным (`max-w-[20ch]`) и общим для ВСЕХ пилюль — раньше здесь была
-  // табличная особенность `max-w-full`, завязанная на ширину колонки.
-  it("пилюля шаблона в таблице усекается, а не переносится, и не вылезает из ячейки", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const pill = container.querySelector("tbody tr td:nth-child(2) > *") as HTMLElement;
-    const label = pill.querySelector("span") as HTMLElement;
+  it("пилюля шаблона в строке усекается, а не переносится", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const label = screen.getByText("Горячий оффер");
     expect(label.className).toContain("truncate");
     // Без min-w-0 флекс-элемент не сжимается уже своего содержимого, и
     // усечение не срабатывает вовсе.
     expect(label.className).toContain("min-w-0");
+    const pill = label.parentElement as HTMLElement;
     expect(pill.className).toContain("max-w-[20ch]");
   });
 
@@ -515,9 +496,9 @@ describe("таблица коммуникаций", () => {
   // быть табличной особенностью — это ТА ЖЕ механика у ЛЮБОЙ пилюли, включая
   // теги ПРОЗЫ (например, перечисление триггеров в «Скоринге базы»). Короткий
   // домен «a.ru» (4 симв.) не достигает потолка `max-w-[20ch]` и визуально не
-  // усекается, но несёт ТЕ ЖЕ классы механики, что и табличная пилюля выше —
+  // усекается, но несёт ТЕ ЖЕ классы механики, что и пилюля строки выше —
   // раньше (при флаге `truncateLabel`) их у прозы не было вовсе.
-  it("пилюля в прозе несёт ту же механику усечения, что и табличная", () => {
+  it("пилюля в прозе несёт ту же механику усечения, что и пилюля строки коммуникации", () => {
     const { container } = render(
       <WorkflowDescription
         stages={[
@@ -574,42 +555,10 @@ describe("таблица коммуникаций", () => {
     expect(pill.getAttribute("title")).toBe(longLabel);
   });
 
-  /**
-   * Ширины колонок — единственный источник на ВСЕ таблицы шага: `table-fixed`
-   * берёт их из первой строки СВОЕЙ таблицы, поэтому разъехавшийся `<colgroup>`
-   * сдвинул бы колонки таблицы повтора относительно таблицы касания. Task 4
-   * приводит ширины к макету (110px / 196px / авто / 52px) — кнопка стала
-   * квадратной иконкой без подписи, поэтому её колонка сузилась с 7rem/120px
-   * до 52px (28px кнопки + по 12px паддинга с каждой стороны).
-   */
-  it("colgroup одинаков у всех таблиц шага и несёт ширины макета", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const widths = [...container.querySelectorAll("table")].map((table) =>
-      [...table.querySelectorAll("col")].map((col) => col.className),
-    );
-    expect(widths).toHaveLength(2);
-    expect(widths[0]).toEqual(widths[1]);
-    expect(widths[0]).toEqual(["w-[110px]", "w-[196px]", "", "w-[52px]"]);
-  });
-
-  it("колонка предпросмотра прижимает кнопку к правому краю и не переносит подпись", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const cell = container.querySelector("tbody tr td:nth-child(4)") as HTMLElement;
-    expect(cell.className).toContain("text-right");
-    expect(cell.className).toContain("whitespace-nowrap");
-  });
-
-  it("ячейки шапки объявлены заголовками КОЛОНОК (scope=col)", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const ths = [...container.querySelectorAll("th")];
-    expect(ths.length).toBeGreaterThan(0);
-    expect(ths.every((th) => th.getAttribute("scope") === "col")).toBe(true);
-  });
-
   // Вторая половина того же зафиксированного решения (первая — в
-  // graph-description.test.ts): описание строку ОТДАЁТ, а таблица её РИСУЕТ —
-  // с пустой ячейкой контента, но с каналом и кнопкой предпросмотра.
-  it("строка с пустым контентом рисуется, а не пропускается таблицей", () => {
+  // graph-description.test.ts): описание строку ОТДАЁТ, а рендер её РИСУЕТ —
+  // без контента, но с каналом и кнопкой предпросмотра.
+  it("строка с пустым контентом рисуется, а не пропускается", () => {
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
@@ -621,10 +570,7 @@ describe("таблица коммуникаций", () => {
     const nodeParams = new Map<string, NodeParams>([
       ["n-empty", { kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" }],
     ]);
-    const { container } = wrap(
-      <WorkflowDescription stages={[stage]} nodeParams={nodeParams} />,
-    );
-    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    wrap(<WorkflowDescription stages={[stage]} nodeParams={nodeParams} />);
     expect(screen.getByText("SMS")).toBeTruthy();
     expect(screen.getByRole("button", { name: /предпросмотр/i })).toBeInTheDocument();
   });
@@ -645,7 +591,7 @@ describe("таблица коммуникаций", () => {
     expect(button.className).toContain("focus-visible:ring");
   });
 
-  it("◈-подзаголовок стоит над таблицей своей группы", () => {
+  it("◈-подзаголовок стоит над строками своей группы", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     expect(screen.getByText(/Высокая склонность/)).toBeTruthy();
     expect(screen.getByText(/Средняя склонность/)).toBeTruthy();
@@ -712,7 +658,7 @@ describe("таблица коммуникаций", () => {
  * описании, человекочитаем). `groupLabel` добавляется поверх для НАСТОЯЩИХ
  * развилок — обе причины дублей закрыты независимо друг от друга.
  */
-describe("таблица коммуникаций — уникальный aria-label кнопки предпросмотра (Task 9)", () => {
+describe("коммуникации — уникальный aria-label кнопки предпросмотра (Task 9)", () => {
   it("реальный случай (Апсейл): касание + повтор с той же таблицей — все ярлыки предпросмотра различны", () => {
     // Та же фикстура, что использует campaign-screen.test.tsx (draftCampaign):
     // Апсейл, канал sms, sourceType "new" — реальный `describeWorkflow`, а не
@@ -931,7 +877,7 @@ describe("таблица коммуникаций — уникальный aria-
   });
 });
 
-describe("таблица коммуникаций — кнопка предпросмотра открывает дровер", () => {
+describe("коммуникации — кнопка предпросмотра открывает дровер", () => {
   // `TemplatePreviewDrawer` смонтирован рядом — тот же приём, что
   // `template-preview-drawer.test.tsx` использует для «глаза» ноды: клик по
   // кнопке диспатчит через `useChat()`, а сам дровер читает диспатченное
@@ -968,9 +914,9 @@ describe("таблица коммуникаций — кнопка предпр�
     fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
     const drawer = screen.getByTestId("template-preview-drawer");
     expect(drawer).toBeInTheDocument();
-    // Скоуп на дровер: та же строка «Ваше предложение ждёт…» лежит ЕЩЁ и в
-    // ячейке таблицы позади дровера — screen.getByText без within нашёл бы
-    // ДВА узла и упал бы с «multiple elements found».
+    // Скоуп на дровер: содержимое сообщения (Task 9) больше не дублируется
+    // инлайн в строке коммуникации, но within() остаётся defensive-паттерном
+    // на случай, если дровер и строка когда-нибудь снова покажут один текст.
     expect(
       within(drawer).getByText("Ваше предложение ждёт. Подробности на сайте."),
     ).toBeInTheDocument();
@@ -1011,8 +957,7 @@ describe("таблица коммуникаций — кнопка предпр�
     fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
     const drawer = screen.getByTestId("template-preview-drawer");
     expect(drawer).toBeInTheDocument();
-    // Скоуп на дровер — та же причина, что и в тесте выше: контент строки
-    // таблицы («У нас есть кое-что для вас.») дублируется дровером поверх неё.
+    // Скоуп на дровер — та же defensive-причина, что и в тесте выше.
     expect(within(drawer).getByText("У нас есть кое-что для вас.")).toBeInTheDocument();
     // `nodePreviewTemplate` метит синтетический шаблон usedInCampaigns: 1 —
     // без записи в библиотеке «Сохранить» списало бы правку в несуществующий
@@ -1022,19 +967,19 @@ describe("таблица коммуникаций — кнопка предпр�
 });
 
 /**
- * Покрытие `nodeTypeForTag` внутри таблицы (Task 8 явно просит его вернуть —
- * прошлая задача сняла юнит-покрытие этой функции, т.к. живого пути к ней не
- * было; таблица — этот путь). Пилюля шаблона строки (`target.kind:"template"`)
- * красится под `NODE_STYLES` СВОЕГО канала — не общим цветом, не нейтральным —
- * подтверждаем на ДВУХ разных каналах в одной таблице, чтобы исключить
- * совпадение по случайности/дефолту.
+ * Покрытие `nodeTypeForTag` внутри строки коммуникации (Task 8 явно просит
+ * его вернуть — прошлая задача сняла юнит-покрытие этой функции, т.к. живого
+ * пути к ней не было; строка коммуникации — этот путь). Пилюля шаблона строки
+ * (`target.kind:"template"`) красится под `NODE_STYLES` СВОЕГО канала — не
+ * общим цветом, не нейтральным — подтверждаем на ДВУХ разных каналах в одной
+ * группе, чтобы исключить совпадение по случайности/дефолту.
  */
 function hexToRgb(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 }
 
-describe("таблица коммуникаций — пилюля шаблона красится под цвет узла (nodeTypeForTag)", () => {
+describe("коммуникации — пилюля шаблона красится под цвет узла (nodeTypeForTag)", () => {
   it("email- и push-строки красятся разными цветами своих каналов, а не нейтрально", () => {
     const stage: DescriptionStage = {
       id: "touch-1",
