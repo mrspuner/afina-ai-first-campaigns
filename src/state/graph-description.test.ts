@@ -1011,6 +1011,13 @@ describe("describeWorkflow — теги", () => {
     const ids = allTags(describeWorkflow(graph, templates, facts)).map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it("каждый этап несёт block: signal | communication | outcome", () => {
+    const stages = describeWorkflow(graph, templates, facts);
+    expect(stages.find((s) => s.id === "start")?.block).toBe("signal");
+    expect(stages.find((s) => s.kind === "touch")?.block).toBe("communication");
+    expect(stages.find((s) => s.id === "outcome")?.block).toBe("outcome");
+  });
 });
 
 describe("describeWorkflow — пилюля шаблона рендерится ВСЕГДА (баг: аффорданс «сменить шаблон» пропадал, если текущий текст ноды случайно не совпал с пресетом библиотеки)", () => {

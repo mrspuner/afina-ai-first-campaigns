@@ -114,6 +114,8 @@ export interface DescriptionSetting {
 export interface DescriptionStage {
   id: string;
   kind: DescriptionStageKind;
+  /** Верхнеуровневый блок карточки, куда попадает этап. */
+  block: "signal" | "communication" | "outcome";
   /** Заголовок БЕЗ точки — номер шага добавляет рендер. */
   heading: string;
   body: DescriptionSegment[];
@@ -614,6 +616,7 @@ export function describeWorkflow(
   stages.push({
     id: "start",
     kind: "start",
+    block: "signal",
     heading: hasScoring ? "Скоринг базы" : "Загрузка базы",
     body: mergeTextSegments([t(startBody), ...domainSegments]),
     ...(settings.length ? { settings } : {}),
@@ -666,6 +669,7 @@ export function describeWorkflow(
       stages.push({
         id: `check-${checkOrdinal}`,
         kind: "check",
+        block: "communication",
         heading: "Проверка реакции",
         body: [
           t(
@@ -706,6 +710,7 @@ export function describeWorkflow(
       stages.push({
         id: `retry-${retryOrdinal}`,
         kind: "retry",
+        block: "communication",
         heading: "Пауза и повтор",
         body: mergeTextSegments(
           waitTag
@@ -783,6 +788,7 @@ export function describeWorkflow(
     stages.push({
       id: isFork ? `fork-${++forkOrdinal}` : `touch-${touchOrdinal}`,
       kind: isFork ? "fork" : "touch",
+      block: "communication",
       heading,
       // Вводная про каналы — у первой волны любого вида, перед её собственной
       // фразой.
@@ -798,6 +804,7 @@ export function describeWorkflow(
   stages.push({
     id: "outcome",
     kind: "outcome",
+    block: "outcome",
     heading: "Итог",
     body: [
       t(
