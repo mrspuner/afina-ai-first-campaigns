@@ -33,6 +33,11 @@ function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): Work
 // будущую таблицу. Своё покрытие для `groups`/таблиц заводит Task 8 — на новой
 // разметке, а не здесь.
 
+// Task 8: описание группируется по верхнеуровневым блокам. Реалистичный вывод
+// `describeWorkflow` для этих тестов — сигнальный титул (его собственный
+// заголовок поглощается заголовком блока), два нумерованных коммуникационных
+// шага и закрывающая строка блока (пустой heading). Блока «Итог» здесь нет —
+// денежный «Итог» рисует экран кампании.
 const STAGES: DescriptionStage[] = [
   {
     id: "start",
@@ -53,10 +58,17 @@ const STAGES: DescriptionStage[] = [
     body: t("Каждому контакту уходит первое сообщение:"),
   },
   {
-    id: "outcome",
+    id: "check-1",
+    kind: "check",
+    block: "communication",
+    heading: "Проверка реакции",
+    body: t("Кто отреагировал — уходит в успех."),
+  },
+  {
+    id: "comm-close",
     kind: "outcome",
-    block: "outcome",
-    heading: "Итог",
+    block: "communication",
+    heading: "",
     body: t("Остальные завершают путь без конверсии."),
   },
 ];
@@ -82,10 +94,17 @@ describe("WorkflowDescription", () => {
   });
 
   describe("текст описания", () => {
-    it("показывает подзаголовок и тело каждого этапа", () => {
+    it("показывает подзаголовки коммуникационных шагов и тело каждого этапа", () => {
       render(<WorkflowDescription stages={STAGES} />);
+      // Заголовки нумерованных коммуникационных под-шагов рендерятся жирным.
+      expect(screen.getByText("Первое касание")).toBeTruthy();
+      expect(screen.getByText("Проверка реакции")).toBeTruthy();
+      // Заголовок сигнального титула поглощён заголовком блока «Сигнал
+      // (Скоринг)» — своим подзаголовком не дублируется.
+      expect(screen.queryByText("Скоринг базы")).toBeNull();
+      // Тело КАЖДОГО этапа (включая сигнальный титул и закрывающую строку)
+      // присутствует — сегменты односегментные, поэтому getByText находит их.
       for (const stage of STAGES) {
-        expect(screen.getByText(stage.heading)).toBeTruthy();
         expect(screen.getByText(segmentsText(stage.body))).toBeTruthy();
       }
     });
@@ -101,8 +120,8 @@ describe("WorkflowDescription", () => {
     // у React нет ни одного текстового узла с полным текстом — getByText(fullString)
     // здесь не найдёт ничего, и это ловушка для Task 4/5. Проверяем через
     // textContent параграфа ТЕЛА, а не getByText — рабочий паттерн для тех
-    // задач. Заголовок теперь на своей строке (Task 7) в ОТДЕЛЬНОМ <p>, поэтому
-    // берём второй <p> этапа, а не первый целиком.
+    // задач. Сигнальный титул (Task 8) поглощён заголовком блока: своего
+    // подзаголовка-<p> у него больше нет, поэтому тело — ПЕРВЫЙ <p> этапа.
     it("несколько сегментов body (текст+тег+текст) склеиваются в один textContent", () => {
       const stages: DescriptionStage[] = [
         {
@@ -120,7 +139,7 @@ describe("WorkflowDescription", () => {
 
       const { container } = render(<WorkflowDescription stages={stages} />);
       const paragraphs = container.querySelectorAll("p");
-      expect(paragraphs[1].textContent).toBe("Домены a.ru, b.ru отправлены на модерацию.");
+      expect(paragraphs[0].textContent).toBe("Домены a.ru, b.ru отправлены на модерацию.");
 
       // Ловушка задокументирована: getByText на полную склеенную строку не
       // находит ничего, потому что текст разбит по нескольким <span>.
@@ -128,6 +147,43 @@ describe("WorkflowDescription", () => {
         screen.queryByText("Домены a.ru, b.ru отправлены на модерацию."),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("верхнеуровневые блоки описания (Task 8)", () => {
+  it("группирует этапы в блоки «Сигнал (Скоринг)» и «Коммуникации», без блока «Итог»", () => {
+    render(<WorkflowDescription stages={STAGES} />);
+    expect(screen.getByText("Сигнал (Скоринг)")).toBeTruthy();
+    expect(screen.getByText("Коммуникации")).toBeTruthy();
+    // Денежный «Итог» рисует ЭКРАН кампании, а не это описание — заголовка
+    // блока «Итог» здесь быть не должно.
+    expect(screen.queryByText("Итог")).toBeNull();
+  });
+
+  it("блок рисуется только при наличии этапов — без коммуникаций нет заголовка «Коммуникации»", () => {
+    const signalOnly: DescriptionStage[] = [
+      { id: "start", kind: "start", block: "signal", heading: "Загрузка базы", body: t("База загружена.") },
+      { id: "signal-close", kind: "outcome", block: "signal", heading: "", body: t("На выходе — готовый сегмент.") },
+    ];
+    render(<WorkflowDescription stages={signalOnly} />);
+    expect(screen.getByText("Сигнал (Скоринг)")).toBeTruthy();
+    expect(screen.queryByText("Коммуникации")).toBeNull();
+  });
+
+  it("этап с пустым heading рендерит тело обычным абзацем — без бейджа-номера", () => {
+    const stages: DescriptionStage[] = [
+      { id: "touch-1", kind: "touch", block: "communication", heading: "Первое касание", body: t("Уходит первое сообщение.") },
+      { id: "comm-close", kind: "outcome", block: "communication", heading: "", body: t("Остальные завершают путь без конверсии.") },
+    ];
+    const { container } = render(<WorkflowDescription stages={stages} />);
+    // Текст закрывающего этапа присутствует, лежит в обычном <p>...
+    const closingText = screen.getByText("Остальные завершают путь без конверсии.");
+    expect(closingText.closest("p")?.tagName).toBe("P");
+    // ...и не сидит в <li> нумерованного шага (значит, без бейджа и рельса).
+    expect(closingText.closest("li")).toBeNull();
+    // Единственный бейдж-номер — у «Первого касания»; у закрывающей строки его нет.
+    const numbers = [...container.querySelectorAll("[data-testid='stage-number']")].map((n) => n.textContent);
+    expect(numbers).toEqual(["1"]);
   });
 });
 
@@ -210,10 +266,14 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
 });
 
 describe("нумерованный таймлайн", () => {
-  it("нумерует шаги по порядку", () => {
+  // Нумерация перезапускается внутри блока и считает ТОЛЬКО нумерованные
+  // (непустой heading) под-шаги. У STAGES в блоке «Коммуникации» их два
+  // (касание + проверка); сигнальный титул поглощён заголовком блока, а
+  // закрывающая строка бейджа не несёт — итого два бейджа.
+  it("нумерует шаги по порядку внутри блока", () => {
     const { container } = render(<WorkflowDescription stages={STAGES} />);
     const numbers = [...container.querySelectorAll("[data-testid='stage-number']")].map((n) => n.textContent);
-    expect(numbers).toEqual(["1", "2", "3"]);
+    expect(numbers).toEqual(["1", "2"]);
   });
 
   // Task 4: номер шага — кружок-бейдж (Ø28px), а не плоская цифра на левом
@@ -231,10 +291,11 @@ describe("нумерованный таймлайн", () => {
     expect(container.querySelector("[data-testid='stage-rail']")).toBeTruthy();
   });
 
-  // Соединять нечего — линия рисуется ТОЛЬКО между соседними бейджами.
+  // Соединять нечего — линия рисуется ТОЛЬКО между соседними нумерованными
+  // под-шагами блока. Одинокий нумерованный шаг рельса не даёт.
   it("одинокий шаг линии не рисует", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", block: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "touch", block: "communication", heading: "Первое касание", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-rail']")).toBeNull();
   });
@@ -246,19 +307,21 @@ describe("нумерованный таймлайн", () => {
   // соседний `<span>`). Тест не отличал run-in от блочной структуры — ровно
   // то, ради чего он написан. Теперь утверждаем БЛОЧНУЮ структуру: заголовок
   // — СВОЙ `<p>` (а не `<strong>` внутри чужого), и тело живёт в СЛЕДУЮЩЕМ
-  // соседнем `<p>` — не в том же узле, что заголовок.
+  // соседнем `<p>` — не в том же узле, что заголовок. Проверяем на
+  // нумерованном коммуникационном под-шаге: у него есть свой подзаголовок (у
+  // сигнального титула он поглощён заголовком блока — Task 8).
   it("заголовок шага — на своей строке, а не вклеен в абзац", () => {
     render(<WorkflowDescription stages={STAGES} />);
-    const heading = screen.getByText("Скоринг базы");
+    const heading = screen.getByText("Первое касание");
     const headingParagraph = heading.closest("p");
     // textContent строго равен заголовку — если бы тело было приклеено в тот
     // же <p> (run-in), здесь оказался бы ещё и текст тела.
     expect(headingParagraph?.tagName).toBe("P");
-    expect(headingParagraph?.textContent).toBe("Скоринг базы");
+    expect(headingParagraph?.textContent).toBe("Первое касание");
 
     const bodyParagraph = headingParagraph?.nextElementSibling;
     expect(bodyParagraph?.tagName).toBe("P");
-    expect(bodyParagraph?.textContent).toBe("Загруженная база проходит скоринг.");
+    expect(bodyParagraph?.textContent).toBe("Каждому контакту уходит первое сообщение:");
   });
 
   // Ревью (fix round): исходный вариант проверял лишь присутствие подписи и
@@ -282,7 +345,7 @@ describe("нумерованный таймлайн", () => {
 
   it("шаг без настроек не рендерит пустой список", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", block: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "touch", block: "communication", heading: "Первое касание", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-settings']")).toBeNull();
   });
@@ -472,7 +535,9 @@ describe("таблица коммуникаций", () => {
         ]}
       />,
     );
-    const prose = container.querySelectorAll("p")[1];
+    // Сигнальный титул (Task 8) поглощён заголовком блока — тело этапа
+    // теперь ПЕРВЫЙ <p>, отдельного подзаголовка-<p> над ним больше нет.
+    const prose = container.querySelectorAll("p")[0];
     expect(prose.textContent).toContain("a.ru");
     expect(prose.innerHTML).toContain("truncate");
     expect(prose.innerHTML).toContain("max-w-[20ch]");
