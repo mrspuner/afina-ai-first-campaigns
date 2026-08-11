@@ -199,7 +199,10 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
       sourceType: "stream",
       wizardData: undefined,
     });
-    expect(screen.getByText("потоковый")).toBeInTheDocument();
+    // Режим анализа больше не дублируется строкой настроек — единственный
+    // источник теперь хедерная пилюля каденса (CardTag), которая берётся
+    // напрямую из campaignCadenceLabel(sourceType).
+    expect(screen.getByText("Потоковая")).toBeInTheDocument();
   });
 
   it("у запущенной кампании теги показывают значения, но не кликаются", () => {
