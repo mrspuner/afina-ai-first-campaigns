@@ -125,19 +125,19 @@ describe("describeWorkflow", () => {
       expect(segmentsText(start.body)).toContain("сверяются с сигналами");
     });
 
-    it("выносит факты кампании в список настроек, в фиксированном порядке", () => {
+    it("выносит факты кампании в список настроек, в фиксированном порядке — сценарий/режим/бюджет туда не попадают (Task 7)", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
         pending: [], baseRows: 186255, scenarioName: "Win-back оффер",
         triggers: ["Вклады", "Рассрочка", "Авто", "Ипотека", "Карты"],
         analysisMode: "once", budget: 571186, editableSteps: [],
       });
       const start = stages.find((s) => s.kind === "start")!;
-      expect(start.settings!.map((s) => s.label)).toEqual([
-        "База", "Сценарий", "Триггеры", "Режим", "Бюджет",
-      ]);
+      // Сценарий/режим/бюджет присутствуют в фактах, но не рендерятся здесь:
+      // сценарий и режим — identity шапки карточки кампании, бюджет — в
+      // блоке «Итог» (Task 7).
+      expect(start.settings!.map((s) => s.label)).toEqual(["База", "Триггеры"]);
       expect(segmentsText(start.settings![0].value)).toBe("186 255 строк");
-      expect(segmentsText(start.settings![3].value)).toBe("разовый");
-      expect(segmentsText(start.settings![2].value)).toBe("Вклады, Рассрочка и ещё 3 триггерам");
+      expect(segmentsText(start.settings![1].value)).toBe("Вклады, Рассрочка и ещё 3 триггерам");
     });
 
     it("пункт не появляется, если факта нет", () => {
@@ -1065,14 +1065,22 @@ describe("describeWorkflow — теги", () => {
     expect(tags).toHaveLength(0);
   });
 
-  it("число строк базы, каналы, бюджет, режим и сценарий присутствуют тегами", () => {
+  it("число строк базы, каналы и триггеры присутствуют тегами", () => {
     const tags = allTags(describeWorkflow(graph, templates, facts));
     const steps = tags
       .filter((t) => t.target.kind === "wizard-step")
       .map((t) => (t.target as { step: string }).step);
-    expect(steps).toEqual(
-      expect.arrayContaining(["file", "interests", "channels", "budget", "analysis", "scenario"]),
-    );
+    expect(steps).toEqual(expect.arrayContaining(["file", "interests", "channels"]));
+  });
+
+  it("настройки скоринга не содержат сценарий/режим/бюджет", () => {
+    const stages = describeWorkflow(graph, templates, facts);
+    const start = stages.find((s) => s.id === "start")!;
+    const ids = (start.settings ?? []).map((s) => s.id);
+    expect(ids).not.toContain("start-scenario");
+    expect(ids).not.toContain("start-mode");
+    expect(ids).not.toContain("start-budget");
+    expect(ids).toContain("start-triggers");
   });
 
   it("перечисление триггеров — два названных плюс схлопка с формой числительного", () => {
@@ -1106,19 +1114,9 @@ describe("describeWorkflow — теги", () => {
     // toLocaleString("ru-RU") группирует разряды через NBSP (U+00A0), не через
     // обычный пробел — используем ту же букву, что реально возвращает форматтер
     // (сверено эмпирически; ASCII-пробел в буквальном тексте брифа не совпал бы).
-    expect(tags.some((t) => t.label.includes("50 000"))).toBe(true);
-  });
-
-  it("шаг, отсутствующий у этой цели, тега не даёт", () => {
-    // Собственная база: шагов «Режим» и «Интересы» в её визарде не существует.
-    const tags = allTags(
-      describeWorkflow(graph, templates, {
-        ...facts,
-        analysisMode: undefined,
-        editableSteps: ["scenario", "intent", "file", "channels", "budget"],
-      }),
-    );
-    expect(tags.some((t) => t.label === "разовый")).toBe(false);
+    // Task 7: бюджет (был «50 000») больше не рендерится тут вовсе (переехал
+    // в «Итог»), поэтому носитель значения проверяем на строках базы.
+    expect(tags.some((t) => t.label.includes("12 000"))).toBe(true);
   });
 
   it("отсутствующее значение тега не даёт, текст остаётся связным", () => {

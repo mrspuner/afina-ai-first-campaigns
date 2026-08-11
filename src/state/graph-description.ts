@@ -1,6 +1,5 @@
 import type { NodeParams, WorkflowEdge, WorkflowNode } from "@/types/workflow";
 import { pluralRu } from "@/lib/plural-ru";
-import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
 import { segmentWaves, type Wave } from "./graph-waves";
 import { conditionBranchLabel, conditionQuestionLabel } from "./node-sublabel";
@@ -535,8 +534,10 @@ export function describeWorkflow(
 
   // Факты кампании — раньше вплетались инлайн в одно длинное предложение
   // старта, теперь каждый факт — свой пункт «подпись — значение» (Task 4).
-  // Порядок фиксирован: База, Сценарий, Триггеры, Режим, Бюджет. Id тегов
-  // внутри значений не меняются — на них ссылаются существующие клики/тесты.
+  // Порядок фиксирован: База, Триггеры. Сценарий и режим переехали в шапку
+  // карточки кампании (identity, read-only), бюджет — в блок «Итог» (Task 7);
+  // ни один из них тут больше не рендерится. Id тегов внутри значений не
+  // меняются — на них ссылаются существующие клики/тесты.
   const settings: DescriptionSetting[] = [];
 
   if (hasBase) {
@@ -554,45 +555,8 @@ export function describeWorkflow(
     });
   }
 
-  if (facts?.scenarioName !== undefined) {
-    settings.push({
-      id: "start-scenario",
-      label: "Сценарий",
-      value: [stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps)],
-    });
-  }
-
   if (hasTriggers) {
     settings.push({ id: "start-triggers", label: "Триггеры", value: triggerTagList() });
-  }
-
-  // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
-  // не приходит вовсе, и пункт не появляется.
-  if (facts?.analysisMode !== undefined) {
-    settings.push({
-      id: "start-mode",
-      label: "Режим",
-      value: [
-        stepTag(
-          "start-mode",
-          facts.analysisMode === "once" ? "разовый" : "потоковый",
-          "analysis",
-          editableSteps,
-        ),
-      ],
-    });
-  }
-
-  // Бюджет переехал сюда из «Итога» (review round 1, Finding 2) — там он был
-  // спайкой на конце предложения о конверсии, к которой отношения не имеет.
-  // Id `outcome-budget` СТАРШЕ переезда и оставлен как есть по историческим
-  // причинам — на него ссылаются существующие тесты/клики.
-  if (facts?.budget !== undefined) {
-    settings.push({
-      id: "start-budget",
-      label: "Бюджет",
-      value: [stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps)],
-    });
   }
 
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
