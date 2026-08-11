@@ -55,6 +55,20 @@ describe("registry — node-context", () => {
     }
   }
 
+  describe("scoring node-context", () => {
+    it("отдаёт подсказки для целого узла скоринга", () => {
+      const items = resolveSuggestions({ kind: "node-context", nodeType: "scoring" });
+      expect(items.length).toBeGreaterThan(0);
+      expect(items.map((i) => i.label)).toContain("Сузить аудиторию");
+    });
+    it("отдаёт подсказки для параметра «Триггеры»", () => {
+      const items = resolveSuggestions({
+        kind: "node-context", nodeType: "scoring", paramLabel: "Триггеры",
+      });
+      expect(items.some((i) => i.action.kind === "submit")).toBe(true);
+    });
+  });
+
   it("unknown nodeType → GENERIC fallback", () => {
     assertValid(
       resolveSuggestions({ kind: "node-context", nodeType: "default" as WorkflowNodeType }),
