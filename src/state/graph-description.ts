@@ -686,9 +686,21 @@ export function describeWorkflow(
       // тем же адресом правки (§2.12). Иначе (следующий шаг — что угодно
       // другое) проверка остаётся простой, а свою паузу повторная волна, если
       // она есть где-то дальше, расскажет сама.
+      //
+      // Слияние обязано ещё и совпасть с тем, что «съест» цикл ниже: волна с
+      // пустыми `groups` (нет ни одной сконфигурированной строки рассылки)
+      // пропускается там через `continue` ДО чтения/гашения
+      // `pauseMergedIntoCheck` (строка `if (!groups.length) continue;`) — то
+      // есть флаг не сбросится и ошибочно достанется следующей волне-повтору
+      // дальше по графу. Поэтому здесь дополнительно требуем, чтобы волна
+      // реально отрендерилась: «сольём» и «отрендерится» не должны расходиться.
       const next = steps[stepIndex + 1];
       let pauseTag: DescriptionTag | undefined;
-      if (next?.kind === "wave" && next.wave.repeatsPrevious) {
+      if (
+        next?.kind === "wave" &&
+        next.wave.repeatsPrevious &&
+        (groupsByWave.get(next.wave.id)?.length ?? 0) > 0
+      ) {
         const waitNode = next.wave.waitBefore;
         const waitParams = waitNode?.data.params;
         if (waitNode && waitParams?.kind === "wait") {
