@@ -170,6 +170,16 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
+
+  it("блок денег называется «Итог» и несёт денежную подводку (spec §6)", () => {
+    renderCampaign(baseCampaign({ id: "cmp_itog", channels: ["sms"] }));
+    // Черновик: денежный блок «Итог» (бывший «Запуск») + подводка + «К оплате».
+    expect(screen.getByText("Итог")).toBeInTheDocument();
+    expect(
+      screen.getByText(/списывается во время запуска/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("К оплате")).toBeInTheDocument();
+  });
 });
 
 describe("CampaignScreen — CampaignFacts на карточке, нодо-блоки сняты (Task 6)", () => {

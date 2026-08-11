@@ -419,7 +419,10 @@ export function CampaignScreen() {
           </p>
         </CardSection>
       ) : showLaunch ? (
-        <CardSection label="Запуск">
+        // Черновик → денежный блок «Итог» (слитый бывший «Запуск», spec §6):
+        // таблица денег + «К оплате». Пауза сохраняет ярлык «Запуск» (там
+        // «Возобновить», без оплаты).
+        <CardSection label={status === "paused" ? "Запуск" : "Итог"}>
           {status === "paused" ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
@@ -437,9 +440,11 @@ export function CampaignScreen() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
+              {/* Денежная подводка (spec §6): не конверсионный нарратив (он
+                  закрывает блок «Коммуникации»), а «за что платите». */}
               <p className="text-sm text-muted-foreground">
-                Запустите кампанию — провайдеры начнут подключаться после
-                оплаты.
+                За что платите: скоринг базы и коммуникации. Списывается во
+                время запуска.
               </p>
               {/* Прогноз касаний — та же оценка (estimateTouches), что и на
                   экране оплаты, на рекомендуемой сумме. */}
