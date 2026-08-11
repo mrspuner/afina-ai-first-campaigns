@@ -6,7 +6,12 @@ import {
   AppStateProvider,
   useAppDispatch,
 } from "@/state/app-state-context";
-import { PromptChipsProvider } from "@/state/prompt-chips-context";
+import {
+  PromptChipsProvider,
+  usePromptChips,
+  isNodeTagPayload,
+  type PromptChip,
+} from "@/state/prompt-chips-context";
 import { ChatProvider } from "@/state/chat-context";
 import type { Campaign, MessageTemplate, Preset } from "@/state/app-state";
 import { initialStepData } from "@/types/campaign";
@@ -84,7 +89,21 @@ function Harness({
   return <CampaignScreen />;
 }
 
-function renderCampaign(campaign: Campaign, extraTemplates?: MessageTemplate[]) {
+/** Task 11: reads the live prompt-chips list out of the real PromptChipsProvider
+ *  tree and mirrors it onto `chipsRef.current` — writing during render (not an
+ *  effect) so the ref is already current by the time a synchronous
+ *  `fireEvent.click` in the test returns, no `act()`/`waitFor` needed. */
+function ChipsProbe({ chipsRef }: { chipsRef: { current: readonly PromptChip[] } }) {
+  const { chips } = usePromptChips();
+  chipsRef.current = chips;
+  return null;
+}
+
+function renderCampaign(
+  campaign: Campaign,
+  extraTemplates?: MessageTemplate[],
+  chipsRef?: { current: readonly PromptChip[] },
+) {
   return render(
     <AppStateProvider>
       {/* WorkflowNodeComponent reads usePromptChips() (spec B #2 close→cleanup);
@@ -93,6 +112,7 @@ function renderCampaign(campaign: Campaign, extraTemplates?: MessageTemplate[]) 
           canvas) reads useChat() too; mirrors the real app tree. */}
       <PromptChipsProvider>
         <ChatProvider>
+          {chipsRef && <ChipsProbe chipsRef={chipsRef} />}
           <Harness campaign={campaign} extraTemplates={extraTemplates} />
         </ChatProvider>
       </PromptChipsProvider>
@@ -283,18 +303,46 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     expect(screen.queryByRole("button", { name: /^Изменить шаблон/ })).toBeNull();
   });
 
-  // Task 2: клик по тегу-настройке больше не диспатчит сразу — раскрывает
-  // поповер «Изменить», и уже кнопка внутри него зовёт активацию. Тест
-  // по-прежнему обязан поймать ТОТ ЖЕ диспатч и уход с карточки — просто
-  // клик по кнопке подтверждения добавлен ПЕРЕД проверкой.
-  it("клик по кликабельному тегу раскрывает поповер, а «Изменить» диспатчит campaign_step_edit_requested и уводит с карточки", async () => {
-    renderCampaign(draftCampaign);
+  // Task 11 (было Task 2): клик по тегу-настройке раскрывает поповер
+  // «Изменить», и уже кнопка внутри него зовёт активацию — это не изменилось.
+  // Изменилась САМА активация для входов скоринга («База»/«Триггеры»): раньше
+  // она диспатчила campaign_step_edit_requested и уводила с карточки в
+  // изолированный шаг визарда; теперь она кладёт в промпт-бар node-чип узла
+  // скоринга и карточка остаётся смонтированной (толкать чип и одновременно
+  // уходить с карточки бессмысленно — useScopeReset стирает чипы при смене
+  // view, так что чип пережил бы переход на долю секунды и тут же исчез).
+  it("клик по тегу «База» кладёт скоринговый чип (paramLabel «База») вместо ухода с карточки", async () => {
+    const chipsRef: { current: readonly PromptChip[] } = { current: [] };
+    renderCampaign(draftCampaign, undefined, chipsRef);
     fireEvent.click(screen.getByRole("button", { name: /строк/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    // campaign_step_edit_requested меняет view на "guided-campaign" —
-    // CampaignScreen перестаёт видеть кампанию как view.kind==="campaign" и
-    // рендерит null (карточка снята, изолированный шаг визарда открыт).
-    expect(screen.queryByText("Сценарий кампании")).not.toBeInTheDocument();
+    // Карточка НЕ снята: старое поведение (campaign_step_edit_requested) меняло
+    // view на "guided-campaign", и CampaignScreen рендерил null.
+    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
+    const chip = chipsRef.current.find((c) => c.kind === "node");
+    expect(chip).toBeDefined();
+    expect(isNodeTagPayload(chip!.payload)).toBe(true);
+    const payload = chip!.payload as { nodeType: string; paramLabel?: string };
+    expect(payload.nodeType).toBe("scoring");
+    expect(payload.paramLabel).toBe("База");
+  });
+
+  it("клик по тегу «Триггеры» кладёт скоринговый чип (paramLabel «Триггеры») вместо ухода с карточки", async () => {
+    const chipsRef: { current: readonly PromptChip[] } = { current: [] };
+    renderCampaign(draftCampaign, undefined, chipsRef);
+    // draftCampaign.triggers = ["Ипотека"] → единственная пилюля перечисления
+    // (start-trigger-0), короткая метка совпадает со входным лейблом — сам
+    // триггер не найден в SHORT_LABEL_BY_LABEL (тот ключуется полными
+    // формулировками триггеров вертикалей, не брендовыми именами), поэтому
+    // getTriggerShortLabel возвращает вход как есть.
+    fireEvent.click(screen.getByRole("button", { name: "Ипотека" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
+    const chip = chipsRef.current.find((c) => c.kind === "node");
+    expect(chip).toBeDefined();
+    const payload = chip!.payload as { nodeType: string; paramLabel?: string };
+    expect(payload.nodeType).toBe("scoring");
+    expect(payload.paramLabel).toBe("Триггеры");
   });
 
   it("красит пилюлю шаблона под цвет sms-узла графа, а не оставляет её нейтральной", () => {

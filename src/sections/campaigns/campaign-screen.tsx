@@ -15,6 +15,7 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
+import { NODE_STYLES } from "./node-visuals";
 import {
   describeWorkflow,
   type CampaignFacts,
@@ -186,6 +187,14 @@ export function CampaignScreen() {
       .map((n) => [n.id, n.data.params as NodeParams]),
   );
 
+  // id узла скоринга — цель чипа скорингового контекста (Task 11): клик по
+  // пилюле «Триггеры»/«База» больше не уводит с карточки, а кладёт в
+  // промпт-бар чип, который select-prompt-suggestions резолвит в
+  // node-context(scoring, paramLabel) и показывает скоринговые подсказки.
+  const scoringNodeId = launchGraph?.nodes.find(
+    (n) => n.data.nodeType === "scoring",
+  )?.id;
+
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
 
@@ -249,14 +258,48 @@ export function CampaignScreen() {
     });
   }
 
-  // Клик по пилюле в описании: только цель wizard-step уводит с карточки — в
-  // изолированный режим правки одного шага (Task 11). Поповерные цели
-  // (шаблон/поля ноды/домены) обрабатываются внутри самой пилюли (Task 7–8),
-  // сюда доходят только wizard-step клики; «носители значений» (target:
-  // "none" — запущенная кампания или шаг вне визарда её intent) клика вообще
-  // не поднимают — resolveVisual/DescriptionTagPill не делает их кнопкой.
+  // Чип скорингового контекста (Task 11): «Триггеры»/«База» больше НЕ уводят
+  // с карточки в изолированный шаг визарда — вместо этого в промпт-бар летит
+  // node-чип узла скоринга с paramLabel, и select-prompt-suggestions подменяет
+  // подсказки на скоринговые (каталог node-context.ts несёт записи именно под
+  // эти paramLabel). Без узла скоринга в графе — тихий no-op (нечего таргетить).
+  function pushScoringContext(paramLabel: "База" | "Интересы" | "Триггеры") {
+    if (!scoringNodeId) return;
+    pushChip({
+      id: `nodefield_${scoringNodeId}_${paramLabel}`,
+      kind: "node",
+      label: paramLabel,
+      payload: {
+        nodeId: scoringNodeId,
+        nodeType: "scoring",
+        color: NODE_STYLES.scoring.color,
+        paramLabel,
+      },
+      removable: true,
+    });
+  }
+
+  // Клик по пилюле в описании: цели wizard-step, кормящие скоринг («Триггеры»
+  // → шаг interests, «База» → шаг file), теперь остаются на карточке и лишь
+  // выставляют контекст промпт-бара (Task 11) — раньше уводили в изолированный
+  // редактор шага, чип при таком уходе всё равно стирался бы сбросом по смене
+  // view (useScopeReset), так что чип и переход к шагу взаимно исключают друг
+  // друга. Прочие возможные wizard-step цели (если появятся) — прежний уход.
+  // Поповерные цели (шаблон/поля ноды/домены) обрабатываются внутри самой
+  // пилюли (Task 7–8), сюда доходят только wizard-step клики; «носители
+  // значений» (target: "none" — запущенная кампания или шаг вне визарда её
+  // intent) клика вообще не поднимают — resolveVisual/DescriptionTagPill не
+  // делает их кнопкой.
   function handleTagActivate(tag: DescriptionTag) {
     if (tag.target.kind !== "wizard-step" || !campaignId) return;
+    if (tag.target.step === "interests") {
+      pushScoringContext("Триггеры");
+      return;
+    }
+    if (tag.target.step === "file") {
+      pushScoringContext("База");
+      return;
+    }
     dispatch({
       type: "campaign_step_edit_requested",
       campaignId,
