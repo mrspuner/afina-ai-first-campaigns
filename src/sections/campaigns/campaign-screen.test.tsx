@@ -112,7 +112,7 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     // Заголовки этапов больше не строка с точкой — это отдельный <p> с текстом
     // ИЗ ГРАФА («Скоринг базы» — есть нода скоринга у sourceType:"new») и
     // номер шага рядом (Task 4/5).
-    expect(screen.getByText("Скоринг базы")).toBeInTheDocument();
+    expect(screen.getByText("Сигнал (Скоринг)")).toBeInTheDocument();
     expect(screen.getByText("Первое касание")).toBeInTheDocument();
     // Текст SMS-ноды шаблона попадает в описание дословно. Апсейл несёт
     // повторную волну (Task 5) с той же серией — тот же текст легально
@@ -150,9 +150,9 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
       baseCampaign({ id: "cmp_desc_order", channels: ["sms"] }),
     );
     const section = screen.getByText("Сценарий кампании").closest("section")!;
-    // Заголовок первого этапа («Скоринг базы» — новая разметка, Task 4/5)
-    // как якорь текста описания.
-    const description = screen.getByText("Скоринг базы");
+    // Заголовок блока «Сигнал (Скоринг)» (Task 8 — блочная группировка) как
+    // якорь текста описания.
+    const description = screen.getByText("Сигнал (Скоринг)");
     const graph = container.querySelector(".react-flow")!;
 
     expect(section.contains(description)).toBe(true);
@@ -165,7 +165,7 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
 
   it("кампания без коммуникаций не выдумывает касаний", () => {
     renderCampaign(baseCampaign({ id: "cmp_desc_nocomm", channels: [] }));
-    expect(screen.getByText("Скоринг базы")).toBeInTheDocument();
+    expect(screen.getByText("Сигнал (Скоринг)")).toBeInTheDocument();
     expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
