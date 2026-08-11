@@ -263,7 +263,7 @@ export function CampaignScreen() {
   // node-чип узла скоринга с paramLabel, и select-prompt-suggestions подменяет
   // подсказки на скоринговые (каталог node-context.ts несёт записи именно под
   // эти paramLabel). Без узла скоринга в графе — тихий no-op (нечего таргетить).
-  function pushScoringContext(paramLabel: "База" | "Интересы" | "Триггеры") {
+  function pushScoringContext(paramLabel: "Интересы" | "Триггеры") {
     if (!scoringNodeId) return;
     pushChip({
       id: `nodefield_${scoringNodeId}_${paramLabel}`,
@@ -279,32 +279,22 @@ export function CampaignScreen() {
     });
   }
 
-  // Клик по пилюле в описании: цели wizard-step, кормящие скоринг («Триггеры»
-  // → шаг interests, «База» → шаг file), теперь остаются на карточке и лишь
-  // выставляют контекст промпт-бара (Task 11) — раньше уводили в изолированный
-  // редактор шага, чип при таком уходе всё равно стирался бы сбросом по смене
-  // view (useScopeReset), так что чип и переход к шагу взаимно исключают друг
-  // друга. Прочие возможные wizard-step цели (если появятся) — прежний уход.
-  // Поповерные цели (шаблон/поля ноды/домены) обрабатываются внутри самой
-  // пилюли (Task 7–8), сюда доходят только wizard-step клики; «носители
-  // значений» (target: "none" — запущенная кампания или шаг вне визарда её
-  // intent) клика вообще не поднимают — resolveVisual/DescriptionTagPill не
-  // делает их кнопкой.
+  // Клик по пилюле-входу «Триггеры» (шаг interests): остаёмся на карточке и
+  // лишь выставляем контекст промпт-бара (Task 11) — node-чип скоринга с
+  // paramLabel «Триггеры» (select-prompt-suggestions подменяет подсказки на
+  // скоринговые). «База» правится собственным поповером (BaseFilesTagPopover,
+  // Task 12) и onActivate не зовёт; каналы — read-only (§4); поповерные цели
+  // (шаблон/пауза/домены) — внутри самой пилюли (Task 7–8); «носители значений»
+  // (target: "none") клика вообще не поднимают.
   function handleTagActivate(tag: DescriptionTag) {
-    if (tag.target.kind !== "wizard-step" || !campaignId) return;
-    if (tag.target.step === "interests") {
-      pushScoringContext("Триггеры");
+    if (
+      tag.target.kind !== "wizard-step" ||
+      tag.target.step !== "interests" ||
+      !campaignId
+    ) {
       return;
     }
-    if (tag.target.step === "file") {
-      pushScoringContext("База");
-      return;
-    }
-    dispatch({
-      type: "campaign_step_edit_requested",
-      campaignId,
-      step: tag.target.step,
-    });
+    pushScoringContext("Триггеры");
   }
 
   // ИИ-иконка у «Сценарий кампании» (spec §2): кладёт тег «Логика кампании» в

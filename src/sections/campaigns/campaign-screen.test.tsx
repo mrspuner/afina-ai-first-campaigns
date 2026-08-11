@@ -95,6 +95,9 @@ function Harness({
  *  `fireEvent.click` in the test returns, no `act()`/`waitFor` needed. */
 function ChipsProbe({ chipsRef }: { chipsRef: { current: readonly PromptChip[] } }) {
   const { chips } = usePromptChips();
+  // Пишем в ref во время рендера намеренно (не в эффекте): ref обязан быть
+  // актуален сразу после синхронного fireEvent.click, без act()/waitFor.
+  // eslint-disable-next-line react-hooks/refs
   chipsRef.current = chips;
   return null;
 }
@@ -134,9 +137,6 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     // номер шага рядом (Task 4/5).
     expect(screen.getByText("Сигнал (Скоринг)")).toBeInTheDocument();
     expect(screen.getByText("Первое касание")).toBeInTheDocument();
-    // Текст SMS-ноды шаблона попадает в описание дословно. Апсейл несёт
-    // повторную волну (Task 5) с той же серией — тот же текст легально
-    // встречается дважды («Первое касание» + «Пауза и повтор»).
     // Контент шаблона больше не инлайн (Task 9 — текст-история): контент виден
     // в предпросмотре. Проверяем, что строка коммуникации отрендерилась —
     // канал «SMS» (точный <span>, в отличие от интро-текста «…: SMS.»).
@@ -303,30 +303,13 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     expect(screen.queryByRole("button", { name: /^Изменить шаблон/ })).toBeNull();
   });
 
-  // Task 11 (было Task 2): клик по тегу-настройке раскрывает поповер
-  // «Изменить», и уже кнопка внутри него зовёт активацию — это не изменилось.
-  // Изменилась САМА активация для входов скоринга («База»/«Триггеры»): раньше
-  // она диспатчила campaign_step_edit_requested и уводила с карточки в
-  // изолированный шаг визарда; теперь она кладёт в промпт-бар node-чип узла
-  // скоринга и карточка остаётся смонтированной (толкать чип и одновременно
-  // уходить с карточки бессмысленно — useScopeReset стирает чипы при смене
-  // view, так что чип пережил бы переход на долю секунды и тут же исчез).
-  it("клик по тегу «База» кладёт скоринговый чип (paramLabel «База») вместо ухода с карточки", async () => {
-    const chipsRef: { current: readonly PromptChip[] } = { current: [] };
-    renderCampaign(draftCampaign, undefined, chipsRef);
-    fireEvent.click(screen.getByRole("button", { name: /строк/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    // Карточка НЕ снята: старое поведение (campaign_step_edit_requested) меняло
-    // view на "guided-campaign", и CampaignScreen рендерил null.
-    expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
-    const chip = chipsRef.current.find((c) => c.kind === "node");
-    expect(chip).toBeDefined();
-    expect(isNodeTagPayload(chip!.payload)).toBe(true);
-    const payload = chip!.payload as { nodeType: string; paramLabel?: string };
-    expect(payload.nodeType).toBe("scoring");
-    expect(payload.paramLabel).toBe("База");
-  });
-
+  // Task 11: клик по тегу-входу «Триггеры» раскрывает поповер «Изменить», и
+  // кнопка внутри зовёт активацию — теперь она НЕ уводит с карточки в
+  // изолированный шаг визарда, а кладёт в промпт-бар node-чип узла скоринга
+  // (карточка остаётся смонтированной; толкать чип и одновременно уходить с
+  // карточки бессмысленно — useScopeReset стирает чипы при смене view). «База»
+  // редактируется собственным поповером (BaseFilesTagPopover, Task 12; см.
+  // description-tag.test.tsx), в handleTagActivate не доходит.
   it("клик по тегу «Триггеры» кладёт скоринговый чип (paramLabel «Триггеры») вместо ухода с карточки", async () => {
     const chipsRef: { current: readonly PromptChip[] } = { current: [] };
     renderCampaign(draftCampaign, undefined, chipsRef);
@@ -340,6 +323,7 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
     const chip = chipsRef.current.find((c) => c.kind === "node");
     expect(chip).toBeDefined();
+    expect(isNodeTagPayload(chip!.payload)).toBe(true);
     const payload = chip!.payload as { nodeType: string; paramLabel?: string };
     expect(payload.nodeType).toBe("scoring");
     expect(payload.paramLabel).toBe("Триггеры");
