@@ -598,11 +598,14 @@ export function describeWorkflow(
         t("Выбрано "),
         // Пилюля называет СКОЛЬКО каналов выбрано («3 канала»), а не
         // перечисляет имена внутри себя — имена идут следом обычным текстом.
+        // Каналы — read-only (§4, паритет с графом: каналы в графе не правятся).
+        // Носитель значения без клика — передаём undefined вместо editableSteps,
+        // поэтому target всегда «none». Сменить каналы можно только через визард.
         stepTag(
           "first-touch-channels",
           `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
           "channels",
-          editableSteps,
+          undefined,
         ),
         t(`: ${facts!.channels!.map((c) => CHANNEL_LABEL[c]).join(", ")}. `),
       ]

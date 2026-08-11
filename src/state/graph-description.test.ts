@@ -743,7 +743,8 @@ describe("describeWorkflow", () => {
       );
       const tag = fork.body.find((s) => s.kind === "tag")!;
       expect(tag.tag.label).toBe("3 канала");
-      expect(tag.tag.target).toEqual({ kind: "wizard-step", step: "channels" });
+      // Каналы read-only (§4): носитель значения без клика (target «none»).
+      expect(tag.tag.target).toEqual({ kind: "none", step: "channels" });
     });
 
     it("повтор ТРАТИТ номер касания: касание → повтор → касание даёт «Первое / Второе / Третье»", () => {
@@ -844,7 +845,7 @@ describe("describeWorkflow", () => {
       expect(tag.tag.label).toBe("3 канала");
     });
 
-    it("пилюля по-прежнему ведёт на шаг «Каналы» (когда он доступен)", () => {
+    it("пилюля «Каналы» — read-only носитель значения (§4), даже если шаг в editableSteps", () => {
       const stages = describeWorkflow(graphNoSplit, T, {
         pending: [],
         channels: ["sms", "email"],
@@ -852,7 +853,8 @@ describe("describeWorkflow", () => {
       });
       const touch = stages.find((s) => s.kind === "touch")!;
       const tag = touch.body.find((s) => s.kind === "tag")!;
-      expect(tag.tag.target).toEqual({ kind: "wizard-step", step: "channels" });
+      // Каналы read-only (§4): носитель значения без клика (target «none»).
+      expect(tag.tag.target).toEqual({ kind: "none", step: "channels" });
     });
 
     // Русское числительное «канал»/«канала»/«каналов» — те же контрольные
@@ -1065,12 +1067,21 @@ describe("describeWorkflow — теги", () => {
     expect(tags).toHaveLength(0);
   });
 
-  it("число строк базы, каналы и триггеры присутствуют тегами", () => {
+  it("база и триггеры — кликабельные теги, каналы — read-only тег (§4)", () => {
     const tags = allTags(describeWorkflow(graph, templates, facts));
-    const steps = tags
+    const editableSteps = tags
       .filter((t) => t.target.kind === "wizard-step")
       .map((t) => (t.target as { step: string }).step);
-    expect(steps).toEqual(expect.arrayContaining(["file", "interests", "channels"]));
+    // База (file) и триггеры (interests) — редактируемые входы.
+    expect(editableSteps).toEqual(expect.arrayContaining(["file", "interests"]));
+    expect(editableSteps).not.toContain("channels");
+    // Каналы присутствуют тегом, но read-only (target «none»), не в wizard-step.
+    const channelsTag = tags.find(
+      (t) =>
+        t.target.kind === "none" &&
+        (t.target as { step?: string }).step === "channels",
+    );
+    expect(channelsTag).toBeDefined();
   });
 
   it("настройки скоринга не содержат сценарий/режим/бюджет", () => {
