@@ -295,17 +295,28 @@ describe("describeWorkflow", () => {
       expect(touch.groups![0].rows[0].channel).toBe("SMS");
     });
 
-    it("идентичный повтор — этап «Пауза и повтор» с той же таблицей и ссылкой на оригинал", () => {
+    it("объединяет проверку реакции и паузу в один шаг перед вторым касанием", () => {
+      const retryGraph = createTemplate("Возврат", "new", ["sms"]);
+      const stages = describeWorkflow(retryGraph, T);
+      const headings = stages.map((s) => s.heading);
+      expect(headings).toContain("Проверка реакции и пауза");
+      expect(headings).not.toContain("Пауза и повтор");
+      expect(headings).toContain("Второе касание");
+    });
+
+    it("идентичный повтор — «Второе касание» с той же таблицей, что и первое", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
         pending: [], editableSteps: [], graphEditable: true,
       });
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(retry.heading).toBe("Пауза и повтор");
-      expect(retry.sameAsHeading).toBe("Первое касание");
-      const first = stages.find((s) => s.kind === "touch")!;
-      expect(retry.groups![0].rows.map((r) => r.contentText))
+      // Повтор больше не отдельный этап «Пауза и повтор» (спека §5): его паузу
+      // забрала слитая «Проверка реакции и пауза», а сам он — обычное «Второе
+      // касание» с той же таблицей, что и первое.
+      expect(stages.some((s) => s.kind === "retry")).toBe(false);
+      const [first, second] = stages.filter((s) => s.kind === "touch");
+      expect(second.heading).toBe("Второе касание");
+      expect(second.groups![0].rows.map((r) => r.contentText))
         .toEqual(first.groups![0].rows.map((r) => r.contentText));
-      expect(segmentsText(retry.body)).toContain("повторяет ту же серию");
+      expect(segmentsText(second.body)).toContain("Та же серия по тем же каналам");
     });
 
     /**
@@ -348,10 +359,10 @@ describe("describeWorkflow", () => {
       expect(stages.filter((s) => s.kind === "touch")).toHaveLength(2);
     });
 
-    it("«Пауза и повтор» берёт длительность из WaitParams", () => {
+    it("«Проверка реакции и пауза» берёт длительность паузы из WaitParams повторной волны", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(segmentsText(retry.body)).toContain("2 дня"); // durationHours: 48
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(segmentsText(check.body)).toContain("2 дня"); // durationHours: 48
     });
 
     it("«Проверка реакции» появляется один раз, даже когда условий в графе два", () => {
@@ -359,10 +370,10 @@ describe("describeWorkflow", () => {
       expect(stages.filter((s) => s.kind === "check")).toHaveLength(1);
     });
 
-    it("«Проверка реакции» описывает уход отреагировавших в успех", () => {
+    it("«Проверка реакции и пауза» описывает уход отреагировавших в успех", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const check = stages.find((s) => s.kind === "check")!;
-      expect(check.heading).toBe("Проверка реакции");
+      expect(check.heading).toBe("Проверка реакции и пауза");
       expect(segmentsText(check.body)).toContain("успех");
     });
 
@@ -388,7 +399,7 @@ describe("describeWorkflow", () => {
         .filter((s) => s.kind === "touch")
         .map((s) => s.heading);
       expect(headings).toEqual([
-        "Первое касание", "Повторное касание", "Третье касание", "Четвёртое касание", "Касание 5",
+        "Первое касание", "Второе касание", "Третье касание", "Четвёртое касание", "Касание 5",
       ]);
     });
 
@@ -461,8 +472,9 @@ describe("describeWorkflow", () => {
         expect(body).toContain("повторяет ту же серию");
         // Паузы в графе нет — фраза не имеет права её выдумывать.
         expect(body).not.toContain("выжидает");
-        // И это не «Пауза и повтор»: заголовок остаётся заголовком касания.
-        expect(touches[1].heading).toBe("Повторное касание");
+        // Заголовок — обычное касание: «Второе касание» (повтор без паузы
+        // отдельным этапом не выделяется).
+        expect(touches[1].heading).toBe("Второе касание");
       });
 
       it("другой канал → «другими каналами и шаблонами»", () => {
@@ -544,7 +556,7 @@ describe("describeWorkflow", () => {
       });
     });
 
-    it("развилка ТРАТИТ номер касания: следующая волна — «Повторное касание», и она про неотреагировавших", () => {
+    it("развилка ТРАТИТ номер касания: следующая волна — «Второе касание», и она про неотреагировавших", () => {
       // Развилка первой волной (легаси-«Удержание» — развилка по построению),
       // за ней через паузу вторая волна. Если бы развилка номер не тратила,
       // вторая волна назвалась бы «Первым касанием», рассказывая при этом про
@@ -553,7 +565,7 @@ describe("describeWorkflow", () => {
         pending: [], channels: ["ivr", "email", "push"],
       });
       expect(stages.map((s) => s.heading)).toEqual([
-        "Загрузка базы", "Деление на потоки", "Повторное касание", "Итог",
+        "Загрузка базы", "Деление на потоки", "Второе касание", "Итог",
       ]);
       expect(segmentsText(stages.find((s) => s.kind === "touch")!.body))
         .toContain("Тем, кто не отреагировал");
@@ -574,7 +586,10 @@ describe("describeWorkflow", () => {
       expect(tag.tag.target).toEqual({ kind: "wizard-step", step: "channels" });
     });
 
-    it("повтор номер НЕ тратит: касание → повтор → касание даёт «Первое / Пауза и повтор / Повторное»", () => {
+    it("повтор ТРАТИТ номер касания: касание → повтор → касание даёт «Первое / Второе / Третье»", () => {
+      // Повтор больше не отдельный этап «Пауза и повтор» (спека §5) — он идёт
+      // обычным касанием и тратит порядковый номер наравне с прочими, так что
+      // следующая, третья по счёту волна получает «Третье касание».
       const sms = (id: string, text: string) =>
         node(id, "sms", { kind: "sms", text, alphaName: "BRAND", scheduledAt: "immediate" });
       const wait = (id: string) =>
@@ -594,8 +609,8 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(graph, T).filter((s) => s.kind !== "start" && s.kind !== "outcome");
       expect(stages.map((s) => [s.kind, s.heading])).toEqual([
         ["touch", "Первое касание"],
-        ["retry", "Пауза и повтор"],
-        ["touch", "Повторное касание"],
+        ["touch", "Второе касание"],
+        ["touch", "Третье касание"],
       ]);
     });
 
@@ -715,9 +730,10 @@ describe("describeWorkflow", () => {
     it("ноды повтора уходят в свою волну, а не в таблицу первого касания", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       // Повторный блок несёт ту же ноду; в таблице первого касания ровно одна
-      // строка, а повтор — отдельный этап.
-      expect(stages.find((s) => s.kind === "touch")!.groups![0].rows).toHaveLength(1);
-      expect(stages.find((s) => s.kind === "retry")!.groups![0].rows).toHaveLength(1);
+      // строка, а повтор — отдельное «Второе касание» со своей таблицей.
+      const touches = stages.filter((s) => s.kind === "touch");
+      expect(touches[0].groups![0].rows).toHaveLength(1);
+      expect(touches[1].groups![0].rows).toHaveLength(1);
     });
   });
 
@@ -725,8 +741,9 @@ describe("describeWorkflow", () => {
   // дни/часы — 840 часов (ровно 5 недель) читались как «35 дней», пока
   // `splitDuration` (wait-fields.tsx, поле внутри поповера паузы Task 8)
   // тот же час читало как «5 недель» — два числа на одном экране одновременно
-  // противоречили друг другу. Хелпер подменяет durationHours retry-ноды
-  // «Возврата» (по умолчанию 48ч/«2 дня» — не кратно неделе, багом не ловится).
+  // противоречили друг другу. Хелпер подменяет durationHours ноды паузы перед
+  // повтором «Возврата» (по умолчанию 48ч/«2 дня» — не кратно неделе, багом не
+  // ловится); длительность теперь звучит в слитой «Проверке реакции и паузе».
   function graphWithRetryDuration(hours: number) {
     const template = createTemplate("Возврат", "new", ["sms"]);
     const waitNode = template.nodes.find((n) => n.data.nodeType === "wait")!;
@@ -743,9 +760,9 @@ describe("describeWorkflow", () => {
   describe("waitPhrase — крупнейшая точная единица, зеркалит splitDuration (fix round 1, Finding 1)", () => {
     it("840 часов (ровно 5 недель) — «5 недель», НЕ «35 дней»", () => {
       const stages = describeWorkflow(graphWithRetryDuration(840), T);
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(segmentsText(retry.body)).toContain("5 недель");
-      expect(segmentsText(retry.body)).not.toContain("35 дней");
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(segmentsText(check.body)).toContain("5 недель");
+      expect(segmentsText(check.body)).not.toContain("35 дней");
     });
 
     // Русское множественное число «неделя»/«недели»/«недель» — те же случаи,
@@ -758,16 +775,16 @@ describe("describeWorkflow", () => {
       [3528, "21 неделя"],
     ])("%s часов → «%s»", (hours, expected) => {
       const stages = describeWorkflow(graphWithRetryDuration(hours), T);
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(segmentsText(retry.body)).toContain(expected);
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(segmentsText(check.body)).toContain(expected);
     });
 
     it("длительность, не кратная неделе, но кратная суткам — по-прежнему в днях", () => {
       // Регресс-щит: неделя не должна начать «съедать» обычные дни (72ч = 3
       // дня, ни разу не делится на 168 без остатка).
       const stages = describeWorkflow(graphWithRetryDuration(72), T);
-      const retry = stages.find((s) => s.kind === "retry")!;
-      expect(segmentsText(retry.body)).toContain("3 дня");
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(segmentsText(check.body)).toContain("3 дня");
     });
   });
 
@@ -799,7 +816,7 @@ describe("describeWorkflow", () => {
         "start",
         "touch-1",
         "check-1",
-        "retry-1",
+        "touch-2",
         "outcome",
       ]);
     });
