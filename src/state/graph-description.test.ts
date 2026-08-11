@@ -503,6 +503,105 @@ describe("describeWorkflow", () => {
     });
   });
 
+  // Слияние паузы в «Проверку реакции» верно для 6 канонических шаблонов
+  // (соседство `касание → проверка → пауза → повтор`), но неканоничные, но
+  // достижимые правкой графы ломали и адрес паузы (баг #1), и её порядковый
+  // номер (баг #2). Фикс: сливаем ТОЛЬКО на непосредственном соседстве, номер
+  // выводим из счётчика, а неслитый повтор рассказывает о своей паузе сам.
+  describe("Проверка реакции — слияние паузы только на непосредственном соседстве (fix)", () => {
+    const sms = (id: string, text: string) =>
+      node(id, "sms", { kind: "sms", text, alphaName: "BRAND", scheduledAt: "immediate" });
+    const wait = (id: string, hours: number) =>
+      node(id, "wait", { kind: "wait", mode: "duration", durationHours: hours });
+
+    it("каноничный граф по-прежнему сливает паузу: «Проверка реакции и пауза» + «второе касание»", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(check.heading).toBe("Проверка реакции и пауза");
+      expect(segmentsText(check.body)).toContain("второе касание");
+      const touches = stages.filter((s) => s.kind === "touch");
+      expect(touches[1].heading).toBe("Второе касание");
+      expect(segmentsText(touches[1].body)).toBe("Та же серия по тем же каналам:");
+    });
+
+    // Баг #1: проверка сканировала ВПЕРЁД до первого повтора и заимствовала его
+    // паузу, хотя её непосредственный сосед — обычное касание. Пауза оседала
+    // не на своём переходе, а собственный повтор о ней молчал.
+    it("проверка НЕ у самого повтора — простая «Проверка реакции», паузу держит сам повтор (баг #1)", () => {
+      // touch1(A) → проверка → touch2(B, без паузы) → пауза → touch3(повтор B).
+      const graph = {
+        nodes: [
+          node("signal", "source"),
+          sms("a1", "Первый заход"),
+          node("react", "condition", { kind: "condition", trigger: "opened" }),
+          sms("b1", "Другой заход"),
+          wait("w", 72),
+          sms("b2", "Другой заход"),
+        ],
+        edges: [
+          edge("signal", "a1"),
+          edge("a1", "react"),
+          edge("react", "b1"),
+          edge("b1", "w"),
+          edge("w", "b2"),
+        ],
+      };
+      const stages = describeWorkflow(graph, T);
+      const check = stages.find((s) => s.kind === "check")!;
+      // Простая проверка: заголовок без «и пауза», тело без утверждений о паузе
+      // и о номере касания.
+      expect(check.heading).toBe("Проверка реакции");
+      expect(segmentsText(check.body)).not.toContain("паузу");
+      expect(segmentsText(check.body)).not.toContain("касание");
+      // Повтор (последнее касание) держит свою паузу сам — она нигде не потеряна.
+      const touches = stages.filter((s) => s.kind === "touch");
+      const repeat = touches[touches.length - 1];
+      expect(repeat.heading).toBe("Третье касание");
+      const body = segmentsText(repeat.body);
+      expect(body).toContain("выжидает");
+      expect(body).toContain("3 дня"); // 72ч
+      expect(body).toContain("повторяет ту же серию по тем же каналам");
+    });
+
+    // Баг #2: слитая проверка хардкодила «второе касание». Когда проверке
+    // предшествуют ДВА касания, следующий (слитый) повтор — «Третье касание», и
+    // «второе» стояло прямо над заголовком «Третье касание».
+    it("проверка перед неканоничным повтором берёт номер из счётчика, а не хардкодит «второе» (баг #2)", () => {
+      // touch1(A) → пауза → touch2(B) → проверка → пауза → touch3(повтор B).
+      const graph = {
+        nodes: [
+          node("signal", "source"),
+          sms("a1", "Первый заход"),
+          wait("w1", 24),
+          sms("b1", "Второй заход"),
+          node("react", "condition", { kind: "condition", trigger: "opened" }),
+          wait("w2", 48),
+          sms("b2", "Второй заход"),
+        ],
+        edges: [
+          edge("signal", "a1"),
+          edge("a1", "w1"),
+          edge("w1", "b1"),
+          edge("b1", "react"),
+          edge("react", "w2"),
+          edge("w2", "b2"),
+        ],
+      };
+      const stages = describeWorkflow(graph, T);
+      const check = stages.find((s) => s.kind === "check")!;
+      expect(check.heading).toBe("Проверка реакции и пауза");
+      const checkBody = segmentsText(check.body);
+      // Номер выведен из счётчика — «третье», не хардкод «второе».
+      expect(checkBody).toContain("третье касание");
+      expect(checkBody).not.toContain("второе касание");
+      // И он совпадает с ЗАГОЛОВКОМ фактического следующего касания.
+      const touches = stages.filter((s) => s.kind === "touch");
+      const repeat = touches[touches.length - 1];
+      expect(repeat.heading).toBe("Третье касание");
+      expect(segmentsText(repeat.body)).toBe("Та же серия по тем же каналам:");
+    });
+  });
+
   describe("Ветки и потоки", () => {
     it("сегментный split даёт этап-развилку с ◈-группами по меткам", () => {
       const stages = describeWorkflow(TEMPLATE_BY_TYPE["Удержание"](), T);
