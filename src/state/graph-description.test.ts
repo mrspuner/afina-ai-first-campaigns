@@ -722,8 +722,10 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(forkThenTouchGraph(), T, {
         pending: [], channels: ["ivr", "email", "push"],
       });
+      // Последний этап — закрывающая строка блока коммуникаций (Task 6): без
+      // заголовка (пустая строка), а не отдельный нумерованный «Итог».
       expect(stages.map((s) => s.heading)).toEqual([
-        "Загрузка базы", "Деление на потоки", "Второе касание", "Итог",
+        "Загрузка базы", "Деление на потоки", "Второе касание", "",
       ]);
       expect(segmentsText(stages.find((s) => s.kind === "touch")!.body))
         .toContain("Тем, кто не отреагировал");
@@ -946,21 +948,40 @@ describe("describeWorkflow", () => {
     });
   });
 
-  describe("Итог", () => {
-    it("после повтора описывает финальную проверку", () => {
+  // Нарратив конверсии больше не отдельный блок «Итог» — он закрывающая строка
+  // своего блока (Task 6): без заголовка, `block` — блок, который он закрывает,
+  // а `block:"outcome"` describeWorkflow не выпускает вовсе.
+  describe("Нарратив конверсии закрывает свой блок", () => {
+    it("после повтора закрывающая строка блока коммуникаций описывает финальную проверку", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      const outcome = stages.find((s) => s.kind === "outcome")!;
-      expect(outcome.heading).toBe("Итог");
-      expect(segmentsText(outcome.body)).toContain("без конверсии");
+      const commClose = stages.filter((s) => s.block === "communication").at(-1)!;
+      // Закрывающая строка — без заголовка (плоский абзац, не нумерованный шаг).
+      expect(commClose.heading).toBe("");
+      expect(segmentsText(commClose.body)).toContain("без конверсии");
+      // Отдельного блока «Итог» describeWorkflow больше не порождает.
+      expect(stages.some((s) => s.block === "outcome")).toBe(false);
     });
   });
 
   describe("Граф без коммуникаций", () => {
-    it("даёт только Старт и Итог, без выдуманных касаний", () => {
+    it("даёт только старт и закрывающую строку сигнала, без выдуманных касаний", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
-      expect(stages.map((s) => s.id)).toEqual(["start", "outcome"]);
+      // Закрывающую строку несёт блок СИГНАЛА (Task 6): коммуникаций нет,
+      // закрывать блок коммуникаций нечем — на выходе только сегмент.
+      expect(stages.map((s) => s.id)).toEqual(["start", "signal-close"]);
+      expect(stages.at(-1)!.block).toBe("signal");
       expect(segmentsText(stages[1].body)).toContain("готовый сегмент");
+      expect(stages.some((s) => s.block === "outcome")).toBe(false);
       expect(stages.some((s) => s.groups?.length)).toBe(false);
+    });
+
+    it("без коммуникаций закрывающую строку про сегмент несёт блок сигнала, а не отдельный блок", () => {
+      // Сигналы без каналов/коммуникаций: `waveOrdinal === 0`, поэтому нарратив
+      // конверсии закрывает блок СИГНАЛА (Task 6).
+      const stages = describeWorkflow(createTemplate("Возврат", "new", []), T);
+      const signalClose = stages.filter((s) => s.block === "signal").at(-1);
+      expect(segmentsText(signalClose!.body)).toMatch(/готовый сегмент/);
+      expect(stages.some((s) => s.block === "outcome")).toBe(false);
     });
   });
 
@@ -975,7 +996,7 @@ describe("describeWorkflow", () => {
         "touch-1",
         "check-1",
         "touch-2",
-        "outcome",
+        "comm-close",
       ]);
     });
 
@@ -1187,11 +1208,26 @@ describe("describeWorkflow — теги", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("каждый этап несёт block: signal | communication | outcome", () => {
+  it("каждый этап несёт block: signal | communication, а block:outcome не выпускается", () => {
     const stages = describeWorkflow(graph, templates, facts);
     expect(stages.find((s) => s.id === "start")?.block).toBe("signal");
     expect(stages.find((s) => s.kind === "touch")?.block).toBe("communication");
-    expect(stages.find((s) => s.id === "outcome")?.block).toBe("outcome");
+    // Нарратив конверсии теперь ЗАКРЫВАЕТ блок коммуникаций (Task 6), а не сидит
+    // в отдельном блоке «Итог»: последний коммуникационный этап несёт его текст,
+    // и ни один этап describeWorkflow не имеет block:"outcome".
+    const commClose = stages.filter((s) => s.block === "communication").at(-1)!;
+    expect(segmentsText(commClose.body)).toContain("без конверсии");
+    expect(stages.some((s) => s.block === "outcome")).toBe(false);
+  });
+
+  it("нарратив конверсии закрывает блок коммуникаций, а не отдельный блок", () => {
+    // `graph` («Возврат»/new/sms) несёт повтор — коммуникации есть, закрывающую
+    // строку берёт блок коммуникаций.
+    const retryGraph = graph;
+    const stages = describeWorkflow(retryGraph, templates, facts);
+    const commClose = stages.filter((s) => s.block === "communication").at(-1);
+    expect(segmentsText(commClose!.body)).toMatch(/завершают путь без конверсии/);
+    expect(stages.some((s) => s.block === "outcome")).toBe(false);
   });
 });
 
