@@ -75,7 +75,7 @@ describe("WorkflowDescription", () => {
   it("несёт увеличенный line-height контейнера (не leading-relaxed) — пилюли не слипаются со строкой", () => {
     const { container } = render(<WorkflowDescription stages={STAGES} />);
     const root = container.firstChild as HTMLElement;
-    expect(root.className).toContain("leading-[2.2]");
+    expect(root.className).toContain("leading-[1.75]");
     expect(root.className).not.toContain("leading-relaxed");
   });
 

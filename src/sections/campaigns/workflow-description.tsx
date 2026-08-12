@@ -259,13 +259,12 @@ export function WorkflowDescription({
 
   return (
     <TooltipProvider delay={1000}>
-      {/* Межстрочный интервал описания. Пилюли выше строки текста, и на плотном
-          случае (несколько инлайн-тегов + перенос строки) соседние обёрнутые
-          строки соприкасались пилюлями при прежнем leading-[1.75] (24.5px).
-          Владелец продукта попросил больше воздуха, чтобы теги не слипались
-          между строк — подняли до 2.2 (≈30.8px при 14px шрифте). Трогаем только
-          контейнер описания, не глобальную типографику. */}
-      <div className="flex flex-col gap-6 text-sm leading-[2.2] text-foreground">
+      {/* Межстрочный интервал прозы. Зазор МЕЖДУ пилюлями соседних строк даёт
+          не он (leading растит и line-height пилюли — она пухнет вместе с
+          интервалом), а собственный `my-[2px]` пилюли (см. `PILL_BASE`).
+          Поэтому leading оставляем «как в тексте» (1.75), а разведение пилюль —
+          на самой пилюле. */}
+      <div className="flex flex-col gap-6 text-sm leading-[1.75] text-foreground">
         {BLOCK_ORDER.map((block) => {
           const blockStages = stagesByBlock.get(block);
           if (!blockStages?.length) return null;
