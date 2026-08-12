@@ -1,12 +1,9 @@
-// Task 8: таблица коммуникаций несёт кнопку предпросмотра, а та зовёт
-// useChat() — компонент перестаёт быть чисто серверным/презентационным и
-// нуждается в границе клиентского компонента (тот же приём, что уже несёт
-// сосед `description-tag.tsx`).
+// Клиентский компонент: вплетённые в текст пилюли (`DescriptionTagPill`)
+// раскрывают поповеры/дроверы и держат собственный клиентский стейт. Само
+// описание правок не производит — оно только рендерит сегменты и теги.
 "use client";
 
-import { Eye } from "lucide-react";
 import type {
-  DescriptionCommunication,
   DescriptionSegment,
   DescriptionStage,
   DescriptionTag,
@@ -16,8 +13,6 @@ import { NODE_STYLES } from "./node-visuals";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { NodeParams, WorkflowNodeType } from "@/types/workflow";
 import type { DomainStatus } from "@/types/account-settings";
-import { useChat } from "@/state/chat-context";
-import { nodePreviewTemplate } from "@/state/node-template-options";
 
 /**
  * Верхнеуровневые блоки карточки «Сценарий кампании». Этапы описания
@@ -26,8 +21,14 @@ import { nodePreviewTemplate } from "@/state/node-template-options";
  * описание), поэтому здесь только «Сигнал (Скоринг)» и «Коммуникации» —
  * `describeWorkflow` иных значений `block` наружу больше и не выпускает.
  */
-const BLOCK_LABEL = { signal: "Сигнал (Скоринг)", communication: "Коммуникации" } as const;
+const BLOCK_LABEL = { signal: "Сигналы", communication: "Коммуникации" } as const;
 const BLOCK_ORDER = ["signal", "communication"] as const;
+/** Этапность: «1. Сигналы» → «2. Коммуникации». Номер фиксирован позицией в
+ *  `BLOCK_ORDER` (signal=1, communication=2) независимо от наличия блоков. */
+const BLOCK_NUMBER: Record<(typeof BLOCK_ORDER)[number], number> = {
+  signal: 1,
+  communication: 2,
+};
 
 /**
  * Тип ноды по её id для целей `template`/`node-fields` — сам тег его не несёт
@@ -85,143 +86,6 @@ function conditionParamsForTag(
   return params?.kind === "condition" ? params : undefined;
 }
 
-/**
- * Кнопка предпросмотра в конце строки коммуникации (Task 9: строка
- * текст-стори вместо ячейки таблицы — сама механика кнопки не изменилась,
- * изменилось только то, что её окружает). Тот же механизм, что «глаз» в
- * селекте шаблонов ноды (`node-card-content.tsx`): резолвнутый
- * шаблон открывается по id, а нерезолвнутый — синтетическим шаблоном из
- * текущих params ноды, который `nodePreviewTemplate` помечает
- * `usedInCampaigns: 1`, чтобы дровер открыл его read-only (нет записи в
- * библиотеке — «Сохранить» списало бы правку в несуществующий id).
- * Без цели (ни `previewTemplateId`, ни резолвнутых `nodeParams`) кнопка не
- * рендерится вовсе — не пустышкой без действия.
- *
- * `stageHeading` (Task 9, fix round) — заголовок этапа, которому принадлежит
- * строка. РЕАЛЬНЫЙ источник дублей аудио-имён — не ◈-группы одного шага (у
- * них `group.label` заполняется только настоящей развилкой, `forkKind`), а
- * этап «Пауза и повтор»: он рисует СВОЮ таблицу с содержательно той же самой
- * строкой, что и оригинальное касание, и обе группы при этом БЕЗ `group.label`
- * (повтор никогда не развилка). Поэтому основной различитель — заголовок
- * ЭТАПА (человекочитаем): «Предпросмотр — SMS, Первое касание» против
- * «Предпросмотр — SMS, Пауза и повтор». `groupLabel` (◈-подпись ветки
- * НАСТОЯЩЕЙ развилки) добавляется поверх — обе причины дублей закрыты
- * независимо.
- *
- * `stageId` (финальное ревью) — страховка на случай, когда и заголовка мало.
- * Заголовки уникальны у шаблонов репозитория, но не ПО ПОСТРОЕНИЮ: цепочка
- * A → пауза → A → пауза → A даёт два этапа «Пауза и повтор», а две
- * условные развилки — две «Развилки по реакции» (из шаблонов недостижимо, из
- * ИИ-правки графа — вполне). Уникален по построению только `stage.id`
- * (`touch-1`, `retry-1`, `retry-2`), поэтому он и дописывается хвостом — но
- * ТОЛЬКО когда заголовки реально совпали (проп приходит `undefined` в обычном
- * случае), иначе ярлык терял бы читаемость на всех нормальных карточках.
- *
- * `rowLabel` — различитель ДВУХ строк одного канала внутри ОДНОЙ группы (см.
- * `rowDistinctions`): ни канал, ни заголовок этапа, ни метка ветки их не
- * различают. Приходит `undefined` в обычном случае — по той же причине, что и
- * `stageId`.
- */
-function PreviewButton({
-  row,
-  nodeParams,
-  stageHeading,
-  stageId,
-  groupLabel,
-  rowLabel,
-}: {
-  row: DescriptionCommunication;
-  nodeParams?: Map<string, NodeParams>;
-  stageHeading: string;
-  stageId?: string;
-  groupLabel?: string;
-  rowLabel?: string;
-}) {
-  const { openTemplatePreview } = useChat();
-  const params = nodeParams?.get(row.nodeId);
-  const fallback = params ? nodePreviewTemplate(row.nodeId, params) : null;
-  const target = row.previewTemplateId ?? fallback;
-  if (!target) return null;
-  const parts = [
-    row.channel,
-    stageHeading,
-    ...(groupLabel ? [groupLabel] : []),
-    ...(rowLabel ? [rowLabel] : []),
-    ...(stageId ? [stageId] : []),
-  ];
-  const label = `Предпросмотр — ${parts.join(", ")}`;
-  return (
-    // Task 4: квадратная кнопка-иконка вместо иконки с подписью — подпись
-    // «Предпросмотр» уходит из видимого текста (освобождает колонку под
-    // контент), но не из доступного имени: aria-label уже уникален (различает
-    // канал/этап/группу/строку выше), а `title` дублирует его для наведения
-    // мышью — подсказка не пропадает вместе с текстом.
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={() => openTemplatePreview(target)}
-      // hover: спека §6 просит светлее И обводку, И иконку. Цвет иконки на
-      // наведении — `--scenario-heading` (#ECECED, самый светлый нейтраль
-      // блока), десятого хекса не заводим; `text-*` наследуется в `<Eye>`
-      // через `currentColor`, поэтому подсвечивать саму иконку отдельным
-      // классом не нужно.
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-scenario-badge-border bg-scenario-badge-bg text-scenario-badge-text transition-colors hover:border-scenario-badge-text hover:bg-white/10 hover:text-scenario-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-    >
-      <Eye className="h-3.5 w-3.5" aria-hidden />
-    </button>
-  );
-}
-
-/** Сколько символов контента строки уходит в её ярлык предпросмотра: фраза
- *  должна опознаваться на слух, а не зачитываться целым сообщением. */
-const ROW_LABEL_LIMIT = 40;
-
-/** Начало контента строки — ровно то, что видно в её ячейке. */
-function contentSnippet(row: DescriptionCommunication): string {
-  const text = (row.contentTitle ?? row.contentText).replace(/\s+/g, " ").trim();
-  return text.length > ROW_LABEL_LIMIT
-    ? `${text.slice(0, ROW_LABEL_LIMIT).trimEnd()}…`
-    : text;
-}
-
-/**
- * Различители строк ВНУТРИ одной ◈-группы: nodeId → добавка к `aria-label`.
- *
- * Канал + заголовок этапа (+ метка ветки) не различают ДВЕ строки ОДНОГО
- * канала в одной группе — например два письма с разными телами: ключ сравнения
- * коммуникаций читает тему И тело (`graph-waves.ts`), поэтому в таблицу они
- * попадают обе, а показывается у письма одна тема.
- *
- * Ведущий различитель — содержательный: начало контента строки. Оно
- * произносится и что-то значит для слушателя, в отличие от технического
- * `row.nodeId`. Но уникальным по построению оно НЕ является (те самые два
- * письма с одной темой), поэтому там, где контент пуст или совпал, идёт
- * порядковый номер строки среди строк своего канала — он уникален всегда.
- * Добавка выдаётся ТОЛЬКО строкам спорного канала: на обычной карточке (по
- * одной строке на канал) ярлык остаётся коротким — тот же принцип, что и у
- * хвоста `stage.id`.
- */
-function rowDistinctions(rows: DescriptionCommunication[]): Map<string, string> {
-  const byChannel = new Map<string, DescriptionCommunication[]>();
-  for (const row of rows) {
-    const list = byChannel.get(row.channel);
-    if (list) list.push(row);
-    else byChannel.set(row.channel, [row]);
-  }
-  const distinctions = new Map<string, string>();
-  for (const list of byChannel.values()) {
-    if (list.length < 2) continue;
-    const snippets = list.map(contentSnippet);
-    list.forEach((row, i) => {
-      const snippet = snippets[i];
-      const distinct = snippet !== "" && snippets.filter((s) => s === snippet).length === 1;
-      distinctions.set(row.nodeId, distinct ? snippet : `сообщение ${i + 1}`);
-    });
-  }
-  return distinctions;
-}
-
 /** Знаки, которые в тексте описания всегда стоят СРАЗУ за предыдущим словом,
  *  без пробела («тег.», «тег,», «каналам:»). */
 const GLUED_PUNCTUATION = /^[.,:;!?]/;
@@ -272,21 +136,17 @@ interface WorkflowDescriptionProps {
 /**
  * Текстовое описание цепочки кампании.
  *
- * Описание — связный текст с вкраплёнными пилюлями значений (Task 4/5):
- * этапы сгруппированы по верхнеуровневым блокам «Сигнал (Скоринг)» и
- * «Коммуникации» (Task 8), под каждым — нумерованные под-шаги (подзаголовок
- * жирным, тексты сообщений в кавычках, параметры кампании — кликабельными
- * тегами) и закрывающая строка блока. Коммуникации каждого шага — не таблица
- * (Task 9), а лёгкие строки текст-стори по ◈-группам шага: канал, пилюля
- * шаблона и кнопка предпросмотра — содержимое сообщения смотрят через дровер
- * предпросмотра, а не читают инлайн. Никаких карточек нод — граф живёт
- * отдельной миниатюрой ниже.
+ * Описание — связный текст с вкраплёнными пилюлями значений: этапы сгруппированы
+ * по нумерованным верхнеуровневым блокам «1. Сигналы» и «2. Коммуникации», под
+ * каждым — нумерованные под-шаги (подзаголовок жирным, параметры кампании —
+ * кликабельными тегами) и закрывающая строка блока. Каналы касания вплетены в
+ * текст инлайн — «SMS с шаблоном [тег] и звонок…»; ветки развилки (форк-волны)
+ * остаются отдельными ◈-абзацами со своим инлайн-перечислением каналов. Никаких
+ * таблиц, кнопок предпросмотра и карточек нод — граф живёт миниатюрой ниже.
  *
- * Клик по тегу поднимается наверх (`onTagActivate`) — решение о том, куда
- * вести (шаг визарда/поповер), принимает вызывающий. Но кнопка предпросмотра
- * (Task 8) зовёт `useChat().openTemplatePreview` сама — компонент больше не
- * чисто презентационный: он открывает боковой дровер напрямую, хотя ничего
- * в нём не правит (само описание правок не производит вовсе).
+ * Клик по тегу поднимается наверх (`onTagActivate`) — решение о том, куда вести
+ * (шаг визарда/поповер/дровер триггеров), принимает вызывающий. Само описание
+ * правок не производит.
  */
 export function WorkflowDescription({
   stages,
@@ -296,18 +156,6 @@ export function WorkflowDescription({
   domains,
 }: WorkflowDescriptionProps) {
   if (!stages.length) return null;
-
-  /**
-   * Заголовки, встречающиеся в описании больше одного раза. Только их ярлыки
-   * предпросмотра получают хвост из `stage.id` — см. `PreviewButton`.
-   * Считается по всему `stages`, а не по соседям: два одноимённых этапа могут
-   * стоять и не подряд (касание — развилка — то же касание).
-   */
-  const ambiguousHeadings = new Set(
-    stages
-      .map((s) => s.heading)
-      .filter((heading, i, all) => all.indexOf(heading) !== i),
-  );
 
   /**
    * Этапы по верхнеуровневым блокам, сохраняя исходный порядок внутри блока.
@@ -383,68 +231,28 @@ export function WorkflowDescription({
             Та же серия, что в шаге «{stage.sameAsHeading}»
           </p>
         )}
-        {stage.groups?.map((group, gi) => {
-          const distinctions = rowDistinctions(group.rows);
-          return (
-            // Спека §7: между блоками групп ~22px — ветки читаются как
-            // отдельные блоки, а не как продолжение предыдущего списка строк.
-            <div key={group.id} className={gi > 0 ? "mt-[22px]" : undefined}>
-              {group.label && (
-                <p
-                  data-testid="group-label"
-                  className="mb-1.5 font-semibold text-foreground"
-                >
-                  {/* Глиф — маркер списка ветвей, а не слово: без
-                      aria-hidden скринридер зачитывал бы его перед каждым
-                      названием потока («ромб чёрный, Высокая склонность»).
-
-                      Цвет — из палитры узла-развилки (`NODE_STYLES.condition`
-                      = `split`, #E08BD0 макета): подзаголовок помечает
-                      ветку, порождённую именно этим узлом, и берёт его
-                      цвет из общего справочника, а не десятым хексом в
-                      компоненте. Инлайном, а не классом, ровно по той же
-                      причине, что и цвета пилюль. */}
-                  <span aria-hidden style={{ color: NODE_STYLES.condition.color }}>
-                    ◈
-                  </span>{" "}
-                  {group.label}
-                </p>
-              )}
-              {/* Task 9: строки коммуникаций — лёгкий текст-стори, не
-                  таблица. Раньше здесь была панель+таблица с колонками
-                  «Коммуникация / Шаблон / Контент шаблона / 👁» — контент
-                  шаблона занимал целую колонку и дублировал то, что и так
-                  открывает кнопка предпросмотра. Теперь на строку — канал,
-                  пилюля шаблона (если есть) и кнопка предпросмотра; сам
-                  контент сообщения смотрят ТОЛЬКО через дровер предпросмотра
-                  (👁), инлайн он больше не рендерится нигде. */}
-              {group.rows.map((row) => (
-                <div key={row.nodeId} className="flex items-center gap-2 py-1 text-sm">
-                  <span className="font-medium text-foreground">{row.channel}</span>
-                  {row.templateTag && (
-                    // Усечение (правка 4) — общее свойство пилюли, отдельный
-                    // `truncateLabel`-флаг здесь не нужен.
-                    <DescriptionTagPill
-                      tag={row.templateTag}
-                      onActivate={onTagActivate}
-                      nodeType={nodeTypeForTag(row.templateTag, nodeTypes)}
-                    />
-                  )}
-                  <PreviewButton
-                    row={row}
-                    nodeParams={nodeParams}
-                    stageHeading={stage.heading}
-                    stageId={
-                      ambiguousHeadings.has(stage.heading) ? stage.id : undefined
-                    }
-                    groupLabel={group.label}
-                    rowLabel={distinctions.get(row.nodeId)}
-                  />
-                </div>
-              ))}
-            </div>
-          );
-        })}
+        {/* Группы остаются ТОЛЬКО у форк-волн (у каждой ветки своё инлайн-
+            перечисление каналов в `group.inline`). Не-форк волны вплетают
+            каналы прямо в `stage.body`, групп не отдают — стопки строк с 👁
+            больше нет. Ветка — один абзац: ◈-подпись + «: » + инлайн-каналы. */}
+        {stage.groups?.map((group) => (
+          <p key={group.id}>
+            {group.label && (
+              <span data-testid="group-label" className="font-semibold text-foreground">
+                {/* Глиф — маркер ветви, а не слово: без aria-hidden скринридер
+                    зачитывал бы его перед каждым названием потока. Цвет — из
+                    палитры узла-развилки (`NODE_STYLES.condition`), инлайном по
+                    той же причине, что и цвета пилюль. */}
+                <span aria-hidden style={{ color: NODE_STYLES.condition.color }}>
+                  ◈
+                </span>{" "}
+                {group.label}
+              </span>
+            )}
+            {group.label ? ": " : null}
+            {group.inline ? renderSegments(group.inline) : null}
+          </p>
+        ))}
       </>
     );
   }
@@ -475,8 +283,8 @@ export function WorkflowDescription({
           //    обычный абзац без бейджа/заголовка/рельса;
           //  • lead — титульный этап СИГНАЛЬНОГО блока: его собственный
           //    заголовок («Скоринг базы») дублировал бы заголовок блока
-          //    «Сигнал (Скоринг)», поэтому тело+настройки идут прямо под
-          //    заголовком блока, без бейджа-номера;
+          //    «Сигналы», поэтому тело идёт прямо под заголовком блока, без
+          //    бейджа-номера;
           //  • numbered — всё прочее: нумерованный под-шаг с бейджем и рельсом.
           const numbered = blockStages.filter(
             (s) => s.heading !== "" && block !== "signal",
@@ -492,7 +300,7 @@ export function WorkflowDescription({
                 data-testid="block-heading"
                 className="text-base font-semibold text-scenario-heading"
               >
-                {BLOCK_LABEL[block]}
+                {BLOCK_NUMBER[block]}. {BLOCK_LABEL[block]}
               </h3>
 
               {/* Сигнальный титульный этап — тело+настройки прямо под

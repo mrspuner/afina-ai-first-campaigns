@@ -25,28 +25,31 @@ import { getTriggerShortLabel } from "@/data/triggers-by-vertical";
  * «скоринг»; нет коммуникаций — нет выдуманных касаний.
  */
 
-/** Строка таблицы коммуникаций: одна нода канала внутри волны. */
+/** Строка коммуникации: одна нода канала внутри волны. Инлайн-текст касания
+ *  строится из `channel` + `templateTag`; контент сообщения смотрят через
+ *  поповер шаблона (сама пилюля), инлайн он больше не рендерится. */
 export interface DescriptionCommunication {
-  /** Нода-источник — ключ строки и адрес предпросмотра. */
+  /** Нода-источник — ключ строки и адрес поповера шаблона. */
   nodeId: string;
   /** Человекочитаемый канал: «SMS», «Email», «Push», «Звонок». */
   channel: string;
   /** Название шаблона как тег — раскрывает поповер выбора шаблона у пилюли. */
   templateTag?: DescriptionTag;
-  /** Первая строка ячейки контента — только push (его заголовок). */
-  contentTitle?: string;
-  /** Основной текст ячейки: sms.text / email.subject / push.body / ivr.scenario. */
-  contentText: string;
-  /** id библиотечного шаблона, если резолвится — иначе предпросмотр из params ноды. */
-  previewTemplateId?: string;
 }
 
-/** Поток внутри этапа: своя ветка развилки со своей таблицей. */
+/** Поток внутри этапа: своя ветка развилки со своим инлайн-перечислением каналов. */
 export interface DescriptionGroup {
   id: string;
   /** ◈-подзаголовок ветки/потока. Отсутствует у обычного касания. */
   label?: string;
   rows: DescriptionCommunication[];
+  /**
+   * Инлайн-перечисление каналов ветки — «SMS с шаблоном [тег] и звонок с
+   * шаблоном [тег]». Выпускается только у ФОРК-волн (у них ветки остаются
+   * отдельными ◈-блоками); не-форк волны вплетают то же перечисление прямо в
+   * `stage.body` и групп наружу не выдают.
+   */
+  inline?: DescriptionSegment[];
 }
 
 /**
@@ -79,6 +82,12 @@ export type TagTarget =
   | { kind: "template"; nodeId: string }
   | { kind: "node-fields"; nodeId: string }
   | { kind: "domains" }
+  // Триггеры скоринга: клик не уводит с карточки и не раскрывает поповер, а
+  // поднимается наверх (`onActivate`) — экран кампании открывает боковой дровер
+  // «Интересы и триггеры» (тот же, что у ноды скоринга в графе) и кладёт
+  // контекст-чип в промпт-бар. Цель без полей: адрес узла скоринга резолвит
+  // сам экран (`scoringNodeId` уже под рукой в `CampaignScreen`).
+  | { kind: "triggers" }
   | { kind: "none"; step?: WizardStepId; nodeId?: string };
 
 /** Значение параметра, вынесенное в кликабельную пилюлю внутри текста. */
@@ -137,19 +146,7 @@ export interface DescribableGraph {
   edges: WorkflowEdge[];
 }
 
-// ── Коммуникации → строка таблицы ────────────────────────────────────────────
-
-/** Контент ячейки таблицы по каналу — что ПОКАЗЫВАЕМ, не что сравниваем
- *  (сравнение волн живёт в `graph-waves.ts` и читает другие поля). */
-function communicationContent(params: NodeParams): { contentTitle?: string; contentText: string } {
-  switch (params.kind) {
-    case "sms": return { contentText: params.text };
-    case "email": return { contentText: params.subject };
-    case "push": return { contentTitle: params.title, contentText: params.body };
-    case "ivr": return { contentText: params.scenario };
-    default: return { contentText: "" };
-  }
-}
+// ── Коммуникации → строка ────────────────────────────────────────────────────
 
 function describeCommunication(
   node: WorkflowNode,
@@ -173,10 +170,6 @@ function describeCommunication(
   return {
     nodeId: node.id,
     channel: CHANNEL_LABEL[channel],
-    ...communicationContent(params),
-    // Резолвится шаблон — предпросмотр открывает его из библиотеки; не
-    // резолвится — рендер собирает синтетический из params самой ноды.
-    ...(template ? { previewTemplateId: template.id } : {}),
     // Fix: пилюля появляется ВСЕГДА в режиме тегов (вызвавший передал факты) —
     // резолвится шаблон или нет. Раньше тег создавался только когда
     // `templateName` резолвился, а резолв зависел от случайного совпадения
@@ -314,6 +307,34 @@ function valueSegments(withTags: boolean, tag: DescriptionTag): DescriptionSegme
 }
 
 /**
+ * Имя канала для бегущего текста: строчная первая буква («звонок», «email»),
+ * кроме аббревиатур целиком в верхнем регистре («SMS» остаётся «SMS»). Канал в
+ * прозе идёт мид-предложением/после двоеточия, где заглавная выглядела бы
+ * формальнее нужного; аббревиатуру ронять нельзя.
+ */
+function channelProseLabel(label: string): string {
+  if (label === label.toUpperCase()) return label;
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
+/**
+ * Инлайн-перечисление каналов волны — «SMS с шаблоном [тег] и звонок с шаблоном
+ * [тег]». Заменяет прежнюю стопку строк «канал · тег · 👁»: канал идёт обычным
+ * текстом (строчными в потоке), шаблон — пилюлей. Разделители «, » между всеми,
+ * кроме последней пары (« и »). Без фактов (`withTags=false` — у строки нет
+ * `templateTag`) остаются одни имена каналов, без «с шаблоном» и пилюль.
+ */
+function inlineChannelSegments(rows: DescriptionCommunication[]): DescriptionSegment[] {
+  const segs: DescriptionSegment[] = [];
+  rows.forEach((row, i) => {
+    if (i > 0) segs.push(t(i === rows.length - 1 ? " и " : ", "));
+    segs.push(t(channelProseLabel(row.channel)));
+    if (row.templateTag) segs.push(t(" с шаблоном "), { kind: "tag", tag: row.templateTag });
+  });
+  return segs;
+}
+
+/**
  * Тело этапа-развилки.
  *
  * `condition` (Task 3) — пилюля со значением ведёт на поповер `node-fields`
@@ -381,6 +402,8 @@ export interface CampaignFacts {
   /** Все домены триггеров со статусами — содержимое поповера доменов. */
   domains?: { domain: string; status: DomainStatus }[];
   baseRows?: number;
+  /** Число файлов базы — управляет склонением «база»/«базы» в сигнальном тексте. */
+  baseFileCount?: number;
   triggers?: string[];
   channels?: Channel[];
   budget?: number;
@@ -487,76 +510,66 @@ export function describeWorkflow(
 
   const stages: DescriptionStage[] = [];
 
-  // Заголовок этапа читается ИЗ ГРАФА (есть нода скоринга — «Скоринг базы»),
-  // а не из сценария/типа базы, как раньше заголовок «Старт.» был константой.
-  const startBody = hasScoring
-    ? "Загруженная база проходит скоринг: остаются те, кто проявляет намерение, с разбивкой по уровням склонности."
-    : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
-
   const triggersList = facts?.triggers ?? [];
   const hasBase = facts?.baseRows !== undefined;
   const hasTriggers = triggersList.length > 0;
+  // Склонение «база»/«базы» — по числу загруженных файлов, а не по числу строк.
+  const manyBases = (facts?.baseFileCount ?? 1) > 1;
 
-  /**
-   * Перечисление тегов триггеров: первые два именем, остаток — схлопка. В
-   * пилюлю идёт КОРОТКОЕ имя триггера (`getTriggerShortLabel`) — полное
-   * («Посещение сайтов банков…») в узкой пилюле всё равно режется многоточием;
-   * полное остаётся подсказкой на наведении (`hoverList: [full]`). Остаток
-   * схлопки — тоже короткими именами: тултип перечисляет их через запятую.
-   */
-  const triggerTagList = (): DescriptionSegment[] => {
-    const [first, second, ...rest] = triggersList;
-    const segs: DescriptionSegment[] = [
-      stepTag("start-trigger-0", getTriggerShortLabel(first), "interests", editableSteps, [first]),
-    ];
-    if (second) {
-      segs.push(
-        t(rest.length ? ", " : " и "),
-        stepTag("start-trigger-1", getTriggerShortLabel(second), "interests", editableSteps, [
-          second,
-        ]),
+  // Сигнальный текст: База и Триггеры теперь ИНЛАЙН-теги в прозе, а не отдельный
+  // список «подпись — значение» (две строки занимали много места).
+  //
+  // База — тот же тег с поповером файлов (цель «file»); значение — количество
+  // строк. Триггеры — единый тег «триггерам» (без перечисления конкретных),
+  // открывающий боковой дровер «Интересы и триггеры»: кликабелен ТОЛЬКО в
+  // черновике и ТОЛЬКО при наличии ноды скоринга (её и откроет дровер) — иначе
+  // носитель значения без клика. Полное перечисление триггеров уходит в
+  // `hoverList` (тултип на наведении).
+  const baseSegments: DescriptionSegment[] = hasBase
+    ? [stepTag("start-base", `${facts!.baseRows!.toLocaleString("ru-RU")} строк`, "file", editableSteps)]
+    : [];
+
+  const triggerSegments: DescriptionSegment[] = hasTriggers
+    ? valueSegments(hasFacts, {
+        id: "start-triggers",
+        label: "триггерам",
+        target:
+          graphEditable && hasScoring
+            ? { kind: "triggers" }
+            : { kind: "none", step: "interests" },
+        hoverList: triggersList.map(getTriggerShortLabel),
+      })
+    : [];
+
+  // Сборка тела старта. Скоринговый кейс: «Загруженная база [N строк] проходит
+  // скоринг. Дальше — скоринг по [триггерам]: …». Своя база (без скоринга) —
+  // прежняя формулировка «попадает в кампанию…», тоже с инлайн-тегом базы, но
+  // без триггеров/дровера. Пробел перед тегом ставим только при наличии базы —
+  // иначе получилось бы «Загруженная база  проходит…» с двойным пробелом.
+  const startSegments: DescriptionSegment[] = [
+    t(manyBases ? "Загруженные базы" : "Загруженная база"),
+  ];
+  if (hasBase) startSegments.push(t(" "), ...baseSegments);
+  if (hasScoring) {
+    startSegments.push(t(manyBases ? " проходят скоринг." : " проходит скоринг."));
+    if (hasTriggers) {
+      startSegments.push(t(" Дальше — скоринг по "), ...triggerSegments);
+      startSegments.push(
+        t(": остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
+      );
+    } else {
+      startSegments.push(
+        t(" Остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
       );
     }
-    if (rest.length) {
-      segs.push(
-        t(" и "),
-        stepTag(
-          "start-triggers-more",
-          `ещё ${rest.length} ${pluralRu(rest.length, ["триггеру", "триггерам", "триггерам"])}`,
-          "interests",
-          editableSteps,
-          rest.map(getTriggerShortLabel),
-        ),
-      );
-    }
-    return segs;
-  };
-
-  // Факты кампании — раньше вплетались инлайн в одно длинное предложение
-  // старта, теперь каждый факт — свой пункт «подпись — значение» (Task 4).
-  // Порядок фиксирован: База, Триггеры. Сценарий и режим переехали в шапку
-  // карточки кампании (identity, read-only), бюджет — в блок «Итог» (Task 7);
-  // ни один из них тут больше не рендерится. Id тегов внутри значений не
-  // меняются — на них ссылаются существующие клики/тесты.
-  const settings: DescriptionSetting[] = [];
-
-  if (hasBase) {
-    settings.push({
-      id: "start-base",
-      label: "База",
-      value: [
-        stepTag(
-          "start-base",
-          `${facts!.baseRows!.toLocaleString("ru-RU")} строк`,
-          "file",
-          editableSteps,
-        ),
-      ],
-    });
-  }
-
-  if (hasTriggers) {
-    settings.push({ id: "start-triggers", label: "Триггеры", value: triggerTagList() });
+  } else {
+    startSegments.push(
+      t(
+        manyBases
+          ? " попадают в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
+          : " попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.",
+      ),
+    );
   }
 
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
@@ -584,32 +597,8 @@ export function describeWorkflow(
     kind: "start",
     block: "signal",
     heading: hasScoring ? "Скоринг базы" : "Загрузка базы",
-    body: mergeTextSegments([t(startBody), ...domainSegments]),
-    ...(settings.length ? { settings } : {}),
+    body: mergeTextSegments([...startSegments, ...domainSegments]),
   });
-
-  // Вводная «Выбрано [N каналов]: …» принадлежит ПЕРВОЙ волне, какой бы она ни
-  // была: пилюля — единственный вход описания в шаг визарда «Каналы», и терять
-  // её оттого, что первая волна разветвилась (легаси-«Удержание» — развилка по
-  // построению), нельзя.
-  const channelsCount = facts?.channels?.length ?? 0;
-  const channelsIntro: DescriptionSegment[] = channelsCount
-    ? [
-        t("Выбрано "),
-        // Пилюля называет СКОЛЬКО каналов выбрано («3 канала»), а не
-        // перечисляет имена внутри себя — имена идут следом обычным текстом.
-        // Каналы — read-only (§4, паритет с графом: каналы в графе не правятся).
-        // Носитель значения без клика — передаём undefined вместо editableSteps,
-        // поэтому target всегда «none». Сменить каналы можно только через визард.
-        stepTag(
-          "first-touch-channels",
-          `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
-          "channels",
-          undefined,
-        ),
-        t(`: ${facts!.channels!.map((c) => CHANNEL_LABEL[c]).join(", ")}. `),
-      ]
-    : [];
 
   // Волны графа → этапы. Счётчиков два, и оба содержательные: ПОРЯДКОВЫЙ НОМЕР
   // КАСАНИЯ тратят и обычные волны, и развилки (развилка — полноценный шаг
@@ -758,72 +747,75 @@ export function describeWorkflow(
         : "Развилка по реакции"
       : touchHeading(touchOrdinal);
 
+    // Все строки волны (каналы + шаблоны) — для инлайн-перечисления в тексте.
+    const rows = groups.flatMap((g) => g.rows);
+    const rowCount = rows.length;
+
+    // Тело волны. У ФОРК-волн ветки остаются отдельными ◈-блоками (каждая несёт
+    // своё инлайн-перечисление каналов в `group.inline`), а тело — только
+    // подводка развилки. У не-форк волн перечисление каналов вплетается прямо в
+    // тело одним предложением («…: SMS с шаблоном [тег] и звонок…»), и группы
+    // наружу не выдаются (стопки строк с 👁 больше нет).
     let waveBody: DescriptionSegment[];
+    let waveGroups: DescriptionGroup[] | undefined;
+
     if (isFork) {
       waveBody = forkBody(wave, groups.length, hasFacts, graphEditable);
-    } else if (waveOrdinal === 1) {
-      const rowCount = groups.reduce((n, group) => n + group.rows.length, 0);
-      // «Поток» в этом блоке принадлежит СЕГМЕНТУ аудитории: этап развилки
-      // говорит «Аудитория делится на 3 потока по уровню склонности», и именно
-      // этот смысл закрепляют ◈-подзаголовки таблиц. Многоканальная волна
-      // делит аудиторию по другому признаку — по каналам (`split by:"equal"`
-      // действительно ДЕЛИТ охват между ветками, поэтому «каждому контакту
-      // уходит серия» тут было бы неправдой), — и называет свой механизм
-      // своим именем, а не занимает чужое слово.
-      waveBody = [
-        t(
-          rowCount > 1
-            ? "Аудитория делится по каналам — каждому своё сообщение:"
-            : "Каждому контакту уходит первое сообщение:",
-        ),
-      ];
-    } else if (wave.repeatsPrevious) {
-      if (pauseMergedIntoCheck) {
-        // Повтор, чью паузу И уход отреагировавших уже описала слитая
-        // «Проверка реакции и пауза» непосредственно перед ним: здесь —
-        // короткая подводка к той же таблице, БЕЗ повторного упоминания
-        // паузы. Флаг гасим: он относился РОВНО к этой волне.
-        pauseMergedIntoCheck = false;
-        waveBody = [t("Та же серия по тем же каналам:")];
+      waveGroups = groups.map((g) => ({ ...g, inline: inlineChannelSegments(g.rows) }));
+    } else {
+      // «Каркас» фразы БЕЗ финального двоеточия — инлайн-каналы допишутся ниже.
+      let framing: DescriptionSegment[];
+      if (waveOrdinal === 1) {
+        // Многоканальная волна делит аудиторию по каналам; одноканальная просто
+        // шлёт первое сообщение. «Поток» здесь принадлежит не каналу, а сегменту
+        // склонности — его занимает форк-ветка выше, поэтому тут «по каналам».
+        framing = [
+          t(
+            rowCount > 1
+              ? "Аудитория делится по каналам, каждому приходит своё сообщение"
+              : "Каждому контакту уходит первое сообщение",
+          ),
+        ];
+      } else if (wave.repeatsPrevious) {
+        if (pauseMergedIntoCheck) {
+          // Паузу и уход отреагировавших уже описала слитая «Проверка реакции и
+          // пауза» прямо перед этой волной — здесь только подводка к той же
+          // серии. Флаг гасим: он относился РОВНО к этой волне.
+          pauseMergedIntoCheck = false;
+          framing = [t("Та же серия по тем же каналам")];
+        } else {
+          // Пауза проверкой не забрана — волна рассказывает о ней сама (та же
+          // нода ожидания `waitTag`), иначе пауза потерялась бы нигде не названной.
+          framing = waitTag
+            ? [
+                t("Тем, кто не отреагировал, кампания выжидает "),
+                ...valueSegments(hasFacts, waitTag),
+                t(" и повторяет ту же серию по тем же каналам"),
+              ]
+            : [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам")];
+        }
+      } else if (wave.sameContentAsPrevious) {
+        // Содержание совпало с предыдущей волной, паузы в графе нет — называем
+        // серию повторённой, но паузу не поминаем (её здесь нет по построению).
+        framing = [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам")];
       } else {
-        // Повтор, чью паузу проверка НЕ забрала (проверки перед ним нет либо
-        // её непосредственный сосед — не этот повтор): волна повествует о
-        // своей паузе сама, иначе пауза потерялась бы нигде не названной
-        // (восстановление до-Task-5-поведения для неканоничных графов). Пилюля
-        // — та же нода ожидания (`waitTag`), что и была бы у слитой проверки.
-        waveBody = waitTag
+        // Волна разошлась с предыдущей: сверяем по каналам, а не утверждаем
+        // наугад — те же каналы с другими текстами это обычная форма.
+        const sameChannels =
+          previousChannels !== undefined &&
+          previousChannels.size === waveChannels.size &&
+          [...waveChannels].every((c) => previousChannels!.has(c));
+        const differs = sameChannels ? "другими сообщениями" : "другими каналами и шаблонами";
+        framing = waitTag
           ? [
               t("Тем, кто не отреагировал, кампания выжидает "),
               ...valueSegments(hasFacts, waitTag),
-              t(" и повторяет ту же серию по тем же каналам:"),
+              t(` и заходит иначе — ${differs}`),
             ]
-          : [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам:")];
+          : [t(`Тем, кто не отреагировал, кампания заходит иначе — ${differs}`)];
       }
-    } else if (wave.sameContentAsPrevious) {
-      // Содержание совпало с предыдущей волной, но разделяющей паузы нет —
-      // повтором (`repeatsPrevious`) такая волна не стала (его определение
-      // требует паузы), а вот назвать её серию ДРУГОЙ было бы прямой ложью:
-      // ниже стоит та же самая таблица. Называем серию повторённой и НЕ
-      // поминаем паузу, которой в графе нет (`waitBefore` здесь отсутствует по
-      // построению: будь она — волна ушла бы в ветку `repeatsPrevious` выше).
-      waveBody = [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам:")];
-    } else {
-      // Волна разошлась с предыдущей: те же люди, но другой заход. Чем именно
-      // он другой — сверяем по каналам, а не утверждаем наугад: вторая волна
-      // тех же каналов с другими текстами — обычная форма, и врать про «другие
-      // каналы» описание не должно.
-      const sameChannels =
-        previousChannels !== undefined &&
-        previousChannels.size === waveChannels.size &&
-        [...waveChannels].every((c) => previousChannels!.has(c));
-      const differs = sameChannels ? "другими сообщениями" : "другими каналами и шаблонами";
-      waveBody = waitTag
-        ? [
-            t("Тем, кто не отреагировал, кампания выжидает "),
-            ...valueSegments(hasFacts, waitTag),
-            t(` и заходит иначе — ${differs}:`),
-          ]
-        : [t(`Тем, кто не отреагировал, кампания заходит иначе — ${differs}:`)];
+      waveBody = [...framing, t(": "), ...inlineChannelSegments(rows), t(".")];
+      waveGroups = undefined;
     }
 
     stages.push({
@@ -831,10 +823,8 @@ export function describeWorkflow(
       kind: isFork ? "fork" : "touch",
       block: "communication",
       heading,
-      // Вводная про каналы — у первой волны любого вида, перед её собственной
-      // фразой.
-      body: mergeTextSegments(waveOrdinal === 1 ? [...channelsIntro, ...waveBody] : waveBody),
-      groups,
+      body: mergeTextSegments(waveBody),
+      ...(waveGroups ? { groups: waveGroups } : {}),
     });
     previousChannels = waveChannels;
   }

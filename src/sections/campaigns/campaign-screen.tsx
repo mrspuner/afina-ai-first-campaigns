@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { BarChart3, Copy, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePromptChips } from "@/state/prompt-chips-context";
+import { useChat } from "@/state/chat-context";
 import {
   EntityCardShell,
   CardTag,
@@ -64,6 +65,7 @@ export function CampaignScreen() {
   const { view, campaigns, artifacts, templates, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
   const { pushChip } = usePromptChips();
+  const chat = useChat();
 
   const campaign =
     view.kind === "campaign"
@@ -157,6 +159,8 @@ export function CampaignScreen() {
     pending: campaignDomains.filter((d) => d.status === "pending").map((d) => d.domain),
     domains: campaignDomains,
     baseRows: campaign ? campaignBaseRows(campaign) : undefined,
+    // Число файлов базы — для склонения «база»/«базы» в сигнальном тексте.
+    baseFileCount: campaign?.files?.length,
     triggers: campaign?.triggers,
     channels: campaign?.channels,
     budget: campaign?.budget,
@@ -279,22 +283,22 @@ export function CampaignScreen() {
     });
   }
 
-  // Клик по пилюле-входу «Триггеры» (шаг interests): остаёмся на карточке и
-  // лишь выставляем контекст промпт-бара (Task 11) — node-чип скоринга с
-  // paramLabel «Триггеры» (select-prompt-suggestions подменяет подсказки на
-  // скоринговые). «База» правится собственным поповером (BaseFilesTagPopover,
-  // Task 12) и onActivate не зовёт; каналы — read-only (§4); поповерные цели
-  // (шаблон/пауза/домены) — внутри самой пилюли (Task 7–8); «носители значений»
-  // (target: "none") клика вообще не поднимают.
+  // Клик по тегу «триггерам»: открываем боковой дровер «Интересы и триггеры»
+  // (тот же, что у ноды скоринга в графе) И кладём контекст-чип скоринга в
+  // промпт-бар (paramLabel «Триггеры» → скоринговые подсказки, ИИ отвечает в
+  // контексте триггеров). Кликабелен только в черновике и при наличии ноды
+  // скоринга (`describeWorkflow` иначе выдаёт цель `none`, клик не поднимается).
+  // «База» правится собственным поповером (BaseFilesTagPopover) и onActivate не
+  // зовёт; поповерные цели (шаблон/пауза/домены) — внутри самой пилюли;
+  // «носители значений» (target: "none") клика вообще не поднимают.
   function handleTagActivate(tag: DescriptionTag) {
-    if (
-      tag.target.kind !== "wizard-step" ||
-      tag.target.step !== "interests" ||
-      !campaignId
-    ) {
-      return;
-    }
+    if (tag.target.kind !== "triggers" || !campaignId || !scoringNodeId) return;
     pushScoringContext("Триггеры");
+    chat.openScoringDrawer({
+      nodeId: scoringNodeId,
+      campaignId,
+      editable: graphEditable,
+    });
   }
 
   // ИИ-иконка у «Сценарий кампании» (spec §2): кладёт тег «Логика кампании» в
@@ -473,12 +477,16 @@ export function CampaignScreen() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {/* Денежная подводка (spec §6): не конверсионный нарратив (он
-                  закрывает блок «Коммуникации»), а «за что платите». */}
-              <p className="text-sm text-muted-foreground">
-                За что платите: скоринг базы и коммуникации. Списывается во
-                время запуска.
-              </p>
+              {/* Денежная подводка: не конверсионный нарратив (он закрывает
+                  блок «Коммуникации»), а «за что платите» + когда списывается. */}
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm text-foreground">
+                  Вы платите за скоринг базы и коммуникации.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Деньги списываются с вашего счёта во время запуска кампании.
+                </p>
+              </div>
               {/* Прогноз касаний — та же оценка (estimateTouches), что и на
                   экране оплаты, на рекомендуемой сумме. */}
               <p className="text-sm text-muted-foreground">
@@ -503,6 +511,7 @@ export function CampaignScreen() {
                     totalDisplay={formatRubPlain(draftPaymentSplit.total)}
                     commGroups={draftCommGroups}
                     formatCell={formatRubPlain}
+                    defaultExpanded
                   />
                 </div>
               )}

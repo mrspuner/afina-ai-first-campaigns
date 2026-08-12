@@ -70,11 +70,15 @@ describe("BudgetBreakdown — collapsible «Коммуникации» table", (
     ).toBe("true");
   });
 
-  it("показывает пояснение первичные/повторные над таблицей (#14)", () => {
+  it("пояснение первичные/повторные — в тултипах заголовков колонок, не абзацем", () => {
     renderBreakdown({ defaultExpanded: true });
+    // Абзаца-пояснения над таблицей больше нет.
     expect(
-      screen.getByText(/дополнительное касание тем, кто не отреагировал/)
-    ).toBeTruthy();
+      screen.queryByText(/дополнительное касание тем, кто не отреагировал/i)
+    ).toBeNull();
+    // Заголовки колонок несут подсказку — триггер тултипа с help-курсором.
+    expect(screen.getByText("Первичные").className).toContain("cursor-help");
+    expect(screen.getByText("Повторные").className).toContain("cursor-help");
   });
 
   it("clicking again collapses the table back", () => {

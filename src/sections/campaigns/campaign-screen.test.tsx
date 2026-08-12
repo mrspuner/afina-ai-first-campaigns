@@ -135,12 +135,11 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     // Заголовки этапов больше не строка с точкой — это отдельный <p> с текстом
     // ИЗ ГРАФА («Скоринг базы» — есть нода скоринга у sourceType:"new») и
     // номер шага рядом (Task 4/5).
-    expect(screen.getByText("Сигнал (Скоринг)")).toBeInTheDocument();
+    expect(screen.getByText("1. Сигналы")).toBeInTheDocument();
     expect(screen.getByText("Первое касание")).toBeInTheDocument();
-    // Контент шаблона больше не инлайн (Task 9 — текст-история): контент виден
-    // в предпросмотре. Проверяем, что строка коммуникации отрендерилась —
-    // канал «SMS» (точный <span>, в отличие от интро-текста «…: SMS.»).
-    expect(screen.getAllByText("SMS").length).toBeGreaterThan(0);
+    // Каналы вплетены инлайн в текст касания — проверяем, что тело первого
+    // касания отрендерилось (канал назван в бегущем тексте).
+    expect(screen.getByText(/Каждому контакту уходит первое сообщение/)).toBeInTheDocument();
   });
 
   it("озаглавливает мини-граф «Граф кампании»", () => {
@@ -173,7 +172,7 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     const section = screen.getByText("Сценарий кампании").closest("section")!;
     // Заголовок блока «Сигнал (Скоринг)» (Task 8 — блочная группировка) как
     // якорь текста описания.
-    const description = screen.getByText("Сигнал (Скоринг)");
+    const description = screen.getByText("1. Сигналы");
     const graph = container.querySelector(".react-flow")!;
 
     expect(section.contains(description)).toBe(true);
@@ -186,7 +185,7 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
 
   it("кампания без коммуникаций не выдумывает касаний", () => {
     renderCampaign(baseCampaign({ id: "cmp_desc_nocomm", channels: [] }));
-    expect(screen.getByText("Сигнал (Скоринг)")).toBeInTheDocument();
+    expect(screen.getByText("1. Сигналы")).toBeInTheDocument();
     expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
@@ -196,7 +195,10 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     // Черновик: денежный блок «Итог» (бывший «Запуск») + подводка + «К оплате».
     expect(screen.getByText("Итог")).toBeInTheDocument();
     expect(
-      screen.getByText(/списывается во время запуска/i),
+      screen.getByText("Вы платите за скоринг базы и коммуникации."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Деньги списываются с вашего счёта во время запуска кампании/i),
     ).toBeInTheDocument();
     expect(screen.getByText("К оплате")).toBeInTheDocument();
   });
@@ -310,16 +312,13 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
   // карточки бессмысленно — useScopeReset стирает чипы при смене view). «База»
   // редактируется собственным поповером (BaseFilesTagPopover, Task 12; см.
   // description-tag.test.tsx), в handleTagActivate не доходит.
-  it("клик по тегу «Триггеры» кладёт скоринговый чип (paramLabel «Триггеры») вместо ухода с карточки", async () => {
+  it("клик по единому тегу «триггерам» кладёт скоринговый чип (paramLabel «Триггеры») и открывает боковой дровер", () => {
     const chipsRef: { current: readonly PromptChip[] } = { current: [] };
     renderCampaign(draftCampaign, undefined, chipsRef);
-    // draftCampaign.triggers = ["Ипотека"] → единственная пилюля перечисления
-    // (start-trigger-0), короткая метка совпадает со входным лейблом — сам
-    // триггер не найден в SHORT_LABEL_BY_LABEL (тот ключуется полными
-    // формулировками триггеров вертикалей, не брендовыми именами), поэтому
-    // getTriggerShortLabel возвращает вход как есть.
-    fireEvent.click(screen.getByRole("button", { name: "Ипотека" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    // Триггеры теперь единый тег «триггерам» (без перечисления конкретных).
+    // Клик — прямой (не шаг визарда, промежуточного «Изменить» нет): открывает
+    // боковой дровер триггеров и кладёт контекст-чип в промпт-бар.
+    fireEvent.click(screen.getByRole("button", { name: "триггерам" }));
     expect(screen.getByText("Сценарий кампании")).toBeInTheDocument();
     const chip = chipsRef.current.find((c) => c.kind === "node");
     expect(chip).toBeDefined();
@@ -327,6 +326,9 @@ describe("CampaignScreen — CampaignFacts на карточке, нодо-бл�
     const payload = chip!.payload as { nodeType: string; paramLabel?: string };
     expect(payload.nodeType).toBe("scoring");
     expect(payload.paramLabel).toBe("Триггеры");
+    // (Сам боковой дровер `ScoringDrawer` живёт в page.tsx, вне дерева карточки,
+    // поэтому здесь проверяем только контекст-чип; открытие дровера — через
+    // chat-context, покрыто на уровне chat-context/страницы.)
   });
 
   it("красит пилюлю шаблона под цвет sms-узла графа, а не оставляет её нейтральной", () => {

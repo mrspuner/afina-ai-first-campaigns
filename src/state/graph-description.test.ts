@@ -107,14 +107,28 @@ function commGraph(params: NodeParams): DescribableGraph {
   };
 }
 
+/**
+ * Теги шаблонов волны (id `msg-…`). У НЕ-форк волн каналы вплетены инлайн прямо
+ * в `stage.body`; у ФОРК-волн — в `group.inline` каждой ветки. Хелпер собирает
+ * их из обоих мест, в порядке текста.
+ */
+function templateTagsOf(stage: ReturnType<typeof describeWorkflow>[number]) {
+  const segs: DescriptionSegment[] = [
+    ...stage.body,
+    ...(stage.groups ?? []).flatMap((g) => g.inline ?? []),
+  ];
+  return segs.flatMap((s) => (s.kind === "tag" && s.tag.id.startsWith("msg-") ? [s.tag] : []));
+}
+
 describe("describeWorkflow", () => {
   describe("Этап старта", () => {
     it("называется «Скоринг базы», когда нода скоринга есть", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const start = stages.find((s) => s.kind === "start")!;
       expect(start.heading).toBe("Скоринг базы");
+      // Без фактов — базы/триггеров тегами нет, тело только общая фраза скоринга.
       expect(segmentsText(start.body)).toBe(
-        "Загруженная база проходит скоринг: остаются те, кто проявляет намерение, с разбивкой по уровням склонности.",
+        "Загруженная база проходит скоринг. Остаются те, кто проявляет намерение, с разбивкой по уровням склонности.",
       );
     });
 
@@ -125,42 +139,61 @@ describe("describeWorkflow", () => {
       expect(segmentsText(start.body)).toContain("сверяются с сигналами");
     });
 
-    it("выносит факты кампании в список настроек, в фиксированном порядке — сценарий/режим/бюджет туда не попадают (Task 7)", () => {
+    it("вплетает базу и триггеры инлайн-тегами в текст, а не отдельным списком (сценарий/режим/бюджет — не тут)", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
-        pending: [], baseRows: 186255, scenarioName: "Win-back оффер",
+        pending: [], baseRows: 186255, baseFileCount: 1, scenarioName: "Win-back оффер",
         triggers: ["Вклады", "Рассрочка", "Авто", "Ипотека", "Карты"],
         analysisMode: "once", budget: 571186, editableSteps: [],
       });
       const start = stages.find((s) => s.kind === "start")!;
-      // Сценарий/режим/бюджет присутствуют в фактах, но не рендерятся здесь:
-      // сценарий и режим — identity шапки карточки кампании, бюджет — в
-      // блоке «Итог» (Task 7).
-      expect(start.settings!.map((s) => s.label)).toEqual(["База", "Триггеры"]);
-      expect(segmentsText(start.settings![0].value)).toBe("186 255 строк");
-      expect(segmentsText(start.settings![1].value)).toBe("Вклады, Рассрочка и ещё 3 триггерам");
+      // Списка «подпись — значение» больше нет — база и триггеры теперь пилюли
+      // прямо в прозе.
+      expect(start.settings).toBeUndefined();
+      expect(segmentsText(start.body)).toBe(
+        "Загруженная база 186 255 строк проходит скоринг. Дальше — скоринг по триггерам: остаются те, кто проявляет намерение, с разбивкой по уровням склонности.",
+      );
+      // База — тег с целью «file»; триггеры — единый тег «триггерам» (без
+      // перечисления конкретных), полный список — в hoverList.
+      const tags = start.body.flatMap((s) => (s.kind === "tag" ? [s.tag] : []));
+      const base = tags.find((t) => t.id === "start-base")!;
+      // toLocaleString("ru-RU") группирует разряды через NBSP (U+00A0) — сравниваем
+      // с тем же форматтером, а не с ASCII-пробелом в буквальном тексте.
+      expect(base.label).toBe(`${(186255).toLocaleString("ru-RU")} строк`);
+      const trig = tags.find((t) => t.id === "start-triggers")!;
+      expect(trig.label).toBe("триггерам");
+      expect(trig.hoverList).toEqual(["Вклады", "Рассрочка", "Авто", "Ипотека", "Карты"]);
     });
 
-    it("пункт не появляется, если факта нет", () => {
+    it("склоняет «база»→«базы» при нескольких файлах", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
+        pending: [], baseRows: 45000, baseFileCount: 2, triggers: ["Вклады"], editableSteps: [],
+      });
+      const start = stages.find((s) => s.kind === "start")!;
+      expect(segmentsText(start.body)).toContain("Загруженные базы 45 000 строк проходят скоринг");
+    });
+
+    it("без базы/триггеров тег не появляется, текст остаётся связным", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "own", ["sms"]), T, {
         pending: [], baseRows: 1000, editableSteps: [],
       });
       const start = stages.find((s) => s.kind === "start")!;
-      expect(start.settings!.map((s) => s.label)).toEqual(["База"]);
+      // Своя база (без скоринга) — только тег базы, триггеров/дровера нет.
+      const tags = start.body.flatMap((s) => (s.kind === "tag" ? [s.tag] : []));
+      expect(tags.map((t) => t.id)).toEqual(["start-base"]);
     });
 
-    it("без фактов список настроек пуст, а тело — только общее предложение", () => {
+    it("без фактов тегов в теле нет, а текст — только общее предложение", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
       const start = stages.find((s) => s.kind === "start")!;
-      expect(start.settings ?? []).toEqual([]);
+      expect(start.body.some((s) => s.kind === "tag")).toBe(false);
     });
 
-    it("фраза о доменах на модерации остаётся предложением тела, а не пунктом списка", () => {
+    it("фраза о доменах на модерации остаётся предложением тела", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
         pending: ["a.ru", "b.ru"], editableSteps: [],
       });
       const start = stages.find((s) => s.kind === "start")!;
       expect(segmentsText(start.body)).toContain("Домены a.ru, b.ru отправлены на модерацию");
-      expect((start.settings ?? []).some((s) => s.label === "Домены")).toBe(false);
     });
   });
 
@@ -201,7 +234,7 @@ describe("describeWorkflow", () => {
       expect(start.body).toEqual([
         {
           kind: "text",
-          text: "Загруженная база проходит скоринг: остаются те, кто проявляет намерение, с разбивкой по уровням склонности. Домены ",
+          text: "Загруженная база проходит скоринг. Остаются те, кто проявляет намерение, с разбивкой по уровням склонности. Домены ",
         },
         { kind: "tag", tag: { id: "start-domains", label: "a.ru, b.ru", target: { kind: "domains" } } },
         {
@@ -213,86 +246,72 @@ describe("describeWorkflow", () => {
   });
 
   describe("Касания", () => {
-    it("первая волна — таблица строк с каналом, контентом и id шаблона", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms", "email"]), T);
+    it("первая волна — инлайн-текст с каналами и тегами шаблонов", () => {
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms", "email"]), T, {
+        pending: [], graphEditable: true,
+      });
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(touch.heading).toBe("Первое касание");
-      expect(touch.groups).toHaveLength(1);
-      const rows = touch.groups![0].rows;
-      expect(rows.map((r) => r.channel).sort()).toEqual(["Email", "SMS"]);
-      const sms = rows.find((r) => r.channel === "SMS")!;
-      expect(sms.contentText).toBe("Ваше предложение ждёт. Подробности на сайте.");
-      expect(sms.previewTemplateId).toBe("tpl_sms_reminder");
+      // Каналы вплетены в текст (не таблица), не форк — групп нет.
+      expect(touch.groups).toBeUndefined();
+      const body = segmentsText(touch.body);
+      expect(body).toContain("Аудитория делится по каналам, каждому приходит своё сообщение:");
+      expect(body).toContain("SMS с шаблоном");
+      expect(body).toContain("email с шаблоном");
     });
 
-    it("email кладёт в контент ТЕМУ, а не тело письма, и при этом резолвит свой шаблон", () => {
+    it("email резолвит свой шаблон — имя видно пилюлей в тексте", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["email"]), T, {
         pending: [], graphEditable: true,
       });
-      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
-      expect(row.channel).toBe("Email");
-      // Равенство ТЕМЕ пресета, а не «нет угловых скобок»: тело письма — тоже
-      // простой текст, и проверка на «<» темы от тела не отличала бы.
-      expect(row.contentText).toBe("Ваше предложение готово");
-      expect(row.contentTitle).toBeUndefined();
+      const touch = stages.find((s) => s.kind === "touch")!;
       // Положительный резолв шаблона ИМЕННО этого канала (исторический баг:
       // сид-текст письма не совпадал ни с одним пресетом справочника, шаблон не
-      // резолвился и пилюля не рисовалась). Рассогласование сида со справочником
-      // специфично для канала — зелёный SMS за email не отвечает.
-      expect(row.previewTemplateId).toBe("tpl_eml_offer");
-      expect(row.templateTag!.label).toBe("Персональный оффер");
+      // резолвился и пилюля не рисовалась).
+      const tag = templateTagsOf(touch)[0];
+      expect(tag.label).toBe("Персональный оффер");
+      expect(tag.target).toEqual({ kind: "template", nodeId: expect.stringMatching(/email/) });
+      expect(segmentsText(touch.body)).toContain("email с шаблоном");
     });
 
-    it("ivr резолвит свой шаблон — тот же щит для четвёртого канала", () => {
+    it("ivr резолвит свой шаблон — тот же щит для канала звонка", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["ivr"]), T, {
         pending: [], graphEditable: true,
       });
-      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
-      expect(row.channel).toBe("Звонок");
-      expect(row.previewTemplateId).toBe("tpl_ivr_greeting");
+      const touch = stages.find((s) => s.kind === "touch")!;
+      expect(segmentsText(touch.body)).toContain("звонок с шаблоном");
+      expect(templateTagsOf(touch)[0].label).toBe("Звонок — приветствие");
     });
 
-    it("push кладёт заголовок отдельной строкой ячейки", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["push"]), T);
-      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
-      expect(row.contentTitle).toBe("Давно вас не видели");
-      expect(row.contentText).toBe("Загляните — у нас есть кое-что для вас.");
-    });
-
-    it("нерезолвнутый шаблон даёт пилюлю «не выбран» и предпросмотр без id", () => {
+    it("нерезолвнутый шаблон даёт пилюлю «не выбран»", () => {
       const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), [], {
         pending: [], editableSteps: [], graphEditable: true,
       });
-      const row = stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
-      expect(row.templateTag!.label).toBe("не выбран");
-      expect(row.previewTemplateId).toBeUndefined();
+      const touch = stages.find((s) => s.kind === "touch")!;
+      expect(templateTagsOf(touch)[0].label).toBe("не выбран");
     });
 
     // Зафиксированное решение финального ревью: снятая `describeMessage`
     // ОТБРАСЫВАЛА коммуникацию с пустым контентом, и нода, которая в графе
-    // есть и деньги за неё считаются, молча пропадала из описания. Таблица её
-    // показывает — с пустой ячейкой контента, но с каналом и шаблоном.
-    // Улучшение намеренное, поэтому закреплено тестом, а не оставлено
-    // побочным эффектом переписывания.
-    it("коммуникация с ПУСТЫМ контентом даёт строку таблицы, а не исчезает молча", () => {
+    // есть и деньги за неё считаются, молча пропадала из описания. Инлайн-текст
+    // её показывает — каналом и тегом шаблона, даже с пустым текстом ноды.
+    it("коммуникация с ПУСТЫМ текстом ноды всё равно даёт канал в тексте, а не исчезает молча", () => {
       const stages = describeWorkflow(
         commGraph({ kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" }),
         T,
       );
-      const rows = stages.find((s) => s.kind === "touch")!.groups![0].rows;
-      expect(rows).toHaveLength(1);
-      expect(rows[0].channel).toBe("SMS");
-      expect(rows[0].contentText).toBe("");
+      const touch = stages.find((s) => s.kind === "touch")!;
+      expect(segmentsText(touch.body)).toContain("SMS");
     });
 
-    it("схлопывает одинаковые касания параллельных сегментов в одну строку на канал", () => {
+    it("схлопывает одинаковые касания параллельных сегментов в один канал (не форк)", () => {
       // Апсейл — сегментированный шаблон: три comm-юнита с одинаковыми params.
       // Одинаковые потоки — не потоки: развилки нет, есть обычное касание.
       const stages = describeWorkflow(createTemplate("Апсейл", "new", ["sms"]), T);
+      expect(stages.some((s) => s.kind === "fork")).toBe(false);
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(touch.groups).toHaveLength(1);
-      expect(touch.groups![0].rows).toHaveLength(1);
-      expect(touch.groups![0].rows[0].channel).toBe("SMS");
+      expect(touch.groups).toBeUndefined();
+      expect(segmentsText(touch.body)).toContain("SMS");
     });
 
     it("объединяет проверку реакции и паузу в один шаг перед вторым касанием", () => {
@@ -314,8 +333,9 @@ describe("describeWorkflow", () => {
       expect(stages.some((s) => s.kind === "retry")).toBe(false);
       const [first, second] = stages.filter((s) => s.kind === "touch");
       expect(second.heading).toBe("Второе касание");
-      expect(second.groups![0].rows.map((r) => r.contentText))
-        .toEqual(first.groups![0].rows.map((r) => r.contentText));
+      // Та же серия — те же теги шаблонов, что и в первом касании.
+      expect(templateTagsOf(second).map((t) => t.label))
+        .toEqual(templateTagsOf(first).map((t) => t.label));
       expect(segmentsText(second.body)).toContain("Та же серия по тем же каналам");
     });
 
@@ -463,8 +483,8 @@ describe("describeWorkflow", () => {
         // существует, повтором её никто не пометил, и содержание совпадает.
         expect(touches).toHaveLength(2);
         expect(stages.some((s) => s.kind === "retry")).toBe(false);
-        expect(touches[1].groups![0].rows.map((r) => r.contentText))
-          .toEqual(touches[0].groups![0].rows.map((r) => r.contentText));
+        expect(templateTagsOf(touches[1]).map((t) => t.label))
+          .toEqual(templateTagsOf(touches[0]).map((t) => t.label));
 
         const body = segmentsText(touches[1].body);
         expect(body).not.toContain("другими сообщениями");
@@ -521,7 +541,7 @@ describe("describeWorkflow", () => {
       expect(segmentsText(check.body)).toContain("второе касание");
       const touches = stages.filter((s) => s.kind === "touch");
       expect(touches[1].heading).toBe("Второе касание");
-      expect(segmentsText(touches[1].body)).toBe("Та же серия по тем же каналам:");
+      expect(segmentsText(touches[1].body)).toBe("Та же серия по тем же каналам: SMS.");
     });
 
     // Баг #1: проверка сканировала ВПЕРЁД до первого повтора и заимствовала его
@@ -598,7 +618,7 @@ describe("describeWorkflow", () => {
       const touches = stages.filter((s) => s.kind === "touch");
       const repeat = touches[touches.length - 1];
       expect(repeat.heading).toBe("Третье касание");
-      expect(segmentsText(repeat.body)).toBe("Та же серия по тем же каналам:");
+      expect(segmentsText(repeat.body)).toBe("Та же серия по тем же каналам: SMS.");
     });
 
     // Пробел из code review: решение сливать паузу проверяло только то, что
@@ -676,9 +696,9 @@ describe("describeWorkflow", () => {
       const fork = describeWorkflow(conditionForkGraph(), T).find((s) => s.kind === "fork")!;
       expect(fork.heading).toBe("Развилка по реакции");
       expect(fork.groups!.map((g) => g.label)).toEqual(["Открыл письмо", "Не открыл письмо"]);
-      expect(fork.groups!.map((g) => g.rows.map((r) => r.contentText))).toEqual([
-        ["Оффер −10%"], ["Короткое напоминание"],
-      ]);
+      // Каждая ветка несёт своё инлайн-перечисление каналов (без фактов —
+      // только имя канала: email в одной ветке, SMS в другой).
+      expect(fork.groups!.map((g) => segmentsText(g.inline!))).toEqual(["email", "SMS"]);
       expect(segmentsText(fork.body)).toContain("расходится по условию открыл письмо?");
     });
 
@@ -731,20 +751,19 @@ describe("describeWorkflow", () => {
         .toContain("Тем, кто не отреагировал");
     });
 
-    it("вводная «Выбрано N каналов» есть и тогда, когда первая волна — развилка", () => {
-      // Пилюля «Каналы» — единственный вход описания в этот шаг визарда; она не
-      // должна пропадать оттого, что первая волна разветвилась.
+    it("развилка-первая-волна: тело — только подводка развилки, без пилюли «N каналов»", () => {
+      // Пилюля-счётчик каналов убрана — каналы теперь названы инлайн в ветках.
       const stages = describeWorkflow(forkThenTouchGraph(), T, {
         pending: [], channels: ["ivr", "email", "push"], editableSteps: ["channels"],
       });
       const fork = stages.find((s) => s.kind === "fork")!;
       expect(segmentsText(fork.body)).toBe(
-        "Выбрано 3 канала: Звонок, Email, Push. Аудитория делится на 3 потока по уровню склонности, каждый получает своё:",
+        "Аудитория делится на 3 потока по уровню склонности, каждый получает своё:",
       );
-      const tag = fork.body.find((s) => s.kind === "tag")!;
-      expect(tag.tag.label).toBe("3 канала");
-      // Каналы read-only (§4): носитель значения без клика (target «none»).
-      expect(tag.tag.target).toEqual({ kind: "none", step: "channels" });
+      // Тега-счётчика каналов в теле развилки больше нет (каналы — в ветках).
+      expect(fork.body.some((s) => s.kind === "tag" && s.tag.id === "first-touch-channels")).toBe(
+        false,
+      );
     });
 
     it("повтор ТРАТИТ номер касания: касание → повтор → касание даёт «Первое / Второе / Третье»", () => {
@@ -779,123 +798,78 @@ describe("describeWorkflow", () => {
       const stages = describeWorkflow(createTemplate("Удержание", "new", ["sms", "email"]), T);
       expect(stages.some((s) => s.kind === "fork")).toBe(false);
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(touch.groups).toHaveLength(1);
-      expect(touch.groups![0].label).toBeUndefined();
+      // Не форк — групп нет, каналы вплетены инлайн в тело.
+      expect(touch.groups).toBeUndefined();
+      const body = segmentsText(touch.body);
+      expect(body).toContain("SMS");
+      expect(body).toContain("email");
     });
   });
 
-  // Item 3 (финальная полировка): «Первое касание» должно называть, СКОЛЬКО
-  // каналов выбрано, а не выводить весь список именами в одной пилюле —
-  // «Выбрано [3 канала]: SMS, Email, Звонок. …» — считает пилюля (кликабельна,
-  // ведёт на «Каналы»), имена идут дальше обычным текстом.
-  describe("Первое касание — «Выбрано N каналов» (Item 3)", () => {
-    // Один канал → сплиттера в графе нет (см. "не выдумывает деление на
-    // потоки" выше); два и больше → есть.
+  // Каналы больше не выносятся отдельной пилюлей-счётчиком «N каналов»: они
+  // названы ИНЛАЙН прямо в тексте касания («SMS с шаблоном [тег] и email…»).
+  describe("Первое касание — каналы вплетены инлайн (пилюля «N каналов» убрана)", () => {
+    // Один канал → сплиттера в графе нет; два и больше → есть.
     const graphNoSplit = createTemplate("Возврат", "new", ["sms"]);
     const graphSplit = createTemplate("Возврат", "new", ["sms", "email"]);
+    const noChannelsPill = (body: DescriptionSegment[]) =>
+      body.some((s) => s.kind === "tag" && s.tag.id === "first-touch-channels");
 
-    it("без сплита: «Выбрано N каналов: имена. Каждому контакту…»", () => {
-      const stages = describeWorkflow(graphNoSplit, T, {
-        pending: [],
-        channels: ["sms", "email", "ivr"],
-      });
+    it("один канал: «Каждому контакту уходит первое сообщение: {канал} с шаблоном [тег]»", () => {
+      const stages = describeWorkflow(graphNoSplit, T, { pending: [], channels: ["sms"] });
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(segmentsText(touch.body)).toBe(
-        "Выбрано 3 канала: SMS, Email, Звонок. Каждому контакту уходит первое сообщение:",
-      );
+      const body = segmentsText(touch.body);
+      expect(body).toContain("Каждому контакту уходит первое сообщение:");
+      expect(body).toContain("SMS с шаблоном");
+      expect(noChannelsPill(touch.body)).toBe(false);
     });
 
-    // Слово «поток» в этом блоке закреплено за СЕГМЕНТОМ аудитории: этап
-    // развилки говорит «Аудитория делится на 3 потока по уровню склонности», и
-    // ровно этот смысл закрепляют ◈-подзаголовки таблиц. Многоканальная волна
-    // делит аудиторию не по склонности, а по каналам (`split by:"equal"` —
-    // модель стоимости делит охват на число веток), поэтому она называет свой
-    // механизм своим именем, а не занимает чужое слово.
-    it("несколько сообщений в волне: та же вводная фраза, второе предложение — про деление по КАНАЛАМ, а не «потокам»", () => {
-      const stages = describeWorkflow(graphSplit, T, {
-        pending: [],
-        channels: ["sms", "email"],
-      });
+    // Слово «поток» закреплено за СЕГМЕНТОМ аудитории (сегментная развилка):
+    // многоканальная волна делит по КАНАЛАМ и называет свой механизм своим
+    // именем, а не занимает чужое слово.
+    it("несколько каналов: «Аудитория делится по каналам, каждому приходит своё сообщение: …»", () => {
+      const stages = describeWorkflow(graphSplit, T, { pending: [], channels: ["sms", "email"] });
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(segmentsText(touch.body)).toBe(
-        "Выбрано 2 канала: SMS, Email. Аудитория делится по каналам — каждому своё сообщение:",
-      );
+      const body = segmentsText(touch.body);
+      expect(body).toContain("Аудитория делится по каналам, каждому приходит своё сообщение:");
+      expect(body).toContain("SMS с шаблоном");
+      expect(body).toContain("email с шаблоном");
     });
 
     it("«поток» остаётся словом сегментной развилки — многоканальная волна его не занимает", () => {
-      const stages = describeWorkflow(graphSplit, T, {
-        pending: [],
-        channels: ["sms", "email"],
-      });
+      const stages = describeWorkflow(graphSplit, T, { pending: [], channels: ["sms", "email"] });
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(segmentsText(touch.body)).not.toContain("поток");
-      // А сегментная развилка — по-прежнему «потоки»: слово не изгнано из
-      // описания, оно закреплено за одним смыслом.
+      // А сегментная развилка — по-прежнему «потоки».
       const fork = describeWorkflow(forkThenTouchGraph(), T).find((s) => s.kind === "fork")!;
       expect(segmentsText(fork.body)).toContain("потока");
     });
 
-    it("пилюля несёт ТОЛЬКО счётчик («3 канала») — имена каналов в неё не входят", () => {
-      const stages = describeWorkflow(graphNoSplit, T, {
-        pending: [],
-        channels: ["sms", "email", "ivr"],
+    it("пилюли-счётчика каналов нет даже когда шаг «channels» в editableSteps", () => {
+      const stages = describeWorkflow(graphSplit, T, {
+        pending: [], channels: ["sms", "email"], editableSteps: ["channels"],
       });
       const touch = stages.find((s) => s.kind === "touch")!;
-      const tag = touch.body.find((s) => s.kind === "tag")!;
-      expect(tag.tag.label).toBe("3 канала");
+      expect(noChannelsPill(touch.body)).toBe(false);
     });
 
-    it("пилюля «Каналы» — read-only носитель значения (§4), даже если шаг в editableSteps", () => {
-      const stages = describeWorkflow(graphNoSplit, T, {
-        pending: [],
-        channels: ["sms", "email"],
-        editableSteps: ["channels"],
-      });
-      const touch = stages.find((s) => s.kind === "touch")!;
-      const tag = touch.body.find((s) => s.kind === "tag")!;
-      // Каналы read-only (§4): носитель значения без клика (target «none»).
-      expect(tag.tag.target).toEqual({ kind: "none", step: "channels" });
-    });
-
-    // Русское числительное «канал»/«канала»/«каналов» — те же контрольные
-    // случаи, что и в других местах кодовой базы (1, 2, 5, 11, 21).
-    const CH = ["sms", "email", "push", "ivr"] as const;
-    it.each([
-      [1, "1 канал"],
-      [2, "2 канала"],
-      [5, "5 каналов"],
-      [11, "11 каналов"],
-      [21, "21 канал"],
-    ])("%s канал(ов) → «%s»", (n, expected) => {
-      const channels = Array.from({ length: n }, (_, i) => CH[i % CH.length]);
-      const stages = describeWorkflow(graphNoSplit, T, { pending: [], channels });
-      const touch = stages.find((s) => s.kind === "touch")!;
-      const tag = touch.body.find((s) => s.kind === "tag")!;
-      expect(tag.tag.label).toBe(expected);
-    });
-
-    it("без channels в facts — формулировка не меняется (нет пилюли, нет фразы «Выбрано»)", () => {
-      const stages = describeWorkflow(graphNoSplit, T, { pending: [] });
-      const touch = stages.find((s) => s.kind === "touch")!;
-      expect(segmentsText(touch.body)).toBe("Каждому контакту уходит первое сообщение:");
-      expect(touch.body.some((s) => s.kind === "tag")).toBe(false);
-    });
-
-    it("без фактов вовсе (hasFacts=false) — формулировка та же, что и раньше", () => {
+    it("без фактов — одно имя канала без «с шаблоном»", () => {
       const stages = describeWorkflow(graphNoSplit, T);
       const touch = stages.find((s) => s.kind === "touch")!;
-      expect(segmentsText(touch.body)).toBe("Каждому контакту уходит первое сообщение:");
+      expect(segmentsText(touch.body)).toBe("Каждому контакту уходит первое сообщение: SMS.");
     });
   });
 
   describe("Первое касание не втягивает повторный блок", () => {
     it("ноды повтора уходят в свою волну, а не в таблицу первого касания", () => {
-      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T);
-      // Повторный блок несёт ту же ноду; в таблице первого касания ровно одна
-      // строка, а повтор — отдельное «Второе касание» со своей таблицей.
+      const stages = describeWorkflow(createTemplate("Возврат", "new", ["sms"]), T, {
+        pending: [], graphEditable: true,
+      });
+      // Повторный блок несёт ту же ноду; первое касание несёт ровно один канал
+      // (один тег шаблона), а повтор — отдельное «Второе касание» со своим.
       const touches = stages.filter((s) => s.kind === "touch");
-      expect(touches[0].groups![0].rows).toHaveLength(1);
-      expect(touches[1].groups![0].rows).toHaveLength(1);
+      expect(templateTagsOf(touches[0])).toHaveLength(1);
+      expect(templateTagsOf(touches[1])).toHaveLength(1);
     });
   });
 
@@ -1026,10 +1000,9 @@ describe("describeWorkflow — теги", () => {
   /**
    * Все теги описания одним плоским списком — удобно для утверждений.
    *
-   * Task 4: факты кампании (база, сценарий, триггеры, режим, бюджет) переехали
-   * из `body` в `settings` — их теги живут внутри `setting.value`, поэтому
-   * список без него не заметил бы половину тегов. Task 5: строки коммуникаций
-   * переехали из `messages` в `groups[].rows`.
+   * База и триггеры теперь ИНЛАЙН-теги в `body`; теги шаблонов у не-форк волн —
+   * тоже в `body`, у форк-волн — в `group.inline`. `settings` больше не
+   * используется, но читаем его на всякий случай (обратная совместимость).
    */
   const allTags = (stages: ReturnType<typeof describeWorkflow>) =>
     stages.flatMap((s) => [
@@ -1038,7 +1011,7 @@ describe("describeWorkflow — теги", () => {
         setting.value.filter((seg) => seg.kind === "tag").map((seg) => seg.tag),
       ),
       ...(s.groups ?? []).flatMap((g) =>
-        g.rows.flatMap((row) => (row.templateTag ? [row.templateTag] : [])),
+        (g.inline ?? []).filter((seg) => seg.kind === "tag").map((seg) => seg.tag),
       ),
     ]);
 
@@ -1067,55 +1040,42 @@ describe("describeWorkflow — теги", () => {
     expect(tags).toHaveLength(0);
   });
 
-  it("база и триггеры — кликабельные теги, каналы — read-only тег (§4)", () => {
+  it("база — кликабельный тег (file), триггеры — тег дровера (triggers), пилюли каналов нет", () => {
     const tags = allTags(describeWorkflow(graph, templates, facts));
-    const editableSteps = tags
-      .filter((t) => t.target.kind === "wizard-step")
-      .map((t) => (t.target as { step: string }).step);
-    // База (file) и триггеры (interests) — редактируемые входы.
-    expect(editableSteps).toEqual(expect.arrayContaining(["file", "interests"]));
-    expect(editableSteps).not.toContain("channels");
-    // Каналы присутствуют тегом, но read-only (target «none»), не в wizard-step.
-    const channelsTag = tags.find(
-      (t) =>
-        t.target.kind === "none" &&
-        (t.target as { step?: string }).step === "channels",
-    );
-    expect(channelsTag).toBeDefined();
+    const base = tags.find((t) => t.id === "start-base")!;
+    expect(base.target).toEqual({ kind: "wizard-step", step: "file" });
+    const trig = tags.find((t) => t.id === "start-triggers")!;
+    // Клик по «триггерам» открывает боковой дровер (черновик + есть скоринг).
+    expect(trig.target).toEqual({ kind: "triggers" });
+    // Пилюли-счётчика каналов больше нет.
+    expect(tags.some((t) => t.id === "first-touch-channels")).toBe(false);
   });
 
-  it("настройки скоринга не содержат сценарий/режим/бюджет", () => {
-    const stages = describeWorkflow(graph, templates, facts);
-    const start = stages.find((s) => s.id === "start")!;
-    const ids = (start.settings ?? []).map((s) => s.id);
+  it("в тексте старта нет сценария/режима/бюджета, но есть триггеры", () => {
+    const ids = allTags(describeWorkflow(graph, templates, facts)).map((t) => t.id);
     expect(ids).not.toContain("start-scenario");
     expect(ids).not.toContain("start-mode");
     expect(ids).not.toContain("start-budget");
     expect(ids).toContain("start-triggers");
   });
 
-  it("перечисление триггеров — два названных плюс схлопка с формой числительного", () => {
-    const tags = allTags(describeWorkflow(graph, templates, facts));
-    const collapse = tags.find((t) => t.label.startsWith("ещё "));
-    expect(collapse?.label).toBe("ещё 2 триггерам");
-    // Схлопка ведёт туда же, куда названные триггеры.
-    expect(collapse?.target).toEqual({ kind: "wizard-step", step: "interests" });
-    // По наведению — остаток перечисления.
-    expect(collapse?.hoverList).toEqual(["Вторичка", "Аренда"]);
+  it("триггеры — единый тег «триггерам», полный список в hoverList (без схлопки «ещё N»)", () => {
+    const trig = allTags(describeWorkflow(graph, templates, facts)).find(
+      (t) => t.id === "start-triggers",
+    )!;
+    expect(trig.label).toBe("триггерам");
+    expect(trig.hoverList).toEqual(["Ипотека", "Новостройки", "Вторичка", "Аренда"]);
+    // Отдельных тегов на каждый триггер (и схлопки «ещё N») больше нет.
+    expect(allTags(describeWorkflow(graph, templates, facts)).some((t) => t.label.startsWith("ещё "))).toBe(
+      false,
+    );
   });
 
-  it("три триггера дают форму «ещё 1 триггеру»", () => {
-    const tags = allTags(
-      describeWorkflow(graph, templates, { ...facts, triggers: ["А", "Б", "В"] }),
-    );
-    expect(tags.find((t) => t.label.startsWith("ещё "))?.label).toBe("ещё 1 триггеру");
-  });
-
-  it("два триггера схлопки не дают", () => {
-    const tags = allTags(
-      describeWorkflow(graph, templates, { ...facts, triggers: ["А", "Б"] }),
-    );
-    expect(tags.some((t) => t.label.startsWith("ещё "))).toBe(false);
+  it("триггеры некликабельны, когда граф не правится (запущена) — носитель значения без клика", () => {
+    const trig = allTags(
+      describeWorkflow(graph, templates, { ...facts, graphEditable: false }),
+    ).find((t) => t.id === "start-triggers")!;
+    expect(trig.target).toEqual({ kind: "none", step: "interests" });
   });
 
   it("пустой editableSteps снимает цель со всех шаговых тегов — кампания запущена", () => {
@@ -1143,18 +1103,14 @@ describe("describeWorkflow — теги", () => {
     expect(rawConcat(stages[0].body)).not.toMatch(/ {2}/);
   });
 
-  it("один триггер даёт голое имя без схлопки и без ложного множественного числа", () => {
-    // Finding 1 (исторический): связка триггеров была захардкожена в
-    // множественном числе — «Работает по триггерам Ипотека» на
-    // одном-единственном триггере. Task 4: связывающая фраза исчезла вовсе —
-    // триггеры переехали в пункт списка «Триггеры», значение которого несёт
-    // только имя (и опциональную схлопку остатка), поэтому регресс проверяем
-    // на значении пункта, а не на сплошном тексте старта.
+  it("один триггер — тот же единый тег «триггерам», hoverList из одного имени", () => {
+    // Триггеры не перечисляются в пилюле поимённо (спека): всегда единый тег
+    // «триггерам», полный список — в hoverList. С одним триггером — hoverList
+    // из одного имени, без ложного множественного числа в самом лейбле.
     const stages = describeWorkflow(graph, templates, { ...facts, triggers: ["Ипотека"] });
-    const start = stages.find((s) => s.kind === "start")!;
-    const triggerSetting = start.settings!.find((s) => s.label === "Триггеры")!;
-    expect(segmentsText(triggerSetting.value)).toBe("Ипотека");
-    // И схлопки, разумеется, тоже нет — схлопывать не из чего.
+    const trig = allTags(stages).find((t) => t.id === "start-triggers")!;
+    expect(trig.label).toBe("триггерам");
+    expect(trig.hoverList).toEqual(["Ипотека"]);
     expect(allTags(stages).some((t) => t.label.startsWith("ещё "))).toBe(false);
   });
 
@@ -1174,8 +1130,8 @@ describe("describeWorkflow — теги", () => {
 
   it("название шаблона становится тегом с целью на свою ноду", () => {
     const stages = describeWorkflow(graph, templates, facts);
-    const row = stages.find((s) => s.kind === "touch")?.groups?.[0].rows[0];
-    expect(row?.templateTag?.target.kind).toBe("template");
+    const touch = stages.find((s) => s.kind === "touch")!;
+    expect(templateTagsOf(touch)[0]?.target.kind).toBe("template");
   });
 
   it("пауза несёт тег с целью node-fields на ноду ожидания", () => {
@@ -1191,8 +1147,8 @@ describe("describeWorkflow — теги", () => {
     expect(tags.some((t) => t.target.kind === "template")).toBe(false);
     expect(tags.some((t) => t.target.kind === "node-fields")).toBe(false);
     // Значения остаются — это носители данных, а не только аффорданс клика.
-    const row = stages.find((s) => s.kind === "touch")?.groups?.[0].rows[0];
-    expect(row?.templateTag?.label).toBeTruthy();
+    const touch = stages.find((s) => s.kind === "touch")!;
+    expect(templateTagsOf(touch)[0]?.label).toBeTruthy();
     expect(tags.some((t) => /дн|час/.test(t.label))).toBe(true);
   });
 
@@ -1243,23 +1199,21 @@ describe("describeWorkflow — теги", () => {
 describe("describeWorkflow — пилюля шаблона рендерится ВСЕГДА (баг: аффорданс «сменить шаблон» пропадал, если текущий текст ноды случайно не совпал с пресетом библиотеки)", () => {
   const editableFacts: CampaignFacts = { pending: [], graphEditable: true };
 
-  /** Единственная строка единственной группы единственного касания. */
-  const onlyRow = (stages: ReturnType<typeof describeWorkflow>) =>
-    stages.find((s) => s.kind === "touch")!.groups![0].rows[0];
+  /** Единственный тег шаблона единственного касания (каналы вплетены в body). */
+  const onlyTag = (stages: ReturnType<typeof describeWorkflow>) =>
+    templateTagsOf(stages.find((s) => s.kind === "touch")!)[0];
 
-  it("email с телом, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран» — и не теряет тему", () => {
+  it("email с телом, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран»", () => {
     const graph = commGraph({
       kind: "email",
       subject: "Индивидуальная тема",
       body: "Совершенно нестандартный текст письма, которого нет в справочнике.",
       sender: "noreply@brand.com",
     });
-    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
-    expect(row.previewTemplateId).toBeUndefined();
-    expect(row.contentText).toBe("Индивидуальная тема");
-    expect(row.templateTag).toBeDefined();
-    expect(row.templateTag!.label).toBe("не выбран");
-    expect(row.templateTag!.target).toEqual({ kind: "template", nodeId: "n1" });
+    const tag = onlyTag(describeWorkflow(graph, T, editableFacts));
+    expect(tag).toBeDefined();
+    expect(tag.label).toBe("не выбран");
+    expect(tag.target).toEqual({ kind: "template", nodeId: "n1" });
   });
 
   it("ivr со сценарием, не совпавшим ни с одним пресетом, всё равно получает тег «не выбран»", () => {
@@ -1268,25 +1222,22 @@ describe("describeWorkflow — пилюля шаблона рендерится 
       scenario: "Совершенно свой сценарий звонка вне библиотеки.",
       voiceType: "neutral",
     });
-    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
-    expect(row.previewTemplateId).toBeUndefined();
-    expect(row.templateTag?.label).toBe("не выбран");
-    expect(row.templateTag?.target).toEqual({ kind: "template", nodeId: "n1" });
+    const tag = onlyTag(describeWorkflow(graph, T, editableFacts));
+    expect(tag.label).toBe("не выбран");
+    expect(tag.target).toEqual({ kind: "template", nodeId: "n1" });
   });
 
-  it("резолвнутый шаблон по-прежнему несёт своё имя пилюлей и id для предпросмотра", () => {
+  it("резолвнутый шаблон по-прежнему несёт своё имя пилюлей", () => {
     const smsTemplate = T.find((tpl) => tpl.id === "tpl_sms_reminder")!;
     const graph = commGraph(smsTemplate.content);
-    const row = onlyRow(describeWorkflow(graph, T, editableFacts));
-    expect(row.templateTag?.label).toBe("SMS — напоминание");
-    expect(row.previewTemplateId).toBe("tpl_sms_reminder");
+    expect(onlyTag(describeWorkflow(graph, T, editableFacts)).label).toBe("SMS — напоминание");
   });
 
   it("graphEditable=false демотирует нерезолвнутый тег в носитель значения (§2.12) — «не выбран» остаётся видимым, но не кликабельным", () => {
     const graph = commGraph({ kind: "ivr", scenario: "Свой сценарий.", voiceType: "neutral" });
-    const row = onlyRow(describeWorkflow(graph, T, { pending: [], graphEditable: false }));
-    expect(row.templateTag?.target.kind).toBe("none");
-    expect(row.templateTag?.label).toBe("не выбран");
+    const tag = onlyTag(describeWorkflow(graph, T, { pending: [], graphEditable: false }));
+    expect(tag.target.kind).toBe("none");
+    expect(tag.label).toBe("не выбран");
   });
 
   it("без фактов (withTags=false) шаблон-тег по-прежнему не создаётся — обратная совместимость Task 3", () => {
@@ -1295,12 +1246,15 @@ describe("describeWorkflow — пилюля шаблона рендерится 
       scenario: "Свой сценарий вне библиотеки.",
       voiceType: "neutral",
     });
-    const row = onlyRow(describeWorkflow(graph, T));
-    expect(row.templateTag).toBeUndefined();
+    const touch = describeWorkflow(graph, T).find((s) => s.kind === "touch")!;
+    expect(templateTagsOf(touch)).toHaveLength(0);
   });
 
-  it("строка знает свою ноду — по ней рендер адресует предпросмотр", () => {
+  it("тег шаблона знает свою ноду — по ней рендер адресует поповер", () => {
     const graph = commGraph({ kind: "sms", text: "Текст.", alphaName: "BRAND", scheduledAt: "immediate" });
-    expect(onlyRow(describeWorkflow(graph, T, editableFacts)).nodeId).toBe("n1");
+    expect(onlyTag(describeWorkflow(graph, T, editableFacts)).target).toEqual({
+      kind: "template",
+      nodeId: "n1",
+    });
   });
 });

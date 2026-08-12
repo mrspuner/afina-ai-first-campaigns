@@ -116,6 +116,12 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
     }
     case "domains":
       return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: Globe };
+    case "triggers":
+      // Триггеры скоринга: нейтральная кликабельная пилюля с иконкой шага
+      // «Интересы». Клик не раскрывает поповер, а поднимается через onActivate
+      // (экран кампании открывает боковой дровер триггеров) — поэтому цель
+      // проваливается в общий фолбэк-путь ниже, к кнопке-тултипу.
+      return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: STEP_ICON.interests };
     case "none": {
       // Шаговый тег — вид макета (своего цвета у него нет), но без
       // hover-подсветки: нажимать больше нечего.
