@@ -551,17 +551,22 @@ export function describeWorkflow(
   ];
   if (hasBase) startSegments.push(t(" "), ...baseSegments);
   if (hasScoring) {
-    startSegments.push(t(manyBases ? " проходят скоринг." : " проходит скоринг."));
+    // Одно предложение: «…проходят скоринг через алгоритмы афины и оператора
+    // данных по [триггерам]: остаются те…». Скоринг идёт через алгоритмы афины
+    // и оператора данных (доверие/кредибилити, не техническая деталь).
+    startSegments.push(
+      t(
+        manyBases
+          ? " проходят скоринг через алгоритмы афины и оператора данных"
+          : " проходит скоринг через алгоритмы афины и оператора данных",
+      ),
+    );
     if (hasTriggers) {
-      startSegments.push(t(" Дальше — скоринг по "), ...triggerSegments);
-      startSegments.push(
-        t(": остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
-      );
-    } else {
-      startSegments.push(
-        t(" Остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
-      );
+      startSegments.push(t(" по "), ...triggerSegments);
     }
+    startSegments.push(
+      t(": остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
+    );
   } else {
     startSegments.push(
       t(
