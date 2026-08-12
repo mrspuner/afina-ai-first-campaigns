@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { Globe, type LucideIcon } from "lucide-react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Globe, X, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -27,27 +27,19 @@ import { DomainStatusBadge } from "@/sections/settings/domains-block";
 
 /**
  * Общая геометрия пилюли. `items-baseline`+`align-baseline` — пилюля сидит НА
- * строке текста, а не плавает над/под ней и не раздувает line-height абзаца
- * (спека Task 5: «этот деталь легче всего сломать»).
+ * строке текста, а не плавает над/под ней.
  *
- * `py-1` (правка 6, владелец продукта): было `py-0` — пилюля читалась
- * приплюснутой рядом с текстом строки. `py-1` = 4px по вертикали, минимум,
- * который просила правка.
- *
- * ПОБОЧНЫЙ ЭФФЕКT (проверено глазами и Playwright'ом на самом плотном случае —
- * перечисление триггеров в «Скоринге базы», см. отчёт правок): возросшая
- * высота пилюли (~33px) уже ПРЕВЫШАЕТ line-height, который держит
- * `leading-[1.75]` контейнера описания (24.5px при 14px шрифте) — на строке
- * ОДНОЙ пилюли это не видно (высота строки просто растёт под пилюлю), но
- * когда абзац/значение настройки ПЕРЕНОСИТСЯ на 2+ строки и на КАЖДОЙ
- * обёрнутой строке своя пилюля, соседние строки стыкуются впритык (нижняя
- * граница пилюли верхней строки = верхняя граница пилюли нижней, замерено:
- * 0px зазора) — до правки 6 (`py-0`) пилюля была ниже 24.5px, и `leading`
- * оставлял видимый зазор. `leading` НЕ трогаем по прямому указанию правки —
- * задокументировано как известный компромисс, а не тихо подогнано.
+ * `my-[2px]` (владелец продукта) — вертикальный зазор МЕЖДУ пилюлями соседних
+ * обёрнутых строк. Пилюля наследует line-height контейнера, поэтому её высота
+ * растёт вместе с `leading`; поднимать `leading`, чтобы развести строки, было
+ * бесполезно — раздувало и саму пилюлю (line-height остаётся прежним). Вместо
+ * этого добавляем пилюле собственный вертикальный отступ: как atomic
+ * inline-flex, её margin-box участвует в высоте строки, поэтому 2px сверху и
+ * снизу дают ~4px чистого зазора между пилюлями верхней и нижней строк, не
+ * трогая общий межстрочный интервал прозы.
  */
 const PILL_BASE =
-  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 align-baseline text-[0.95em] font-semibold";
+  "inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0 my-[2px] align-baseline text-[0.95em] font-semibold";
 
 /**
  * Тег читается как отдельный элемент, а не как часть карточки: серая
@@ -116,6 +108,12 @@ function resolveVisual(tag: DescriptionTag, nodeType: WorkflowNodeType | undefin
     }
     case "domains":
       return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: Globe };
+    case "triggers":
+      // Триггеры скоринга: нейтральная кликабельная пилюля с иконкой шага
+      // «Интересы». Клик не раскрывает поповер, а поднимается через onActivate
+      // (экран кампании открывает боковой дровер триггеров) — поэтому цель
+      // проваливается в общий фолбэк-путь ниже, к кнопке-тултипу.
+      return { className: cn(NEUTRAL_CLASS, NEUTRAL_HOVER_CLASS), Icon: STEP_ICON.interests };
     case "none": {
       // Шаговый тег — вид макета (своего цвета у него нет), но без
       // hover-подсветки: нажимать больше нечего.
@@ -222,6 +220,19 @@ export function DescriptionTagPill({
       <span className={pillClass} style={style} title={hint}>
         {content}
       </span>
+    );
+  }
+
+  // База кампании (Task 12): единственный шаговый тег, чей поповер редактирует
+  // ЦЕЛИКОМ на месте (список загруженных файлов — добавить/удалить), а не
+  // подтверждает уход на шаг визарда. Перехватывает ветку `wizard-step`
+  // раньше общего случая ниже — остальные шаговые теги («Режим», «Интересы»,
+  // «Бюджет» …) в неё не попадают, для них поведение не меняется.
+  if (tag.target.kind === "wizard-step" && tag.target.step === "file") {
+    return (
+      <BaseFilesTagPopover className={pillClass} style={style} hint={hint}>
+        {content}
+      </BaseFilesTagPopover>
     );
   }
 
@@ -504,6 +515,131 @@ function WizardStepTagPopover({
           >
             Изменить
           </Button>
+        </div>
+      }
+    >
+      {children}
+    </TagPopoverShell>
+  );
+}
+
+/**
+ * Поповер базы кампании у тега «База» (Task 12). В отличие от соседних
+ * шаговых тегов («Режим», «Интересы» — `WizardStepTagPopover` выше), этот НЕ
+ * уводит на шаг визарда: список загруженных файлов правится ЦЕЛИКОМ внутри
+ * поповера (добавить/удалить) — тот же принцип «поповер и есть редактор»,
+ * что уже несут поповеры шаблона/паузы/условия (Task 7/8/3). `onActivate`
+ * поэтому не зовётся вовсе — пропа для него нет.
+ *
+ * Кампанию/файлы читает сама из `useAppState()` по текущему `view` (карточка
+ * открыта → `view.kind === "campaign"`), а не пропом сверху — единственный
+ * поповер описания, которому нужен весь список файлов кампании целиком, а не
+ * кусок, резолвнутый вызывающим (как `waitParams`/`conditionParams`/`domains`
+ * у соседних поповеров, где резолвер живёт в `CampaignScreen`).
+ *
+ * Удаление — `campaign_file_removed` по ИНДЕКСУ (тот же ключ, что и в
+ * редьюсере — имена файлов не гарантированно уникальны, см. его комментарий в
+ * `app-state.ts`). Кнопка «Удалить файл: …» рендерится, только когда файлов
+ * больше одного: единственную/последнюю базу снять нельзя — кампании нужен
+ * хотя бы один файл.
+ *
+ * Добавление — через скрытый `<input type="file">`: кнопка «+ Добавить файл»
+ * лишь открывает системный пикер (`inputRef.current?.click()`), `onChange`
+ * дописывает `CampaignFile` через `campaign_file_added`. Это прототип (см.
+ * PRODUCT.md — «AI работает по regex, кейсы ошибок описаны минимально»):
+ * реального парсинга содержимого файла нет, `rowCount` — детерминированная
+ * заглушка от длины имени файла, а не разбор строк.
+ */
+function BaseFilesTagPopover({
+  className,
+  style,
+  hint,
+  children,
+}: {
+  className: string;
+  style?: CSSProperties;
+  hint?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const campaignId = state.view.kind === "campaign" ? state.view.campaign.id : undefined;
+  const campaign = campaignId ? state.campaigns.find((c) => c.id === campaignId) : undefined;
+  const files = campaign?.files ?? [];
+
+  return (
+    <TagPopoverShell
+      open={open}
+      onOpenChange={setOpen}
+      className={className}
+      style={style}
+      hint={hint}
+      // Та же сторона, что и у общего WizardStepTagPopover выше — тег «База»
+      // стоит в том же плотном списке строк настроек, раскрытый вниз поповер
+      // перекрывал бы соседние строки.
+      side="top"
+      contentClassName="w-72 p-2.5"
+      content={
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">База кампании</span>
+          <div className="flex flex-col gap-1">
+            {files.map((file, index) => (
+              <div
+                key={`${file.name}-${index}`}
+                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate text-xs text-foreground">{file.name}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    ~{file.rowCount.toLocaleString("ru-RU")} строк
+                  </span>
+                </div>
+                {files.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={`Удалить файл: ${file.name}`}
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      if (!campaignId) return;
+                      dispatch({ type: "campaign_file_removed", campaignId, index });
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="rounded-md border border-dashed border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => inputRef.current?.click()}
+          >
+            + Добавить файл
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.xlsx,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f && campaignId) {
+                // Прототип: реального парсинга файла нет — rowCount
+                // детерминированно выводится из длины имени, а не из
+                // содержимого.
+                dispatch({
+                  type: "campaign_file_added",
+                  campaignId,
+                  file: { name: f.name, rowCount: 1000 + ((f.name.length * 137) % 99000) },
+                });
+              }
+              e.target.value = "";
+            }}
+          />
         </div>
       }
     >

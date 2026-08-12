@@ -42,7 +42,15 @@ export function EntityCardShell({
   secondaryActions,
 }: EntityCardShellProps) {
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto px-8 pb-promptbar pt-[120px]">
+    <div
+      className="flex flex-1 flex-col overflow-y-auto px-8 pb-promptbar pt-[120px] transition-[padding] duration-300"
+      // При открытом правом дровере (скоринг/предпросмотр — общий реестр
+      // `--right-rail-width`) резервируем место справа, чтобы весь контент
+      // карточки съезжал и рецентрировался, а не оставался под дровером —
+      // раньше съезжал только промпт-бар. База отступа справа (2rem от px-8)
+      // сохраняется, ширина рельса добавляется поверх.
+      style={{ paddingRight: "calc(2rem + var(--right-rail-width, 0px))" }}
+    >
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         {onBack && (
           <button

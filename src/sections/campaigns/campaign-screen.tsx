@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { BarChart3, Copy, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePromptChips } from "@/state/prompt-chips-context";
+import { useChat } from "@/state/chat-context";
 import {
   EntityCardShell,
   CardTag,
@@ -15,6 +16,7 @@ import {
 import { useAppDispatch, useAppState } from "@/state/app-state-context";
 import { WorkflowMiniPreview } from "./workflow-mini-preview";
 import { WorkflowDescription } from "./workflow-description";
+import { NODE_STYLES } from "./node-visuals";
 import {
   describeWorkflow,
   type CampaignFacts,
@@ -63,6 +65,7 @@ export function CampaignScreen() {
   const { view, campaigns, artifacts, templates, accountSettings } = useAppState();
   const dispatch = useAppDispatch();
   const { pushChip } = usePromptChips();
+  const chat = useChat();
 
   const campaign =
     view.kind === "campaign"
@@ -156,6 +159,8 @@ export function CampaignScreen() {
     pending: campaignDomains.filter((d) => d.status === "pending").map((d) => d.domain),
     domains: campaignDomains,
     baseRows: campaign ? campaignBaseRows(campaign) : undefined,
+    // Число файлов базы — для склонения «база»/«базы» в сигнальном тексте.
+    baseFileCount: campaign?.files?.length,
     triggers: campaign?.triggers,
     channels: campaign?.channels,
     budget: campaign?.budget,
@@ -185,6 +190,14 @@ export function CampaignScreen() {
       .filter((n) => n.data.params !== undefined)
       .map((n) => [n.id, n.data.params as NodeParams]),
   );
+
+  // id узла скоринга — цель чипа скорингового контекста (Task 11): клик по
+  // пилюле «Триггеры»/«База» больше не уводит с карточки, а кладёт в
+  // промпт-бар чип, который select-prompt-suggestions резолвит в
+  // node-context(scoring, paramLabel) и показывает скоринговые подсказки.
+  const scoringNodeId = launchGraph?.nodes.find(
+    (n) => n.data.nodeType === "scoring",
+  )?.id;
 
   if (view.kind !== "campaign") return null;
   if (!campaign) return null;
@@ -249,18 +262,42 @@ export function CampaignScreen() {
     });
   }
 
-  // Клик по пилюле в описании: только цель wizard-step уводит с карточки — в
-  // изолированный режим правки одного шага (Task 11). Поповерные цели
-  // (шаблон/поля ноды/домены) обрабатываются внутри самой пилюли (Task 7–8),
-  // сюда доходят только wizard-step клики; «носители значений» (target:
-  // "none" — запущенная кампания или шаг вне визарда её intent) клика вообще
-  // не поднимают — resolveVisual/DescriptionTagPill не делает их кнопкой.
+  // Чип скорингового контекста (Task 11): «Триггеры»/«База» больше НЕ уводят
+  // с карточки в изолированный шаг визарда — вместо этого в промпт-бар летит
+  // node-чип узла скоринга с paramLabel, и select-prompt-suggestions подменяет
+  // подсказки на скоринговые (каталог node-context.ts несёт записи именно под
+  // эти paramLabel). Без узла скоринга в графе — тихий no-op (нечего таргетить).
+  function pushScoringContext(paramLabel: "Интересы" | "Триггеры") {
+    if (!scoringNodeId) return;
+    pushChip({
+      id: `nodefield_${scoringNodeId}_${paramLabel}`,
+      kind: "node",
+      label: paramLabel,
+      payload: {
+        nodeId: scoringNodeId,
+        nodeType: "scoring",
+        color: NODE_STYLES.scoring.color,
+        paramLabel,
+      },
+      removable: true,
+    });
+  }
+
+  // Клик по тегу «триггерам»: открываем боковой дровер «Интересы и триггеры»
+  // (тот же, что у ноды скоринга в графе) И кладём контекст-чип скоринга в
+  // промпт-бар (paramLabel «Триггеры» → скоринговые подсказки, ИИ отвечает в
+  // контексте триггеров). Кликабелен только в черновике и при наличии ноды
+  // скоринга (`describeWorkflow` иначе выдаёт цель `none`, клик не поднимается).
+  // «База» правится собственным поповером (BaseFilesTagPopover) и onActivate не
+  // зовёт; поповерные цели (шаблон/пауза/домены) — внутри самой пилюли;
+  // «носители значений» (target: "none") клика вообще не поднимают.
   function handleTagActivate(tag: DescriptionTag) {
-    if (tag.target.kind !== "wizard-step" || !campaignId) return;
-    dispatch({
-      type: "campaign_step_edit_requested",
+    if (tag.target.kind !== "triggers" || !campaignId || !scoringNodeId) return;
+    pushScoringContext("Триггеры");
+    chat.openScoringDrawer({
+      nodeId: scoringNodeId,
       campaignId,
-      step: tag.target.step,
+      editable: graphEditable,
     });
   }
 
@@ -419,7 +456,10 @@ export function CampaignScreen() {
           </p>
         </CardSection>
       ) : showLaunch ? (
-        <CardSection label="Запуск">
+        // Черновик → денежный блок «Итог» (слитый бывший «Запуск», spec §6):
+        // таблица денег + «К оплате». Пауза сохраняет ярлык «Запуск» (там
+        // «Возобновить», без оплаты).
+        <CardSection label={status === "paused" ? "Запуск" : "Итог"}>
           {status === "paused" ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
@@ -437,10 +477,16 @@ export function CampaignScreen() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-muted-foreground">
-                Запустите кампанию — провайдеры начнут подключаться после
-                оплаты.
-              </p>
+              {/* Денежная подводка: не конверсионный нарратив (он закрывает
+                  блок «Коммуникации»), а «за что платите» + когда списывается. */}
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm text-foreground">
+                  Вы платите за скоринг базы и коммуникации.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Деньги списываются с вашего счёта во время запуска кампании.
+                </p>
+              </div>
               {/* Прогноз касаний — та же оценка (estimateTouches), что и на
                   экране оплаты, на рекомендуемой сумме. */}
               <p className="text-sm text-muted-foreground">
@@ -465,6 +511,7 @@ export function CampaignScreen() {
                     totalDisplay={formatRubPlain(draftPaymentSplit.total)}
                     commGroups={draftCommGroups}
                     formatCell={formatRubPlain}
+                    defaultExpanded
                   />
                 </div>
               )}

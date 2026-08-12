@@ -1,6 +1,5 @@
 import type { NodeParams, WorkflowEdge, WorkflowNode } from "@/types/workflow";
 import { pluralRu } from "@/lib/plural-ru";
-import { formatRubPlain } from "@/lib/format-rub";
 import { CHANNEL_LABEL } from "./channel-nodes";
 import { segmentWaves, type Wave } from "./graph-waves";
 import { conditionBranchLabel, conditionQuestionLabel } from "./node-sublabel";
@@ -26,28 +25,31 @@ import { getTriggerShortLabel } from "@/data/triggers-by-vertical";
  * «скоринг»; нет коммуникаций — нет выдуманных касаний.
  */
 
-/** Строка таблицы коммуникаций: одна нода канала внутри волны. */
+/** Строка коммуникации: одна нода канала внутри волны. Инлайн-текст касания
+ *  строится из `channel` + `templateTag`; контент сообщения смотрят через
+ *  поповер шаблона (сама пилюля), инлайн он больше не рендерится. */
 export interface DescriptionCommunication {
-  /** Нода-источник — ключ строки и адрес предпросмотра. */
+  /** Нода-источник — ключ строки и адрес поповера шаблона. */
   nodeId: string;
   /** Человекочитаемый канал: «SMS», «Email», «Push», «Звонок». */
   channel: string;
   /** Название шаблона как тег — раскрывает поповер выбора шаблона у пилюли. */
   templateTag?: DescriptionTag;
-  /** Первая строка ячейки контента — только push (его заголовок). */
-  contentTitle?: string;
-  /** Основной текст ячейки: sms.text / email.subject / push.body / ivr.scenario. */
-  contentText: string;
-  /** id библиотечного шаблона, если резолвится — иначе предпросмотр из params ноды. */
-  previewTemplateId?: string;
 }
 
-/** Поток внутри этапа: своя ветка развилки со своей таблицей. */
+/** Поток внутри этапа: своя ветка развилки со своим инлайн-перечислением каналов. */
 export interface DescriptionGroup {
   id: string;
   /** ◈-подзаголовок ветки/потока. Отсутствует у обычного касания. */
   label?: string;
   rows: DescriptionCommunication[];
+  /**
+   * Инлайн-перечисление каналов ветки — «SMS с шаблоном [тег] и звонок с
+   * шаблоном [тег]». Выпускается только у ФОРК-волн (у них ветки остаются
+   * отдельными ◈-блоками); не-форк волны вплетают то же перечисление прямо в
+   * `stage.body` и групп наружу не выдают.
+   */
+  inline?: DescriptionSegment[];
 }
 
 /**
@@ -80,6 +82,12 @@ export type TagTarget =
   | { kind: "template"; nodeId: string }
   | { kind: "node-fields"; nodeId: string }
   | { kind: "domains" }
+  // Триггеры скоринга: клик не уводит с карточки и не раскрывает поповер, а
+  // поднимается наверх (`onActivate`) — экран кампании открывает боковой дровер
+  // «Интересы и триггеры» (тот же, что у ноды скоринга в графе) и кладёт
+  // контекст-чип в промпт-бар. Цель без полей: адрес узла скоринга резолвит
+  // сам экран (`scoringNodeId` уже под рукой в `CampaignScreen`).
+  | { kind: "triggers" }
   | { kind: "none"; step?: WizardStepId; nodeId?: string };
 
 /** Значение параметра, вынесенное в кликабельную пилюлю внутри текста. */
@@ -114,6 +122,8 @@ export interface DescriptionSetting {
 export interface DescriptionStage {
   id: string;
   kind: DescriptionStageKind;
+  /** Верхнеуровневый блок карточки, куда попадает этап. */
+  block: "signal" | "communication" | "outcome";
   /** Заголовок БЕЗ точки — номер шага добавляет рендер. */
   heading: string;
   body: DescriptionSegment[];
@@ -136,19 +146,7 @@ export interface DescribableGraph {
   edges: WorkflowEdge[];
 }
 
-// ── Коммуникации → строка таблицы ────────────────────────────────────────────
-
-/** Контент ячейки таблицы по каналу — что ПОКАЗЫВАЕМ, не что сравниваем
- *  (сравнение волн живёт в `graph-waves.ts` и читает другие поля). */
-function communicationContent(params: NodeParams): { contentTitle?: string; contentText: string } {
-  switch (params.kind) {
-    case "sms": return { contentText: params.text };
-    case "email": return { contentText: params.subject };
-    case "push": return { contentTitle: params.title, contentText: params.body };
-    case "ivr": return { contentText: params.scenario };
-    default: return { contentText: "" };
-  }
-}
+// ── Коммуникации → строка ────────────────────────────────────────────────────
 
 function describeCommunication(
   node: WorkflowNode,
@@ -172,10 +170,6 @@ function describeCommunication(
   return {
     nodeId: node.id,
     channel: CHANNEL_LABEL[channel],
-    ...communicationContent(params),
-    // Резолвится шаблон — предпросмотр открывает его из библиотеки; не
-    // резолвится — рендер собирает синтетический из params самой ноды.
-    ...(template ? { previewTemplateId: template.id } : {}),
     // Fix: пилюля появляется ВСЕГДА в режиме тегов (вызвавший передал факты) —
     // резолвится шаблон или нет. Раньше тег создавался только когда
     // `templateName` резолвился, а резолв зависел от случайного совпадения
@@ -246,10 +240,12 @@ const SEGMENT_LABEL: Record<string, string> = {
   "Низ": "Низкая склонность",
 };
 
-const TOUCH_HEADING = ["Первое касание", "Повторное касание", "Третье касание", "Четвёртое касание"];
+const TOUCH_HEADING = ["Первое касание", "Второе касание", "Третье касание", "Четвёртое касание"];
 
-/** Заголовок волны-касания по её порядковому номеру (1-based). Развилки и
- *  повторы номер НЕ тратят — их заголовки не зависят от него вовсе. */
+/** Заголовок волны-касания по её порядковому номеру (1-based). Повтор теперь
+ *  идёт обычным касанием и берёт заголовок отсюда же. Развилка номер тратит
+ *  (следующее касание сдвигается), но собственный заголовок берёт из вида
+ *  развилки, а не из этого списка. */
 function touchHeading(ordinal: number): string {
   return TOUCH_HEADING[ordinal - 1] ?? `Касание ${ordinal}`;
 }
@@ -308,6 +304,34 @@ function describeGroups(
  */
 function valueSegments(withTags: boolean, tag: DescriptionTag): DescriptionSegment[] {
   return withTags ? [{ kind: "tag", tag }] : [t(tag.label)];
+}
+
+/**
+ * Имя канала для бегущего текста: строчная первая буква («звонок», «email»),
+ * кроме аббревиатур целиком в верхнем регистре («SMS» остаётся «SMS»). Канал в
+ * прозе идёт мид-предложением/после двоеточия, где заглавная выглядела бы
+ * формальнее нужного; аббревиатуру ронять нельзя.
+ */
+function channelProseLabel(label: string): string {
+  if (label === label.toUpperCase()) return label;
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
+/**
+ * Инлайн-перечисление каналов волны — «SMS с шаблоном [тег] и звонок с шаблоном
+ * [тег]». Заменяет прежнюю стопку строк «канал · тег · 👁»: канал идёт обычным
+ * текстом (строчными в потоке), шаблон — пилюлей. Разделители «, » между всеми,
+ * кроме последней пары (« и »). Без фактов (`withTags=false` — у строки нет
+ * `templateTag`) остаются одни имена каналов, без «с шаблоном» и пилюль.
+ */
+function inlineChannelSegments(rows: DescriptionCommunication[]): DescriptionSegment[] {
+  const segs: DescriptionSegment[] = [];
+  rows.forEach((row, i) => {
+    if (i > 0) segs.push(t(i === rows.length - 1 ? " и " : ", "));
+    segs.push(t(channelProseLabel(row.channel)));
+    if (row.templateTag) segs.push(t(" с шаблоном "), { kind: "tag", tag: row.templateTag });
+  });
+  return segs;
 }
 
 /**
@@ -378,6 +402,8 @@ export interface CampaignFacts {
   /** Все домены триггеров со статусами — содержимое поповера доменов. */
   domains?: { domain: string; status: DomainStatus }[];
   baseRows?: number;
+  /** Число файлов базы — управляет склонением «база»/«базы» в сигнальном тексте. */
+  baseFileCount?: number;
   triggers?: string[];
   channels?: Channel[];
   budget?: number;
@@ -484,111 +510,71 @@ export function describeWorkflow(
 
   const stages: DescriptionStage[] = [];
 
-  // Заголовок этапа читается ИЗ ГРАФА (есть нода скоринга — «Скоринг базы»),
-  // а не из сценария/типа базы, как раньше заголовок «Старт.» был константой.
-  const startBody = hasScoring
-    ? "Загруженная база проходит скоринг: остаются те, кто проявляет намерение, с разбивкой по уровням склонности."
-    : "Загруженная база попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.";
-
   const triggersList = facts?.triggers ?? [];
   const hasBase = facts?.baseRows !== undefined;
   const hasTriggers = triggersList.length > 0;
+  // Склонение «база»/«базы» — по числу загруженных файлов, а не по числу строк.
+  const manyBases = (facts?.baseFileCount ?? 1) > 1;
 
-  /**
-   * Перечисление тегов триггеров: первые два именем, остаток — схлопка. В
-   * пилюлю идёт КОРОТКОЕ имя триггера (`getTriggerShortLabel`) — полное
-   * («Посещение сайтов банков…») в узкой пилюле всё равно режется многоточием;
-   * полное остаётся подсказкой на наведении (`hoverList: [full]`). Остаток
-   * схлопки — тоже короткими именами: тултип перечисляет их через запятую.
-   */
-  const triggerTagList = (): DescriptionSegment[] => {
-    const [first, second, ...rest] = triggersList;
-    const segs: DescriptionSegment[] = [
-      stepTag("start-trigger-0", getTriggerShortLabel(first), "interests", editableSteps, [first]),
-    ];
-    if (second) {
-      segs.push(
-        t(rest.length ? ", " : " и "),
-        stepTag("start-trigger-1", getTriggerShortLabel(second), "interests", editableSteps, [
-          second,
-        ]),
-      );
+  // Сигнальный текст: База и Триггеры теперь ИНЛАЙН-теги в прозе, а не отдельный
+  // список «подпись — значение» (две строки занимали много места).
+  //
+  // База — тот же тег с поповером файлов (цель «file»); значение — количество
+  // строк. Триггеры — единый тег «триггерам» (без перечисления конкретных),
+  // открывающий боковой дровер «Интересы и триггеры»: кликабелен ТОЛЬКО в
+  // черновике и ТОЛЬКО при наличии ноды скоринга (её и откроет дровер) — иначе
+  // носитель значения без клика. Полное перечисление триггеров уходит в
+  // `hoverList` (тултип на наведении).
+  const baseSegments: DescriptionSegment[] = hasBase
+    ? [stepTag("start-base", `${facts!.baseRows!.toLocaleString("ru-RU")} строк`, "file", editableSteps)]
+    : [];
+
+  const triggerSegments: DescriptionSegment[] = hasTriggers
+    ? valueSegments(hasFacts, {
+        id: "start-triggers",
+        label: "триггерам",
+        target:
+          graphEditable && hasScoring
+            ? { kind: "triggers" }
+            : { kind: "none", step: "interests" },
+        hoverList: triggersList.map(getTriggerShortLabel),
+      })
+    : [];
+
+  // Сборка тела старта. Скоринговый кейс: «Загруженная база [N строк] проходит
+  // скоринг. Дальше — скоринг по [триггерам]: …». Своя база (без скоринга) —
+  // прежняя формулировка «попадает в кампанию…», тоже с инлайн-тегом базы, но
+  // без триггеров/дровера. Пробел перед тегом ставим только при наличии базы —
+  // иначе получилось бы «Загруженная база  проходит…» с двойным пробелом.
+  const startSegments: DescriptionSegment[] = [
+    t(manyBases ? "Загруженные базы" : "Загруженная база"),
+  ];
+  if (hasBase) startSegments.push(t(" "), ...baseSegments);
+  if (hasScoring) {
+    // Одно предложение: «…проходят скоринг через алгоритмы афины и оператора
+    // данных по [триггерам]: остаются те…». Скоринг идёт через алгоритмы афины
+    // и оператора данных (доверие/кредибилити, не техническая деталь).
+    startSegments.push(
+      t(
+        manyBases
+          ? " проходят скоринг через алгоритмы афины и оператора данных"
+          : " проходит скоринг через алгоритмы афины и оператора данных",
+      ),
+    );
+    if (hasTriggers) {
+      startSegments.push(t(" по "), ...triggerSegments);
     }
-    if (rest.length) {
-      segs.push(
-        t(" и "),
-        stepTag(
-          "start-triggers-more",
-          `ещё ${rest.length} ${pluralRu(rest.length, ["триггеру", "триггерам", "триггерам"])}`,
-          "interests",
-          editableSteps,
-          rest.map(getTriggerShortLabel),
-        ),
-      );
-    }
-    return segs;
-  };
-
-  // Факты кампании — раньше вплетались инлайн в одно длинное предложение
-  // старта, теперь каждый факт — свой пункт «подпись — значение» (Task 4).
-  // Порядок фиксирован: База, Сценарий, Триггеры, Режим, Бюджет. Id тегов
-  // внутри значений не меняются — на них ссылаются существующие клики/тесты.
-  const settings: DescriptionSetting[] = [];
-
-  if (hasBase) {
-    settings.push({
-      id: "start-base",
-      label: "База",
-      value: [
-        stepTag(
-          "start-base",
-          `${facts!.baseRows!.toLocaleString("ru-RU")} строк`,
-          "file",
-          editableSteps,
-        ),
-      ],
-    });
-  }
-
-  if (facts?.scenarioName !== undefined) {
-    settings.push({
-      id: "start-scenario",
-      label: "Сценарий",
-      value: [stepTag("start-scenario", facts.scenarioName, "scenario", editableSteps)],
-    });
-  }
-
-  if (hasTriggers) {
-    settings.push({ id: "start-triggers", label: "Триггеры", value: triggerTagList() });
-  }
-
-  // Режим анализа отсутствует в визарде собственной базы — тогда analysisMode
-  // не приходит вовсе, и пункт не появляется.
-  if (facts?.analysisMode !== undefined) {
-    settings.push({
-      id: "start-mode",
-      label: "Режим",
-      value: [
-        stepTag(
-          "start-mode",
-          facts.analysisMode === "once" ? "разовый" : "потоковый",
-          "analysis",
-          editableSteps,
-        ),
-      ],
-    });
-  }
-
-  // Бюджет переехал сюда из «Итога» (review round 1, Finding 2) — там он был
-  // спайкой на конце предложения о конверсии, к которой отношения не имеет.
-  // Id `outcome-budget` СТАРШЕ переезда и оставлен как есть по историческим
-  // причинам — на него ссылаются существующие тесты/клики.
-  if (facts?.budget !== undefined) {
-    settings.push({
-      id: "start-budget",
-      label: "Бюджет",
-      value: [stepTag("outcome-budget", formatRubPlain(facts.budget), "budget", editableSteps)],
-    });
+    startSegments.push(
+      t(": остаются те, кто проявляет намерение, с разбивкой по уровням склонности."),
+    );
+  } else {
+    startSegments.push(
+      t(
+        manyBases
+          ? " попадают в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности."
+          : " попадает в кампанию: контакты сверяются с сигналами, остаются те, кто сейчас проявляет намерение, с разбивкой по уровням склонности.",
+      ),
+    );
   }
 
   // Детерминированная строка судьбы доменов (Task 11): появляется ТОЛЬКО когда
@@ -614,67 +600,115 @@ export function describeWorkflow(
   stages.push({
     id: "start",
     kind: "start",
+    block: "signal",
     heading: hasScoring ? "Скоринг базы" : "Загрузка базы",
-    body: mergeTextSegments([t(startBody), ...domainSegments]),
-    ...(settings.length ? { settings } : {}),
+    body: mergeTextSegments([...startSegments, ...domainSegments]),
   });
-
-  // Вводная «Выбрано [N каналов]: …» принадлежит ПЕРВОЙ волне, какой бы она ни
-  // была: пилюля — единственный вход описания в шаг визарда «Каналы», и терять
-  // её оттого, что первая волна разветвилась (легаси-«Удержание» — развилка по
-  // построению), нельзя.
-  const channelsCount = facts?.channels?.length ?? 0;
-  const channelsIntro: DescriptionSegment[] = channelsCount
-    ? [
-        t("Выбрано "),
-        // Пилюля называет СКОЛЬКО каналов выбрано («3 канала»), а не
-        // перечисляет имена внутри себя — имена идут следом обычным текстом.
-        stepTag(
-          "first-touch-channels",
-          `${channelsCount} ${pluralRu(channelsCount, ["канал", "канала", "каналов"])}`,
-          "channels",
-          editableSteps,
-        ),
-        t(`: ${facts!.channels!.map((c) => CHANNEL_LABEL[c]).join(", ")}. `),
-      ]
-    : [];
 
   // Волны графа → этапы. Счётчиков два, и оба содержательные: ПОРЯДКОВЫЙ НОМЕР
   // КАСАНИЯ тратят и обычные волны, и развилки (развилка — полноценный шаг
   // рассылки, просто со своим заголовком; иначе следующая волна назвалась бы
-  // «Первым касанием», рассказывая при этом про неотреагировавших), а повтор не
-  // тратит — это та же волна, повторённая. НОМЕР ВОЛНЫ решает, чья формулировка
-  // «первая»: легаси-«Реактивация» ставит паузу перед первым касанием, и оно
-  // всё равно остаётся первым.
+  // «Первым касанием», рассказывая при этом про неотреагировавших), и повтор
+  // тоже: слитая с паузой «Проверка реакции» больше не отдельным этапом
+  // «Пауза и повтор» держит повторную волну, а обычным «Вторым касанием» —
+  // а значит и порядковый номер она тратит наравне с прочими. НОМЕР ВОЛНЫ
+  // решает, чья формулировка «первая»: легаси-«Реактивация» ставит паузу
+  // перед первым касанием, и оно всё равно остаётся первым.
   let waveOrdinal = 0;
   let touchOrdinal = 0;
   let forkOrdinal = 0;
-  let retryOrdinal = 0;
   let checkOrdinal = 0;
-  /** Заголовок последней НЕ-повторной волны — на него ссылается «Пауза и повтор». */
-  let originHeading: string | undefined;
   /** Каналы предыдущей волны — расходящаяся волна сверяется с ними. */
   let previousChannels: Set<string> | undefined;
+  // Исход «Итога» ветвится по наличию повторной волны: после неё стоит финальная
+  // проверка реакции, до которой при обычном касании дело не доходит.
   let hasRetry = false;
+  // Слита ли пауза ближайшего повтора в «Проверку реакции и паузу». Флаг
+  // ставит шаг проверки, а читает и гасит РОВНО следующая волна — по
+  // построению непосредственно соседняя (слияние только на смежности): слитую
+  // паузу она не повторяет, неслитую — рассказывает о ней сама.
+  let pauseMergedIntoCheck = false;
 
-  for (const step of steps) {
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    const step = steps[stepIndex];
     if (step.kind === "check") {
       // Проверять реакцию не на что, пока ничего не отправлено; вторая и
       // дальнейшие проверки поглощаются формулировкой «Итога».
       if (waveOrdinal === 0 || checkOrdinal > 0) continue;
       checkOrdinal += 1;
-      stages.push({
-        id: `check-${checkOrdinal}`,
-        kind: "check",
-        heading: "Проверка реакции",
-        body: [
-          t(
-            multiChannel
-              ? "Кто отреагировал по любому каналу — уходит в успех и покидает кампанию."
-              : "Кто отреагировал — уходит в успех и покидает кампанию.",
-          ),
-        ],
-      });
+
+      // Пауза перед следующим касанием живёт не отдельным этапом, а прямо в
+      // этой проверке (спека §5) — но СЛИВАЕТСЯ только при непосредственном
+      // соседстве (fix): смотрим РОВНО следующий шаг, не сканируя дальше.
+      // Слить можно, лишь если он — волна-повтор с разрешимой нодой ожидания:
+      // та самая, ради которой пауза и выдерживается. Тег строится как
+      // `waitTag` волны ниже (`waitPhrase` + node-fields/none по
+      // `graphEditable`), чтобы пилюля паузы осталась той же нодой ожидания с
+      // тем же адресом правки (§2.12). Иначе (следующий шаг — что угодно
+      // другое) проверка остаётся простой, а свою паузу повторная волна, если
+      // она есть где-то дальше, расскажет сама.
+      //
+      // Слияние обязано ещё и совпасть с тем, что «съест» цикл ниже: волна с
+      // пустыми `groups` (нет ни одной сконфигурированной строки рассылки)
+      // пропускается там через `continue` ДО чтения/гашения
+      // `pauseMergedIntoCheck` (строка `if (!groups.length) continue;`) — то
+      // есть флаг не сбросится и ошибочно достанется следующей волне-повтору
+      // дальше по графу. Поэтому здесь дополнительно требуем, чтобы волна
+      // реально отрендерилась: «сольём» и «отрендерится» не должны расходиться.
+      const next = steps[stepIndex + 1];
+      let pauseTag: DescriptionTag | undefined;
+      if (
+        next?.kind === "wave" &&
+        next.wave.repeatsPrevious &&
+        (groupsByWave.get(next.wave.id)?.length ?? 0) > 0
+      ) {
+        const waitNode = next.wave.waitBefore;
+        const waitParams = waitNode?.data.params;
+        if (waitNode && waitParams?.kind === "wait") {
+          pauseTag = {
+            id: `wait-${waitNode.id}`,
+            label: waitPhrase(waitParams),
+            target: graphEditable
+              ? { kind: "node-fields", nodeId: waitNode.id }
+              : { kind: "none", nodeId: waitNode.id },
+          };
+        }
+      }
+
+      const reacted = multiChannel
+        ? "Кто отреагировал по любому каналу — уходит в успех и покидает кампанию."
+        : "Кто отреагировал — уходит в успех и покидает кампанию.";
+
+      if (pauseTag) {
+        // Сливаем: порядковый номер ближайшего касания-повтора ВЫВОДИМ из
+        // счётчика, а не хардкодим «второе». Повтор — непосредственно соседняя
+        // волна, она потратит номер `touchOrdinal + 1` и получит ровно этот
+        // заголовок; проверка называет его же — «второе» в каноничном случае,
+        // «третье», когда проверке предшествуют два касания.
+        pauseMergedIntoCheck = true;
+        const nextTouch = touchHeading(touchOrdinal + 1).toLowerCase();
+        stages.push({
+          id: `check-${checkOrdinal}`,
+          kind: "check",
+          block: "communication",
+          heading: "Проверка реакции и пауза",
+          body: mergeTextSegments([
+            t(`${reacted} Остальным выдерживаем паузу `),
+            ...valueSegments(hasFacts, pauseTag),
+            t(` и делаем ${nextTouch}.`),
+          ]),
+        });
+      } else {
+        // Не сливаем: простая проверка реакции — ни паузы, ни номера касания.
+        // Заголовок без «и пауза», тело — только исход реакции.
+        stages.push({
+          id: `check-${checkOrdinal}`,
+          kind: "check",
+          block: "communication",
+          heading: "Проверка реакции",
+          body: [t(reacted)],
+        });
+      }
       continue;
     }
 
@@ -700,28 +734,12 @@ export function describeWorkflow(
           }
         : undefined;
 
-    if (wave.repeatsPrevious) {
-      retryOrdinal += 1;
-      hasRetry = true;
-      stages.push({
-        id: `retry-${retryOrdinal}`,
-        kind: "retry",
-        heading: "Пауза и повтор",
-        body: mergeTextSegments(
-          waitTag
-            ? [
-                t("Тем, кто не отреагировал, кампания выжидает "),
-                ...valueSegments(hasFacts, waitTag),
-                t(" и повторяет ту же серию по тем же каналам."),
-              ]
-            : [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам.")],
-        ),
-        groups,
-        ...(originHeading ? { sameAsHeading: originHeading } : {}),
-      });
-      previousChannels = waveChannels;
-      continue;
-    }
+    // Повторная волна больше не отдельным этапом «Пауза и повтор»: её паузу
+    // забрала слитая проверка реакции выше, а сама волна проходит обычным
+    // касанием (спека §5). `hasRetry` при этом всё ещё нужен «Итогу» — он
+    // ветвит исход по наличию повтора (финальная проверка после второго
+    // касания).
+    if (wave.repeatsPrevious) hasRetry = true;
 
     // Развилка — только когда ветки РАЗЛИЧАЮТСЯ: одинаковые по содержанию
     // потоки `graph-waves` уже схлопнул в одну группу, и делить там нечего.
@@ -734,81 +752,125 @@ export function describeWorkflow(
         : "Развилка по реакции"
       : touchHeading(touchOrdinal);
 
+    // Все строки волны (каналы + шаблоны) — для инлайн-перечисления в тексте.
+    const rows = groups.flatMap((g) => g.rows);
+    const rowCount = rows.length;
+
+    // Тело волны. У ФОРК-волн ветки остаются отдельными ◈-блоками (каждая несёт
+    // своё инлайн-перечисление каналов в `group.inline`), а тело — только
+    // подводка развилки. У не-форк волн перечисление каналов вплетается прямо в
+    // тело одним предложением («…: SMS с шаблоном [тег] и звонок…»), и группы
+    // наружу не выдаются (стопки строк с 👁 больше нет).
     let waveBody: DescriptionSegment[];
+    let waveGroups: DescriptionGroup[] | undefined;
+
     if (isFork) {
       waveBody = forkBody(wave, groups.length, hasFacts, graphEditable);
-    } else if (waveOrdinal === 1) {
-      const rowCount = groups.reduce((n, group) => n + group.rows.length, 0);
-      // «Поток» в этом блоке принадлежит СЕГМЕНТУ аудитории: этап развилки
-      // говорит «Аудитория делится на 3 потока по уровню склонности», и именно
-      // этот смысл закрепляют ◈-подзаголовки таблиц. Многоканальная волна
-      // делит аудиторию по другому признаку — по каналам (`split by:"equal"`
-      // действительно ДЕЛИТ охват между ветками, поэтому «каждому контакту
-      // уходит серия» тут было бы неправдой), — и называет свой механизм
-      // своим именем, а не занимает чужое слово.
-      waveBody = [
-        t(
-          rowCount > 1
-            ? "Аудитория делится по каналам — каждому своё сообщение:"
-            : "Каждому контакту уходит первое сообщение:",
-        ),
-      ];
-    } else if (wave.sameContentAsPrevious) {
-      // Содержание совпало с предыдущей волной, но разделяющей паузы нет —
-      // «Паузой и повтором» такая волна не стала (её определение требует
-      // паузы), а вот назвать её серию ДРУГОЙ было бы прямой ложью: ниже
-      // стоит та же самая таблица. Называем серию повторённой и НЕ поминаем
-      // паузу, которой в графе нет (`waitBefore` здесь отсутствует по
-      // построению: будь она — волна ушла бы в ветку `repeatsPrevious` выше).
-      waveBody = [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам:")];
+      waveGroups = groups.map((g) => ({ ...g, inline: inlineChannelSegments(g.rows) }));
     } else {
-      // Волна разошлась с предыдущей: те же люди, но другой заход. Чем именно
-      // он другой — сверяем по каналам, а не утверждаем наугад: вторая волна
-      // тех же каналов с другими текстами — обычная форма, и врать про «другие
-      // каналы» описание не должно.
-      const sameChannels =
-        previousChannels !== undefined &&
-        previousChannels.size === waveChannels.size &&
-        [...waveChannels].every((c) => previousChannels!.has(c));
-      const differs = sameChannels ? "другими сообщениями" : "другими каналами и шаблонами";
-      waveBody = waitTag
-        ? [
-            t("Тем, кто не отреагировал, кампания выжидает "),
-            ...valueSegments(hasFacts, waitTag),
-            t(` и заходит иначе — ${differs}:`),
-          ]
-        : [t(`Тем, кто не отреагировал, кампания заходит иначе — ${differs}:`)];
+      // «Каркас» фразы БЕЗ финального двоеточия — инлайн-каналы допишутся ниже.
+      let framing: DescriptionSegment[];
+      if (waveOrdinal === 1) {
+        // Многоканальная волна делит аудиторию по каналам; одноканальная просто
+        // шлёт первое сообщение. «Поток» здесь принадлежит не каналу, а сегменту
+        // склонности — его занимает форк-ветка выше, поэтому тут «по каналам».
+        framing = [
+          t(
+            rowCount > 1
+              ? "Аудитория делится по каналам, каждому приходит своё сообщение"
+              : "Каждому контакту уходит первое сообщение",
+          ),
+        ];
+      } else if (wave.repeatsPrevious) {
+        if (pauseMergedIntoCheck) {
+          // Паузу и уход отреагировавших уже описала слитая «Проверка реакции и
+          // пауза» прямо перед этой волной — здесь только подводка к той же
+          // серии. Флаг гасим: он относился РОВНО к этой волне.
+          pauseMergedIntoCheck = false;
+          framing = [t("Та же серия по тем же каналам")];
+        } else {
+          // Пауза проверкой не забрана — волна рассказывает о ней сама (та же
+          // нода ожидания `waitTag`), иначе пауза потерялась бы нигде не названной.
+          framing = waitTag
+            ? [
+                t("Тем, кто не отреагировал, кампания выжидает "),
+                ...valueSegments(hasFacts, waitTag),
+                t(" и повторяет ту же серию по тем же каналам"),
+              ]
+            : [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам")];
+        }
+      } else if (wave.sameContentAsPrevious) {
+        // Содержание совпало с предыдущей волной, паузы в графе нет — называем
+        // серию повторённой, но паузу не поминаем (её здесь нет по построению).
+        framing = [t("Тем, кто не отреагировал, кампания повторяет ту же серию по тем же каналам")];
+      } else {
+        // Волна разошлась с предыдущей: сверяем по каналам, а не утверждаем
+        // наугад — те же каналы с другими текстами это обычная форма.
+        const sameChannels =
+          previousChannels !== undefined &&
+          previousChannels.size === waveChannels.size &&
+          [...waveChannels].every((c) => previousChannels!.has(c));
+        const differs = sameChannels ? "другими сообщениями" : "другими каналами и шаблонами";
+        framing = waitTag
+          ? [
+              t("Тем, кто не отреагировал, кампания выжидает "),
+              ...valueSegments(hasFacts, waitTag),
+              t(` и заходит иначе — ${differs}`),
+            ]
+          : [t(`Тем, кто не отреагировал, кампания заходит иначе — ${differs}`)];
+      }
+      waveBody = [...framing, t(": "), ...inlineChannelSegments(rows), t(".")];
+      waveGroups = undefined;
     }
 
     stages.push({
       id: isFork ? `fork-${++forkOrdinal}` : `touch-${touchOrdinal}`,
       kind: isFork ? "fork" : "touch",
+      block: "communication",
       heading,
-      // Вводная про каналы — у первой волны любого вида, перед её собственной
-      // фразой.
-      body: mergeTextSegments(waveOrdinal === 1 ? [...channelsIntro, ...waveBody] : waveBody),
-      groups,
+      body: mergeTextSegments(waveBody),
+      ...(waveGroups ? { groups: waveGroups } : {}),
     });
-    originHeading = heading;
     previousChannels = waveChannels;
   }
 
-  // «Итог» — снова только про исход конверсии (review round 1, Finding 2:
-  // бюджет переехал в «Старт», сюда его больше не сплавляем).
-  stages.push({
-    id: "outcome",
-    kind: "outcome",
-    heading: "Итог",
-    body: [
-      t(
-        waveOrdinal === 0
-          ? "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании."
-          : hasRetry
+  // Нарратив конверсии больше НЕ отдельный блок «Итог»: это ЗАКРЫВАЮЩАЯ строка
+  // своего блока (Task 6). Заголовок пуст — рендер покажет её обычным абзацем,
+  // а не нумерованным шагом. Единственный блок «Итог» (деньги) принадлежит
+  // экрану кампании, а не `describeWorkflow`, поэтому `block:"outcome"` отсюда
+  // больше не выпускается (сам член союза сохранён — фикстуры/типы на него
+  // ссылаются; `kind:"outcome"` тоже остаётся валидным видом закрывающей строки).
+  if (waveOrdinal > 0) {
+    // Были коммуникации — строку закрывает блок КОММУНИКАЦИЙ. Исход ветвится по
+    // наличию повтора: после него стоит финальная проверка реакции, до которой
+    // при обычном касании дело не доходит.
+    stages.push({
+      id: "comm-close",
+      kind: "outcome",
+      block: "communication",
+      heading: "",
+      body: [
+        t(
+          hasRetry
             ? "После финальной проверки: отреагировавшие — в успех, остальные завершают путь без конверсии."
             : "Отреагировавшие засчитываются в успех, остальные завершают путь без конверсии.",
-      ),
-    ],
-  });
+        ),
+      ],
+    });
+  } else {
+    // Коммуникаций нет — строку закрывает блок СИГНАЛА: на выходе только сегмент.
+    stages.push({
+      id: "signal-close",
+      kind: "outcome",
+      block: "signal",
+      heading: "",
+      body: [
+        t(
+          "Исходящих коммуникаций нет — на выходе вы получаете готовый сегмент, который можно выгрузить или запустить в другой кампании.",
+        ),
+      ],
+    });
+  }
 
   return stages;
 }

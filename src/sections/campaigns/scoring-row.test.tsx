@@ -6,6 +6,11 @@ import type { ScoringParams } from "@/types/workflow";
 // ---- context mocks -------------------------------------------------------
 const dispatch = vi.fn();
 let mockReadOnly = false;
+// Hoisted (not fresh-per-call like the old inline `vi.fn()`s) so tests can
+// assert on invocations — mirrors `dispatch` above.
+const removeChip = vi.fn();
+const pushChip = vi.fn();
+const openScoringDrawer = vi.fn();
 
 vi.mock("@/state/app-state-context", () => ({
   useAppDispatch: () => dispatch,
@@ -17,10 +22,10 @@ vi.mock("./workflow-readonly-context", () => ({
   useWorkflowReadOnly: () => mockReadOnly,
 }));
 vi.mock("@/state/chat-context", () => ({
-  useChat: () => ({ openScoringDrawer: vi.fn() }),
+  useChat: () => ({ openScoringDrawer }),
 }));
 vi.mock("@/state/prompt-chips-context", () => ({
-  usePromptChips: () => ({ removeChip: vi.fn(), pushChip: vi.fn() }),
+  usePromptChips: () => ({ removeChip, pushChip }),
 }));
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
@@ -45,6 +50,9 @@ const params: ScoringParams = {
 describe("ScoringRow — «Файлы» как отдельные удаляемые строки", () => {
   beforeEach(() => {
     dispatch.mockClear();
+    removeChip.mockClear();
+    pushChip.mockClear();
+    openScoringDrawer.mockClear();
     mockReadOnly = false;
   });
 
@@ -146,5 +154,27 @@ describe("ScoringRow — «Файлы» как отдельные удаляем
     expect(getByRole("button", { name: "Показать интересы и триггеры" })).not.toBeNull();
     expect(container.querySelector("svg.lucide-eye")).not.toBeNull();
     expect(container.querySelector("svg.lucide-pencil")).toBeNull();
+  });
+
+  // spec §8: открытие боковика скоринга ДОЛЖНО класть whole-node чип узла в
+  // бар (иначе у ИИ нет контекста и он отвечает «нет такой ноды»). Раньше
+  // здесь был removeChip(`node_${nodeId}`) — чип наоборот снимался.
+  it("клик по «Интересы и триггеры» кладёт whole-node чип скоринга в бар, а не снимает его", () => {
+    const { getByRole } = render(<ScoringRow nodeId="n1" params={params} />);
+    fireEvent.click(getByRole("button", { name: "Изменить интересы и триггеры" }));
+
+    expect(pushChip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "node_n1",
+        kind: "node",
+        payload: expect.objectContaining({ nodeId: "n1", nodeType: "scoring" }),
+      }),
+    );
+    expect(removeChip).not.toHaveBeenCalled();
+    expect(openScoringDrawer).toHaveBeenCalledWith({
+      nodeId: "n1",
+      campaignId: "c1",
+      editable: true,
+    });
   });
 });

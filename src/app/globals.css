@@ -49,8 +49,6 @@
   --color-scenario-badge-border: var(--scenario-badge-border);
   --color-scenario-badge-text: var(--scenario-badge-text);
   --color-scenario-rail: var(--scenario-rail);
-  --color-scenario-panel: var(--scenario-panel);
-  --color-scenario-th: var(--scenario-th);
   --color-scenario-heading: var(--scenario-heading);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -193,12 +191,6 @@
   --scenario-badge-border: #2A2A30;
   --scenario-badge-text: #9596A0;
   --scenario-rail: #212127;
-  /* Тон панели таблицы. Прозрачность задаётся НЕ здесь, а модификатором
-     утилиты (`bg-scenario-panel/50`): токен темы Tailwind отдаёт значение как
-     есть, и альфа, записанная в самой переменной, до computed-стиля не
-     доезжает — проверено замером. */
-  --scenario-panel: #0C0C0B;
-  --scenario-th: #6D6E78;
   --scenario-heading: #ECECED;
 }
 

@@ -305,6 +305,42 @@ describe("selectPromptSuggestions — тег «Логика кампании» (
   });
 });
 
+describe("selectPromptSuggestions — section-чипы интересов/триггеров скоринга", () => {
+  it("section-чип «Триггеры» даёт scoring-подсказки, а не hidden", () => {
+    const r = selectPromptSuggestions(
+      withView({ kind: "welcome" }),
+      ctx({
+        activeTag: {
+          id: "section_triggers",
+          kind: "section",
+          label: "Триггеры",
+          payload: "triggers",
+          removable: true,
+        },
+      })
+    );
+    if (r.kind !== "items") throw new Error("expected items");
+    expect(r.scope.kind).toBe("node-context");
+  });
+
+  it("section-чип «Интересы» даёт scoring-подсказки, а не hidden", () => {
+    const r = selectPromptSuggestions(
+      withView({ kind: "welcome" }),
+      ctx({
+        activeTag: {
+          id: "section_interests",
+          kind: "section",
+          label: "Интересы",
+          payload: "interests",
+          removable: true,
+        },
+      })
+    );
+    if (r.kind !== "items") throw new Error("expected items");
+    expect(r.scope.kind).toBe("node-context");
+  });
+});
+
 describe("selectPromptSuggestions — welcome / awaiting / select", () => {
   it("welcome без чипов → hidden", () => {
     expect(
