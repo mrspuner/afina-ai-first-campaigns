@@ -99,4 +99,30 @@ describe("StepBudget — финальная развилка визарда", ()
     ).toBeInTheDocument();
     expect(screen.queryByText(/Можно вернуться назад и что-то поменять/)).toBeNull();
   });
+
+  it("показывает сводку заполненного визарда над прогнозом", () => {
+    renderStep();
+    expect(screen.getByText("Сценарий")).toBeInTheDocument();
+    // Сводка стоит ВЫШЕ прогноза — порядок в документе, а не только наличие.
+    const summary = screen.getByText("Сценарий");
+    const forecast = screen.getByText("Итого");
+    expect(
+      summary.compareDocumentPosition(forecast) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  // В изолированной правке правится ОДИН шаг: соседние значения не при делах,
+  // и возвращаться из сводки некуда.
+  it("в режиме правки сводки нет", () => {
+    render(
+      <StepBudget
+        data={streamData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        active
+        footerOverride={{ continueLabel: "Применить и вернуться", backLabel: "Отмена" }}
+      />,
+    );
+    expect(screen.queryByText("Сценарий")).toBeNull();
+  });
 });

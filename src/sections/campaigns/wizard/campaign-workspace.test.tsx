@@ -121,7 +121,7 @@ function renderAtBudgetStep(onLaunchRequested: (req: unknown) => void) {
 // Бюджет step's own StepContent root (same pattern wizard-buttons.spec.ts
 // uses) so a click never lands on some other mounted step's button.
 function budgetStepScope() {
-  return within(screen.getByText("Прогноз бюджета").closest("div")!);
+  return within(screen.getByText("Проверьте кампанию").closest("div")!);
 }
 
 describe("CampaignWorkspace — изолированный режим правки шага (Task 12)", () => {
@@ -130,7 +130,7 @@ describe("CampaignWorkspace — изолированный режим правк
   it("изолированный режим показывает только запрошенный шаг", () => {
     renderWorkspace({ editing: { campaignId: "cmp_1", step: "channels" }, snapshot });
     expect(screen.getByText("Как будем общаться с аудиторией?")).toBeInTheDocument();
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
   });
 
   it("без правки основная кнопка читается как «Применить и вернуться»", () => {
@@ -145,7 +145,7 @@ describe("CampaignWorkspace — изолированный режим правк
     fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
     expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
     // Шаг «Бюджет» реально появился в колонке — не только подпись поменялась.
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
   });
 
   // Item 2 (финальная полировка): степпер должен отличать «значение не
@@ -244,7 +244,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
 
     // Живой выбор снова совпал со снапшотом — обнулять уже нечего, «Бюджет»
     // выпадает из колонки, кнопка возвращается к «Применить и вернуться».
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
@@ -290,7 +290,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
 
     fireEvent.click(screen.getByRole("button", { name: "Каналы" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Push/ })); // восстановили снапшот
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
     // Меняем каналы снова (по-другому) — маска обязана вернуться.
     fireEvent.click(screen.getByRole("checkbox", { name: /Звонок/ }));
     expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Применить и вернуться" }),
     ).toBeNull();
@@ -343,7 +343,7 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     // Коммита ещё не было — сценарий применился в СЕССИЮ, а не наружу.
     expect(onCommit).not.toHaveBeenCalled();
     // Колонка выросла до «Бюджета» — ровно то, что делает каскад канала.
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
@@ -545,7 +545,7 @@ describe("CampaignWorkspace — экран «Создаём кампанию» �
     fireEvent.click(
       budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
     );
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
     expect(screen.queryByRole("button", { name: "Бюджет" })).toBeNull();
   });
 

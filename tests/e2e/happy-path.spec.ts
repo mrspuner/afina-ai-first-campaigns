@@ -82,7 +82,7 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   //    Wait for the step's body (the budget cards) to render before clicking —
   //    StepContent types its title/subtitle first, so «Далее» appears late and
   //    a premature `.last()` would re-hit the previous step's button.
-  const budgetHeading = page.getByRole("heading", { name: /Прогноз бюджета/ });
+  const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   // Scope to the budget step's own StepContent root (heading → .mb-8 → root)

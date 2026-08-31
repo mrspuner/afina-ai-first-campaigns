@@ -16,6 +16,7 @@ import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
 import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
 import { BudgetBreakdown } from "@/sections/campaigns/budget-breakdown";
+import { WizardSummaryTable } from "@/sections/campaigns/wizard/steps/wizard-summary-table";
 import type { StepData } from "@/types/campaign";
 import { cn } from "@/lib/utils";
 
@@ -155,6 +156,7 @@ export function StepBudget({
   onNext,
   onBack,
   active,
+  onGoToStep,
   footerOverride,
 }: StepProps) {
   useScreenHints(active ? BUDGET_SCREEN_HINTS : null);
@@ -301,11 +303,18 @@ export function StepBudget({
 
   return (
     <StepContent
-      title="Прогноз бюджета"
-      subtitle={`Рассчитали стоимость по выбранному источнику, каналам${data.fileRowCount ? " и размеру базы" : ""}.`}
+      title="Проверьте кампанию"
+      subtitle={`Настройки собраны, стоимость рассчитана по источнику, каналам${data.fileRowCount ? " и размеру базы" : ""}.`}
       maxWidth="max-w-xl"
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        {/* Сводка заполненного визарда (возвращена из снятого Step6Summary).
+            В изолированной правке шага с карточки её нет: там правится ОДИН
+            шаг, соседние значения не при делах, и возвращаться некуда. */}
+        {!footerOverride && (
+          <WizardSummaryTable data={data} onGoToStep={onGoToStep} />
+        )}
+
         {/* Forecast: merged «Сигналы» + collapsible «Коммуникации» table + «Итого».
             Shared with the payment screen via BudgetBreakdown. */}
         <div className="rounded-lg border border-border bg-card p-4">

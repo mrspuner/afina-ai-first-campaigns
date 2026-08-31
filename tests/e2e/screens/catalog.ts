@@ -260,7 +260,7 @@ export const SCREENS: Screen[] = [
     id: "wizard-7-budget",
     name: "Визард · шаг 7 — Бюджет",
     seed: guided(7, wizardData),
-    expect: 'h1:has-text("Прогноз бюджета")',
+    expect: 'h1:has-text("Проверьте кампанию")',
   },
 
   // ---- Campaign lifecycle screens ----

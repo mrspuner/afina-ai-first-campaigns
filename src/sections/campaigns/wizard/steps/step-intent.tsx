@@ -12,7 +12,10 @@ interface IntentOption {
   description: string;
 }
 
-const INTENT_OPTIONS: IntentOption[] = [
+/** Экспортируется ради сводки на финальном шаге: она показывает выбранную цель
+ *  той же подписью, что стояла на карточке выбора, — иначе пользователь читал бы
+ *  в сводке не то, что выбирал. */
+export const INTENT_OPTIONS: IntentOption[] = [
   {
     value: "signals",
     label: "Только сигналы",

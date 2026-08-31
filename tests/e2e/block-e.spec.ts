@@ -119,7 +119,7 @@ async function createCampaignViaWizard(page: Page, channel: "sms") {
   ).toBeVisible({ timeout: 15_000 });
   await page.getByRole("checkbox", { name: new RegExp(channel, "i") }).click();
   await page.getByRole("button", { name: "Далее" }).last().click();
-  const budgetHeading = page.getByRole("heading", { name: /Прогноз бюджета/ });
+  const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   // Scope to the budget step's own StepContent root (heading → .mb-8 → root)

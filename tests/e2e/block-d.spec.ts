@@ -95,7 +95,7 @@ async function createCampaignViaWizard(
   // → .mb-8 → root) instead of a blind `.last()` — the app now has four
   // «Создать кампанию» buttons (welcome view, campaigns section, empty-state
   // card, and this step's forward CTA).
-  const budgetHeading = page.getByRole("heading", { name: /Прогноз бюджета/ });
+  const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
   await budgetHeading

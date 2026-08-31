@@ -276,6 +276,10 @@ function WorkspaceInner({
             {...props}
             onBack={onBack}
             onNext={handleLaunchFromBudget}
+            // Сводка на этом шаге кликабельна: строка возвращает на свой шаг.
+            // Тот же плавный скролл, что у «Назад», — колонка шагов уже
+            // смонтирована целиком, идти никуда не нужно.
+            onGoToStep={handleGoToStep}
           />
         );
       default: return null;
