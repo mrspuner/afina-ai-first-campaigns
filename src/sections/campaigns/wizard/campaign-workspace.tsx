@@ -13,6 +13,7 @@ import { StepFile, sameFileSet } from "@/sections/campaigns/wizard/steps/step-fi
 import { StepIntegration } from "@/sections/campaigns/wizard/steps/step-integration";
 import { StepChannels } from "@/sections/campaigns/wizard/steps/step-channels";
 import { StepBudget } from "@/sections/campaigns/wizard/steps/step-budget";
+import { SurveyAwaiting } from "@/sections/survey/survey-awaiting";
 import {
   computeStepTransition,
   invalidatedBy,
@@ -68,6 +69,13 @@ function WorkspaceInner({
       ? { ...initialStepData, scenario: initialScenario.id }
       : initialStepData
   );
+  // Экран «Создаём кампанию» (комменты от 31.08): визард раньше телепортировал
+  // на карточку без единого кадра между кликом и результатом. Держим здесь
+  // снапшот, с которым уйдём в onLaunchRequested, когда ожидание кончится.
+  // НЕ шаг визарда: попав в stepsForIntent, экран стал бы кликабельной
+  // позицией степпера и целью computeStepTransition — а из ожидания нельзя
+  // ни выйти, ни вернуться.
+  const [creating, setCreating] = useState<StepData | null>(null);
   const stepRefs = useRef<Record<number, HTMLDivElement | null>>({});
   // Seed the scroll target on initial mount so resume entries (`initialStep`
   // > 1) land directly on the latest available step instead of opening at
@@ -220,16 +228,24 @@ function WorkspaceInner({
         handleNext(partial);
         return;
       }
-      onLaunchRequested({
-        scenarioId: merged.scenario ?? "",
-        cost: merged.budget ?? 0,
-        count: merged.fileRowCount ?? FALLBACK_BASE,
-        stepData: merged,
-        proceed: () => {},
-      });
+      setCreating(merged);
     },
     [handleNext, onLaunchRequested, stepData]
   );
+
+  // Конец ожидания — здесь и только здесь кампания реально создаётся.
+  // Дальше работает существующая цепочка: campaign_created_from_wizard
+  // создаёт кампанию и в том же переходе роутит view на карточку.
+  const handleCreatingDone = useCallback(() => {
+    if (!creating || !onLaunchRequested) return;
+    onLaunchRequested({
+      scenarioId: creating.scenario ?? "",
+      cost: creating.budget ?? 0,
+      count: creating.fileRowCount ?? FALLBACK_BASE,
+      stepData: creating,
+      proceed: () => {},
+    });
+  }, [creating, onLaunchRequested]);
 
   // The intent-gated step sequence. The numeric currentStep/maxStep are
   // 1-based INDICES into this list; the id at step N is steps[N-1].
@@ -267,6 +283,23 @@ function WorkspaceInner({
   }
 
   const visibleSteps = Array.from({ length: maxStep }, (_, i) => i + 1);
+
+  if (creating) {
+    return (
+      <div
+        className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-8 transition-[padding] duration-300"
+        style={{ paddingRight: "var(--chat-sidebar-width, 0px)" }}
+      >
+        <SurveyAwaiting
+          title="Создаём кампанию"
+          subtitle="Собираем сценарий, каналы и расписание в готовую к запуску кампанию."
+          durationMs={4000}
+          footnote="Все кампании хранятся в разделе «Кампании»"
+          onDone={handleCreatingDone}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
