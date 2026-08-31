@@ -183,7 +183,7 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
         onBack={vi.fn()}
       />
     );
-    expect(screen.getByRole("button", { name: "Далее" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Создать кампанию" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /пополнить/i })).toBeNull();
     cleanup();
   });
@@ -202,7 +202,7 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
         onBack={vi.fn()}
       />
     );
-    const button = screen.getByRole("button", { name: "Далее" });
+    const button = screen.getByRole("button", { name: "Создать кампанию" });
     fireEvent.click(button);
     // Wizard advances — no top-up gate.
     expect(onNext).toHaveBeenCalledTimes(1);

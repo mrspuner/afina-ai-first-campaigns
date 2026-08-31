@@ -453,13 +453,24 @@ export function StepBudget({
         )}
 
         {!footerOverride?.hidden && (
-          <StepFooter
-            onBack={onBack}
-            onContinue={proceed}
-            continueLabel={footerOverride?.continueLabel ?? "Далее"}
-            backLabel={footerOverride?.backLabel}
-            continueDisabled={!canContinue}
-          />
+          <>
+            {/* Последняя развилка визарда (комменты от 31.08): шаг перестаёт
+                читаться как «ещё один шаг». В режиме точечной правки с
+                карточки (footerOverride) ничего не создаётся — там текста нет. */}
+            {!footerOverride && (
+              <p className="text-sm text-muted-foreground">
+                Вот прогноз бюджета. Можно вернуться назад и что-то поменять — или
+                создать кампанию, готовую к запуску.
+              </p>
+            )}
+            <StepFooter
+              onBack={onBack}
+              onContinue={proceed}
+              continueLabel={footerOverride?.continueLabel ?? "Создать кампанию"}
+              backLabel={footerOverride?.backLabel}
+              continueDisabled={!canContinue}
+            />
+          </>
         )}
       </div>
 

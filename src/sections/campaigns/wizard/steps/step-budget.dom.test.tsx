@@ -41,7 +41,7 @@ describe("StepBudget — потолок дневного бюджета сохр
     fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
       target: { value: "5000" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({ maxDailyBudget: 5000 }),
     );
@@ -57,9 +57,46 @@ describe("StepBudget — потолок дневного бюджета сохр
     fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({ maxDailyBudget: undefined }),
     );
+  });
+});
+
+describe("StepBudget — финальная развилка визарда", () => {
+  it("показывает развилку: назад поправить или создать кампанию", () => {
+    renderStep();
+    expect(
+      screen.getByText(
+        "Вот прогноз бюджета. Можно вернуться назад и что-то поменять — или создать кампанию, готовую к запуску.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("основная кнопка называет действие — «Создать кампанию», а не «Далее»", () => {
+    renderStep();
+    expect(
+      screen.getByRole("button", { name: "Создать кампанию" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Далее" })).toBeNull();
+  });
+
+  // Точечная правка с карточки ничего не создаёт: там свой лейбл футера, и
+  // текст про создание кампании был бы прямой ложью.
+  it("в режиме правки развилки нет, лейбл — из footerOverride", () => {
+    render(
+      <StepBudget
+        data={streamData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        active
+        footerOverride={{ continueLabel: "Применить и вернуться", backLabel: "Отмена" }}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Можно вернуться назад и что-то поменять/)).toBeNull();
   });
 });
