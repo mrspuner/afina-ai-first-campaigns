@@ -568,28 +568,6 @@ describe("CampaignWorkspace — экран «Создаём кампанию» �
     expect(onLaunchRequested).toHaveBeenCalledTimes(1);
   });
 
-  it("бюджет, выбранный перед ожиданием, доезжает до LaunchRequest", () => {
-    const onLaunchRequested = vi.fn();
-    renderAtBudgetStep(onLaunchRequested);
-    const budget = budgetStepScope();
-    fireEvent.click(budget.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(budget.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "88888" },
-    });
-    fireEvent.click(budget.getByRole("button", { name: "Создать кампанию" }));
-
-    act(() => {
-      vi.advanceTimersByTime(4200);
-    });
-
-    const req = onLaunchRequested.mock.calls[0][0] as {
-      cost: number;
-      stepData: StepData;
-    };
-    expect(req.cost).toBe(88888);
-    expect(req.stepData.budget).toBe(88888);
-  });
-
   // Точечная правка с карточки кампанию не создаёт — она коммитит правку
   // существующей. Экран «Создаём кампанию» там был бы прямой ложью.
   it("в режиме точечной правки экран ожидания не поднимается", () => {

@@ -970,7 +970,6 @@ describe("mergeChannelNodes — слоты под сегментным спли�
   });
 });
 
-
 // Fix round 4 (Important finding) — the "no comm/condition nodes anywhere"
 // branch (round 3) rebuilds the whole graph via createTemplate, which is
 // correct for the COMMUNICATION area but wrong for «Скоринг»/«Сигнал»: those

@@ -166,11 +166,11 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
   });
 });
 
-describe("StepBudget — footer button is «Далее» and always advances (group B #6)", () => {
+describe("StepBudget — footer button is «Создать кампанию» and always advances (group B #6)", () => {
   const SCENARIO = "base-first-deal"; // signalType "Первая сделка", cost > 0
 
-  it("footer button label is «Далее» regardless of balance", () => {
-    // Default app-state balance is 0; cost > 0 — but button must still read «Далее».
+  it("footer button label is «Создать кампанию» regardless of balance", () => {
+    // Default app-state balance is 0; cost > 0 — but button must still read «Создать кампанию».
     renderStep(
       <StepBudget
         data={makeData({
@@ -188,7 +188,7 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
     cleanup();
   });
 
-  it("clicking «Далее» calls onNext (does NOT open a top-up modal)", () => {
+  it("clicking «Создать кампанию» calls onNext (does NOT open a top-up modal)", () => {
     const onNext = vi.fn();
     renderStep(
       <StepBudget
