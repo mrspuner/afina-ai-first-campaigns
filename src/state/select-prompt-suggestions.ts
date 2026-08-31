@@ -114,6 +114,19 @@ export function selectPromptSuggestions(
     if (ctx.activeTag.kind === "campaign-logic") {
       return resolved({ kind: "campaign-logic" });
     }
+    // Section-чипы интересов/триггеров скоринга — контекст ноды скоринга, а не
+    // «спрятать»: подсказки должны меняться под баром (spec §8). payload у
+    // section-чипа — строка "interests" | "triggers" (см. pushSectionChip).
+    if (ctx.activeTag.kind === "section") {
+      const section = ctx.activeTag.payload;
+      const paramLabel =
+        section === "interests" ? "Интересы"
+        : section === "triggers" ? "Триггеры"
+        : undefined;
+      if (paramLabel) {
+        return resolved({ kind: "node-context", nodeType: "scoring", paramLabel });
+      }
+    }
     // Прочие теги (section) — прячем подсказки.
     return { kind: "hidden" };
   }

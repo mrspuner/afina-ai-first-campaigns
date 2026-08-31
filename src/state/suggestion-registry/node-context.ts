@@ -170,6 +170,28 @@ const SPLIT: ParamSuggestions = {
   ],
 };
 
+const SCORING: ParamSuggestions = {
+  [WHOLE_NODE_KEY]: [
+    howNode("scoring-how", "Объясни простыми словами, как работает скоринг базы: что он делает и как отбирает аудиторию."),
+    ask("scoring-narrow", "Сузить аудиторию", "Сделай отбор строже — оставь только самых горячих."),
+    ask("scoring-widen", "Расширить охват", "Ослабь отбор — добавь тёплую аудиторию."),
+  ],
+  "База": [
+    ask("scoring-base-reupload", "Перезалить базу", "Хочу заменить загруженную базу на другую."),
+    ask("scoring-base-add", "Добавить базу", "Добавь ещё один файл базы к текущим."),
+    ask("scoring-base-quality", "Оценить базу", "Оцени качество и размер загруженной базы."),
+  ],
+  "Интересы": [
+    ask("scoring-int-narrow", "Сузить интересы", "Убери лишние интересы, оставь ключевые."),
+    ask("scoring-int-widen", "Добавить интересы", "Предложи ещё релевантные интересы."),
+  ],
+  "Триггеры": [
+    { id: "scoring-trg-domains", label: "Проверить домены",
+      action: { kind: "submit", phrase: "проверить доступность доменов" } },
+    ask("scoring-trg-add", "Добавить триггер", "Добавь триггер по конкретному домену."),
+  ],
+};
+
 const SIGNAL: ParamSuggestions = {
   [WHOLE_NODE_KEY]: [
     howNode("signal-how", "Объясни простыми словами, как работает нода Сигнал: что она задаёт в сценарии (исходную аудиторию по сигналу), как влияет на охват и когда её стоит настраивать."),
@@ -211,6 +233,7 @@ const CATALOG: Partial<Record<WorkflowNodeType, ParamSuggestions>> = {
   wait: WAIT,
   condition: CONDITION,
   split: SPLIT,
+  scoring: SCORING,
   signal: SIGNAL,
   success: SUCCESS,
   end: END,

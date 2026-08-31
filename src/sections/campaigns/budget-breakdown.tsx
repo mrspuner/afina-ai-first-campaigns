@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import {
   buildChannelTable,
@@ -95,42 +101,68 @@ export function BudgetBreakdown({
           </button>
 
           {/* Expanded → a faint "appendix" table directly under the row: square
-              top corners, rounded bottom, subtle top divider. */}
+              top corners, rounded bottom, subtle top divider. Пояснение
+              Первичные/Повторные переехало из абзаца в тултипы заголовков
+              колонок — таблица не разбухает текстом, смысл под наведением. */}
           {expanded && (
             <div className="mb-4 rounded-b-[7px] border-t border-white/[0.067] bg-white/[0.011] px-3 py-1.5">
-              <p className="mb-2 text-[11px] leading-[1.5] text-muted-foreground">
-                Первичные — первое касание по каждому получателю. Повторные —
-                дополнительное касание тем, кто не отреагировал: обычно это заметно
-                повышает отклик, их можно будет отключать при настройке кампании.
-              </p>
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-[0.02em] text-[#6f6f66]">
-                    <th className="pb-1 text-left font-normal">Канал</th>
-                    <th className="pb-1 pl-4 text-right font-normal">Первичные</th>
-                    <th className="pb-1 pl-4 text-right font-normal">Повторные</th>
-                    <th className="pb-1 pl-4 text-right font-normal">Итого</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.channel} className="text-xs tabular-nums">
-                      <td className="py-0.5 text-left text-foreground/80">
-                        {CHANNEL_LABEL[r.channel]}
-                      </td>
-                      <td className="py-0.5 pl-4 text-right text-muted-foreground">
-                        {formatCell(r.primary)}
-                      </td>
-                      <td className="py-0.5 pl-4 text-right text-muted-foreground">
-                        {formatCell(r.repeat)}
-                      </td>
-                      <td className="py-0.5 pl-4 text-right text-foreground/90">
-                        {formatCell(r.total)}
-                      </td>
+              <TooltipProvider delay={200}>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-[0.02em] text-[#6f6f66]">
+                      <th className="pb-1 text-left font-normal">Канал</th>
+                      <th className="pb-1 pl-4 text-right font-normal">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="cursor-help underline decoration-dotted decoration-[#6f6f66] underline-offset-2" />
+                            }
+                          >
+                            Первичные
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Первое касание — покажем каждому получателю.
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
+                      <th className="pb-1 pl-4 text-right font-normal">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="cursor-help underline decoration-dotted decoration-[#6f6f66] underline-offset-2" />
+                            }
+                          >
+                            Повторные
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[240px]">
+                            Дополнительное касание — тем, кто не отреагировал.
+                            Обычно повышает отклик; можно отключить при настройке.
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
+                      <th className="pb-1 pl-4 text-right font-normal">Итого</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.channel} className="text-xs tabular-nums">
+                        <td className="py-0.5 text-left text-foreground/80">
+                          {CHANNEL_LABEL[r.channel]}
+                        </td>
+                        <td className="py-0.5 pl-4 text-right text-muted-foreground">
+                          {formatCell(r.primary)}
+                        </td>
+                        <td className="py-0.5 pl-4 text-right text-muted-foreground">
+                          {formatCell(r.repeat)}
+                        </td>
+                        <td className="py-0.5 pl-4 text-right text-foreground/90">
+                          {formatCell(r.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TooltipProvider>
             </div>
           )}
         </>

@@ -1,29 +1,15 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { WorkflowDescription } from "./workflow-description";
-import { describeWorkflow, segmentsText, type DescriptionStage } from "@/state/graph-description";
+import { segmentsText, type DescriptionStage } from "@/state/graph-description";
 import { AppStateProvider } from "@/state/app-state-context";
 import { ChatProvider } from "@/state/chat-context";
-import { TemplatePreviewDrawer } from "./template-preview-drawer";
 import { NODE_STYLES } from "./node-visuals";
-import type { NodeParams, WorkflowNode, WorkflowNodeType } from "@/types/workflow";
-import { createTemplate } from "@/state/workflow-templates";
-import { getScenario } from "@/data/scenarios";
 
 /** Текстовый сегмент — короткий помощник, чтобы фикстура читалась как раньше. */
 const t = (text: string) => [{ kind: "text" as const, text }];
-
-/** Нода рукотворного графа — описанию нужны только id, nodeType и params. */
-function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): WorkflowNode {
-  return {
-    id,
-    type: "workflowNode",
-    position: { x: 0, y: 0 },
-    data: { label: id, nodeType, ...(params ? { params } : {}) },
-  };
-}
 
 // ВНИМАНИЕ (Task 5 → Task 7): поле `DescriptionStage.messages` снято — строки
 // коммуникаций живут в `groups[].rows` (`DescriptionCommunication`), рендерит
@@ -33,10 +19,16 @@ function node(id: string, nodeType: WorkflowNodeType, params?: NodeParams): Work
 // будущую таблицу. Своё покрытие для `groups`/таблиц заводит Task 8 — на новой
 // разметке, а не здесь.
 
+// Task 8: описание группируется по верхнеуровневым блокам. Реалистичный вывод
+// `describeWorkflow` для этих тестов — сигнальный титул (его собственный
+// заголовок поглощается заголовком блока), два нумерованных коммуникационных
+// шага и закрывающая строка блока (пустой heading). Блока «Итог» здесь нет —
+// денежный «Итог» рисует экран кампании.
 const STAGES: DescriptionStage[] = [
   {
     id: "start",
     kind: "start",
+    block: "signal",
     heading: "Скоринг базы",
     body: t("Загруженная база проходит скоринг."),
     settings: [
@@ -47,10 +39,24 @@ const STAGES: DescriptionStage[] = [
   {
     id: "touch-1",
     kind: "touch",
+    block: "communication",
     heading: "Первое касание",
     body: t("Каждому контакту уходит первое сообщение:"),
   },
-  { id: "outcome", kind: "outcome", heading: "Итог", body: t("Остальные завершают путь без конверсии.") },
+  {
+    id: "check-1",
+    kind: "check",
+    block: "communication",
+    heading: "Проверка реакции",
+    body: t("Кто отреагировал — уходит в успех."),
+  },
+  {
+    id: "comm-close",
+    kind: "outcome",
+    block: "communication",
+    heading: "",
+    body: t("Остальные завершают путь без конверсии."),
+  },
 ];
 
 describe("WorkflowDescription", () => {
@@ -74,10 +80,17 @@ describe("WorkflowDescription", () => {
   });
 
   describe("текст описания", () => {
-    it("показывает подзаголовок и тело каждого этапа", () => {
+    it("показывает подзаголовки коммуникационных шагов и тело каждого этапа", () => {
       render(<WorkflowDescription stages={STAGES} />);
+      // Заголовки нумерованных коммуникационных под-шагов рендерятся жирным.
+      expect(screen.getByText("Первое касание")).toBeTruthy();
+      expect(screen.getByText("Проверка реакции")).toBeTruthy();
+      // Заголовок сигнального титула поглощён заголовком блока «Сигнал
+      // (Скоринг)» — своим подзаголовком не дублируется.
+      expect(screen.queryByText("Скоринг базы")).toBeNull();
+      // Тело КАЖДОГО этапа (включая сигнальный титул и закрывающую строку)
+      // присутствует — сегменты односегментные, поэтому getByText находит их.
       for (const stage of STAGES) {
-        expect(screen.getByText(stage.heading)).toBeTruthy();
         expect(screen.getByText(segmentsText(stage.body))).toBeTruthy();
       }
     });
@@ -93,13 +106,14 @@ describe("WorkflowDescription", () => {
     // у React нет ни одного текстового узла с полным текстом — getByText(fullString)
     // здесь не найдёт ничего, и это ловушка для Task 4/5. Проверяем через
     // textContent параграфа ТЕЛА, а не getByText — рабочий паттерн для тех
-    // задач. Заголовок теперь на своей строке (Task 7) в ОТДЕЛЬНОМ <p>, поэтому
-    // берём второй <p> этапа, а не первый целиком.
+    // задач. Сигнальный титул (Task 8) поглощён заголовком блока: своего
+    // подзаголовка-<p> у него больше нет, поэтому тело — ПЕРВЫЙ <p> этапа.
     it("несколько сегментов body (текст+тег+текст) склеиваются в один textContent", () => {
       const stages: DescriptionStage[] = [
         {
           id: "start",
           kind: "start",
+          block: "signal",
           heading: "Старт",
           body: [
             { kind: "text", text: "Домены " },
@@ -111,7 +125,7 @@ describe("WorkflowDescription", () => {
 
       const { container } = render(<WorkflowDescription stages={stages} />);
       const paragraphs = container.querySelectorAll("p");
-      expect(paragraphs[1].textContent).toBe("Домены a.ru, b.ru отправлены на модерацию.");
+      expect(paragraphs[0].textContent).toBe("Домены a.ru, b.ru отправлены на модерацию.");
 
       // Ловушка задокументирована: getByText на полную склеенную строку не
       // находит ничего, потому что текст разбит по нескольким <span>.
@@ -122,12 +136,50 @@ describe("WorkflowDescription", () => {
   });
 });
 
+describe("верхнеуровневые блоки описания — нумерованная этапность", () => {
+  it("нумерует блоки «1. Сигналы» и «2. Коммуникации», без блока «Итог»", () => {
+    render(<WorkflowDescription stages={STAGES} />);
+    expect(screen.getByText("1. Сигналы")).toBeTruthy();
+    expect(screen.getByText("2. Коммуникации")).toBeTruthy();
+    // Денежный «Итог» рисует ЭКРАН кампании, а не это описание — заголовка
+    // блока «Итог» здесь быть не должно.
+    expect(screen.queryByText("Итог")).toBeNull();
+  });
+
+  it("блок рисуется только при наличии этапов — без коммуникаций нет заголовка «Коммуникации»", () => {
+    const signalOnly: DescriptionStage[] = [
+      { id: "start", kind: "start", block: "signal", heading: "Загрузка базы", body: t("База загружена.") },
+      { id: "signal-close", kind: "outcome", block: "signal", heading: "", body: t("На выходе — готовый сегмент.") },
+    ];
+    render(<WorkflowDescription stages={signalOnly} />);
+    expect(screen.getByText("1. Сигналы")).toBeTruthy();
+    expect(screen.queryByText("2. Коммуникации")).toBeNull();
+  });
+
+  it("этап с пустым heading рендерит тело обычным абзацем — без бейджа-номера", () => {
+    const stages: DescriptionStage[] = [
+      { id: "touch-1", kind: "touch", block: "communication", heading: "Первое касание", body: t("Уходит первое сообщение.") },
+      { id: "comm-close", kind: "outcome", block: "communication", heading: "", body: t("Остальные завершают путь без конверсии.") },
+    ];
+    const { container } = render(<WorkflowDescription stages={stages} />);
+    // Текст закрывающего этапа присутствует, лежит в обычном <p>...
+    const closingText = screen.getByText("Остальные завершают путь без конверсии.");
+    expect(closingText.closest("p")?.tagName).toBe("P");
+    // ...и не сидит в <li> нумерованного шага (значит, без бейджа и рельса).
+    expect(closingText.closest("li")).toBeNull();
+    // Единственный бейдж-номер — у «Первого касания»; у закрывающей строки его нет.
+    const numbers = [...container.querySelectorAll("[data-testid='stage-number']")].map((n) => n.textContent);
+    expect(numbers).toEqual(["1"]);
+  });
+});
+
 describe("WorkflowDescription — пунктуация вплотную к пилюле (fix round 2, Finding 1)", () => {
   it("текстовый сегмент сразу после тега, начинающийся со знака препинания, получает pull-back класс", () => {
     const stages: DescriptionStage[] = [
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Сценарий — " },
@@ -146,6 +198,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "first-touch",
         kind: "touch",
+        block: "communication",
         heading: "Первое касание.",
         body: [
           { kind: "tag", tag: { id: "trig", label: "Ипотека", target: { kind: "none" } } },
@@ -165,6 +218,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "tag", tag: { id: "scenario", label: "Апсейл", target: { kind: "none" } } },
@@ -184,6 +238,7 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
       {
         id: "start",
         kind: "start",
+        block: "signal",
         heading: "Старт.",
         body: [
           { kind: "text", text: "Слово" },
@@ -197,10 +252,14 @@ describe("WorkflowDescription — пунктуация вплотную к пи�
 });
 
 describe("нумерованный таймлайн", () => {
-  it("нумерует шаги по порядку", () => {
+  // Нумерация перезапускается внутри блока и считает ТОЛЬКО нумерованные
+  // (непустой heading) под-шаги. У STAGES в блоке «Коммуникации» их два
+  // (касание + проверка); сигнальный титул поглощён заголовком блока, а
+  // закрывающая строка бейджа не несёт — итого два бейджа.
+  it("нумерует шаги по порядку внутри блока", () => {
     const { container } = render(<WorkflowDescription stages={STAGES} />);
     const numbers = [...container.querySelectorAll("[data-testid='stage-number']")].map((n) => n.textContent);
-    expect(numbers).toEqual(["1", "2", "3"]);
+    expect(numbers).toEqual(["1", "2"]);
   });
 
   // Task 4: номер шага — кружок-бейдж (Ø28px), а не плоская цифра на левом
@@ -218,10 +277,11 @@ describe("нумерованный таймлайн", () => {
     expect(container.querySelector("[data-testid='stage-rail']")).toBeTruthy();
   });
 
-  // Соединять нечего — линия рисуется ТОЛЬКО между соседними бейджами.
+  // Соединять нечего — линия рисуется ТОЛЬКО между соседними нумерованными
+  // под-шагами блока. Одинокий нумерованный шаг рельса не даёт.
   it("одинокий шаг линии не рисует", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "touch", block: "communication", heading: "Первое касание", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-rail']")).toBeNull();
   });
@@ -233,19 +293,21 @@ describe("нумерованный таймлайн", () => {
   // соседний `<span>`). Тест не отличал run-in от блочной структуры — ровно
   // то, ради чего он написан. Теперь утверждаем БЛОЧНУЮ структуру: заголовок
   // — СВОЙ `<p>` (а не `<strong>` внутри чужого), и тело живёт в СЛЕДУЮЩЕМ
-  // соседнем `<p>` — не в том же узле, что заголовок.
+  // соседнем `<p>` — не в том же узле, что заголовок. Проверяем на
+  // нумерованном коммуникационном под-шаге: у него есть свой подзаголовок (у
+  // сигнального титула он поглощён заголовком блока — Task 8).
   it("заголовок шага — на своей строке, а не вклеен в абзац", () => {
     render(<WorkflowDescription stages={STAGES} />);
-    const heading = screen.getByText("Скоринг базы");
+    const heading = screen.getByText("Первое касание");
     const headingParagraph = heading.closest("p");
     // textContent строго равен заголовку — если бы тело было приклеено в тот
     // же <p> (run-in), здесь оказался бы ещё и текст тела.
     expect(headingParagraph?.tagName).toBe("P");
-    expect(headingParagraph?.textContent).toBe("Скоринг базы");
+    expect(headingParagraph?.textContent).toBe("Первое касание");
 
     const bodyParagraph = headingParagraph?.nextElementSibling;
     expect(bodyParagraph?.tagName).toBe("P");
-    expect(bodyParagraph?.textContent).toBe("Загруженная база проходит скоринг.");
+    expect(bodyParagraph?.textContent).toBe("Каждому контакту уходит первое сообщение:");
   });
 
   // Ревью (fix round): исходный вариант проверял лишь присутствие подписи и
@@ -269,7 +331,7 @@ describe("нумерованный таймлайн", () => {
 
   it("шаг без настроек не рендерит пустой список", () => {
     const { container } = render(
-      <WorkflowDescription stages={[{ id: "o", kind: "outcome", heading: "Итог", body: t("Всё.") }]} />,
+      <WorkflowDescription stages={[{ id: "o", kind: "touch", block: "communication", heading: "Первое касание", body: t("Всё.") }]} />,
     );
     expect(container.querySelector("[data-testid='stage-settings']")).toBeNull();
   });
@@ -300,9 +362,8 @@ describe("нумерованный таймлайн", () => {
 });
 
 /**
- * Таблица коммуникаций (Task 8). `PreviewButton` внутри строки зовёт
- * `useChat()` напрямую — компонент перестаёт быть чисто презентационным,
- * поэтому здесь и только здесь нужна обёртка провайдерами (та же пара, что
+ * Пилюли шаблона внутри `DescriptionTagPill` зовут `useChat()` (поповер выбора
+ * шаблона), поэтому здесь нужна обёртка провайдерами (та же пара, что
  * `campaign-screen.tsx` реально ставит вокруг `WorkflowDescription`).
  */
 const wrap = (ui: ReactElement) =>
@@ -312,11 +373,15 @@ const wrap = (ui: ReactElement) =>
     </AppStateProvider>,
   );
 
+// Форк-волна: у неё ветки остаются отдельными ◈-абзацами, каждая несёт своё
+// инлайн-перечисление каналов в `group.inline` (у не-форк волн каналы вплетены
+// прямо в `stage.body`).
 const GROUP_STAGE: DescriptionStage = {
-  id: "touch-1",
-  kind: "touch",
-  heading: "Первое касание",
-  body: t("Аудитория делится по каналам — каждому своё сообщение:"),
+  id: "fork-1",
+  kind: "fork",
+  block: "communication",
+  heading: "Развилка по реакции",
+  body: t("Аудитория делится на потоки, каждый получает своё:"),
   groups: [
     {
       id: "g1",
@@ -325,10 +390,12 @@ const GROUP_STAGE: DescriptionStage = {
         {
           nodeId: "n1",
           channel: "Email",
-          contentText: "Ваше предложение готово",
-          previewTemplateId: "tpl_email_1",
           templateTag: { id: "tt1", label: "Горячий оффер", target: { kind: "none", nodeId: "n1" } },
         },
+      ],
+      inline: [
+        { kind: "text", text: "email с шаблоном " },
+        { kind: "tag", tag: { id: "tt1", label: "Горячий оффер", target: { kind: "none", nodeId: "n1" } } },
       ],
     },
     {
@@ -338,92 +405,52 @@ const GROUP_STAGE: DescriptionStage = {
         {
           nodeId: "n2",
           channel: "Push",
-          contentTitle: "Напоминание",
-          contentText: "У нас есть кое-что для вас.",
           templateTag: { id: "tt2", label: "не выбран", target: { kind: "none", nodeId: "n2" } },
         },
+      ],
+      inline: [
+        { kind: "text", text: "push с шаблоном " },
+        { kind: "tag", tag: { id: "tt2", label: "не выбран", target: { kind: "none", nodeId: "n2" } } },
       ],
     },
   ],
 };
 
-describe("таблица коммуникаций", () => {
-  it("рендерит канал, шаблон и контент строкой таблицы", () => {
+describe("коммуникации — инлайн-текст ветвей (форк-волны)", () => {
+  it("рендерит канал и пилюлю шаблона инлайн, без таблицы и кнопки предпросмотра", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    expect(screen.getByText("Email")).toBeTruthy();
+    // Пилюля шаблона в тексте ветки.
     expect(screen.getByText("Горячий оффер")).toBeTruthy();
-    expect(screen.getByText("Ваше предложение готово")).toBeTruthy();
+    // Каналы и шаблоны — бегущий текст: ни таблицы, ни кнопки предпросмотра.
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryAllByRole("button", { name: /предпросмотр/i })).toHaveLength(0);
   });
 
-  // Task 4: таблица лежит в обрамлённой панели — фон, обводка, скруглённые
-  // углы, overflow: hidden (иначе строки/шапка вылезали бы за радиус).
-  it("таблица лежит в обрамлённой панели", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const panel = container.querySelector("[data-testid='table-panel']") as HTMLElement;
-    expect(panel.className).toContain("rounded-[10px]");
-    expect(panel.className).toContain("overflow-hidden");
-  });
-
-  // Task 4: кнопка предпросмотра теряет видимую подпись «Предпросмотр», но не
-  // доступность — aria-label уже уникальный (различает канал/этап/группу),
-  // title дублирует его для наведения мышью.
-  it("кнопка предпросмотра — только иконка, подпись остаётся доступной", () => {
+  // Имя канала идёт обычным текстом (строчными в потоке), рядом — пилюля
+  // шаблона. Контент сообщения инлайн не рендерится (👁 убран): его смотрят
+  // через поповер самой пилюли.
+  it("канал — обычный текст рядом с пилюлей шаблона", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const btn = screen.getAllByRole("button", { name: /^Предпросмотр/ })[0];
-    expect(btn.textContent).toBe("");
-    expect(btn.getAttribute("title")).toMatch(/Предпросмотр/);
-  });
-
-  it("контент без кавычек и без меток «Тема»/«Текст»", () => {
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const cell = screen.getByText("Ваше предложение готово");
-    expect(cell.textContent).not.toContain("«");
-    expect(cell.textContent).not.toContain("Тема:");
-  });
-
-  it("push показывает заголовок и текст двумя строками ячейки", () => {
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    expect(screen.getByText("Напоминание")).toBeTruthy();
-    expect(screen.getByText("У нас есть кое-что для вас.")).toBeTruthy();
-  });
-
-  // Финальное ревью: прежний вариант считал `<thead>` и требовал ровно один на
-  // шаг — визуально верно, но вторая и последующие ◈-таблицы оставались
-  // полностью НЕПОДПИСАННЫМИ сетками данных для скринридера. Тест переписан на
-  // то, что он на самом деле охраняет: ВИДИМАЯ шапка одна на шаг, у остальных
-  // таблиц шапка есть, но только для скринридера.
-  it("видимая шапка — одна на шаг; у последующих ◈-таблиц шапка только для скринридера", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const tables = [...container.querySelectorAll("table")];
-    expect(tables).toHaveLength(2);
-
-    const heads = tables.map((table) => table.querySelector("thead"));
-    // Ни одна таблица данных не остаётся без подписей колонок.
-    expect(heads.every((head) => head !== null)).toBe(true);
-    // Но видимая ровно одна — у первой группы; остальные скрыты визуально.
-    expect(heads[0]!.className).not.toContain("sr-only");
-    expect(heads.slice(1).every((head) => head!.className.includes("sr-only"))).toBe(true);
+    expect(screen.getByText(/email с шаблоном/)).toBeTruthy();
+    expect(screen.getByText(/push с шаблоном/)).toBeTruthy();
   });
 
   /**
-   * Найдено глазами на живой карточке: русские имена шаблонов («Персональный
-   * оффер», «Push — возвращение») не влезали в колонку и переносились ВНУТРИ
-   * пилюли — та вырастала в два ряда и читалась крупным блоком-кнопкой, а не
-   * чипом строки. Замер на карточке: имя в одну строку требует до 178px, в
-   * колонке было 157px. Лечится парой — усечением у пилюли и шириной у
-   * колонки; порознь ни одно не даёт однострочного чипа.
+   * Найдено глазами на живой карточке (ещё в табличной вёрстке): русские
+   * имена шаблонов («Персональный оффер», «Push — возвращение») не влезали в
+   * колонку и переносились ВНУТРИ пилюли — та вырастала в два ряда и
+   * читалась крупным блоком-кнопкой, а не чипом строки. Механика усечения
+   * (правка 4) — общее свойство ЛЮБОЙ пилюли, а не табличная особенность, и
+   * остаётся в силе у пилюли строки текст-стори.
    */
-  // Правка 4 (владелец продукта, разбор живой карточки): потолок ширины стал
-  // символьным (`max-w-[20ch]`) и общим для ВСЕХ пилюль — раньше здесь была
-  // табличная особенность `max-w-full`, завязанная на ширину колонки.
-  it("пилюля шаблона в таблице усекается, а не переносится, и не вылезает из ячейки", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const pill = container.querySelector("tbody tr td:nth-child(2) > *") as HTMLElement;
-    const label = pill.querySelector("span") as HTMLElement;
+  it("пилюля шаблона в строке усекается, а не переносится", () => {
+    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
+    const label = screen.getByText("Горячий оффер");
     expect(label.className).toContain("truncate");
     // Без min-w-0 флекс-элемент не сжимается уже своего содержимого, и
     // усечение не срабатывает вовсе.
     expect(label.className).toContain("min-w-0");
+    const pill = label.parentElement as HTMLElement;
     expect(pill.className).toContain("max-w-[20ch]");
   });
 
@@ -438,15 +465,16 @@ describe("таблица коммуникаций", () => {
   // быть табличной особенностью — это ТА ЖЕ механика у ЛЮБОЙ пилюли, включая
   // теги ПРОЗЫ (например, перечисление триггеров в «Скоринге базы»). Короткий
   // домен «a.ru» (4 симв.) не достигает потолка `max-w-[20ch]` и визуально не
-  // усекается, но несёт ТЕ ЖЕ классы механики, что и табличная пилюля выше —
+  // усекается, но несёт ТЕ ЖЕ классы механики, что и пилюля строки выше —
   // раньше (при флаге `truncateLabel`) их у прозы не было вовсе.
-  it("пилюля в прозе несёт ту же механику усечения, что и табличная", () => {
+  it("пилюля в прозе несёт ту же механику усечения, что и пилюля строки коммуникации", () => {
     const { container } = render(
       <WorkflowDescription
         stages={[
           {
             id: "start",
             kind: "start",
+            block: "signal",
             heading: "Скоринг базы",
             body: [
               { kind: "text", text: "Домены " },
@@ -457,7 +485,9 @@ describe("таблица коммуникаций", () => {
         ]}
       />,
     );
-    const prose = container.querySelectorAll("p")[1];
+    // Сигнальный титул (Task 8) поглощён заголовком блока — тело этапа
+    // теперь ПЕРВЫЙ <p>, отдельного подзаголовка-<p> над ним больше нет.
+    const prose = container.querySelectorAll("p")[0];
     expect(prose.textContent).toContain("a.ru");
     expect(prose.innerHTML).toContain("truncate");
     expect(prose.innerHTML).toContain("max-w-[20ch]");
@@ -476,6 +506,7 @@ describe("таблица коммуникаций", () => {
           {
             id: "start",
             kind: "start",
+            block: "signal",
             heading: "Скоринг базы",
             body: [
               { kind: "text", text: "Триггеры: " },
@@ -493,58 +524,27 @@ describe("таблица коммуникаций", () => {
     expect(pill.getAttribute("title")).toBe(longLabel);
   });
 
-  /**
-   * Ширины колонок — единственный источник на ВСЕ таблицы шага: `table-fixed`
-   * берёт их из первой строки СВОЕЙ таблицы, поэтому разъехавшийся `<colgroup>`
-   * сдвинул бы колонки таблицы повтора относительно таблицы касания. Task 4
-   * приводит ширины к макету (110px / 196px / авто / 52px) — кнопка стала
-   * квадратной иконкой без подписи, поэтому её колонка сузилась с 7rem/120px
-   * до 52px (28px кнопки + по 12px паддинга с каждой стороны).
-   */
-  it("colgroup одинаков у всех таблиц шага и несёт ширины макета", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const widths = [...container.querySelectorAll("table")].map((table) =>
-      [...table.querySelectorAll("col")].map((col) => col.className),
-    );
-    expect(widths).toHaveLength(2);
-    expect(widths[0]).toEqual(widths[1]);
-    expect(widths[0]).toEqual(["w-[110px]", "w-[196px]", "", "w-[52px]"]);
-  });
-
-  it("колонка предпросмотра прижимает кнопку к правому краю и не переносит подпись", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const cell = container.querySelector("tbody tr td:nth-child(4)") as HTMLElement;
-    expect(cell.className).toContain("text-right");
-    expect(cell.className).toContain("whitespace-nowrap");
-  });
-
-  it("ячейки шапки объявлены заголовками КОЛОНОК (scope=col)", () => {
-    const { container } = wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    const ths = [...container.querySelectorAll("th")];
-    expect(ths.length).toBeGreaterThan(0);
-    expect(ths.every((th) => th.getAttribute("scope") === "col")).toBe(true);
-  });
-
   // Вторая половина того же зафиксированного решения (первая — в
-  // graph-description.test.ts): описание строку ОТДАЁТ, а таблица её РИСУЕТ —
-  // с пустой ячейкой контента, но с каналом и кнопкой предпросмотра.
-  it("строка с пустым контентом рисуется, а не пропускается таблицей", () => {
+  // graph-description.test.ts): описание строку ОТДАЁТ, а рендер её РИСУЕТ —
+  // без контента, но с каналом и кнопкой предпросмотра.
+  it("ветка с нерезолвнутым шаблоном («не выбран») всё равно рисуется каналом", () => {
     const stage: DescriptionStage = {
-      id: "touch-1",
-      kind: "touch",
-      heading: "Первое касание",
-      body: t("Каждому контакту уходит первое сообщение:"),
-      groups: [{ id: "g1", rows: [{ nodeId: "n-empty", channel: "SMS", contentText: "" }] }],
+      id: "fork-1",
+      kind: "fork",
+      block: "communication",
+      heading: "Развилка по реакции",
+      body: t("Аудитория делится на потоки:"),
+      groups: [
+        {
+          id: "g1",
+          label: "Высокая склонность",
+          rows: [{ nodeId: "n-x", channel: "SMS" }],
+          inline: [{ kind: "text", text: "SMS" }],
+        },
+      ],
     };
-    const nodeParams = new Map<string, NodeParams>([
-      ["n-empty", { kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" }],
-    ]);
-    const { container } = wrap(
-      <WorkflowDescription stages={[stage]} nodeParams={nodeParams} />,
-    );
-    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
-    expect(screen.getByText("SMS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /предпросмотр/i })).toBeInTheDocument();
+    wrap(<WorkflowDescription stages={[stage]} />);
+    expect(screen.getByText(/SMS/)).toBeTruthy();
   });
 
   it("глиф ◈ скрыт от скринридера — озвучивается только название ветки", () => {
@@ -554,16 +554,7 @@ describe("таблица коммуникаций", () => {
     expect(glyph?.textContent).toContain("◈");
   });
 
-  it("кнопка предпросмотра несёт кольцо focus-visible, как соседние контролы", () => {
-    const nodeParams = new Map<string, NodeParams>([
-      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
-    ]);
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} nodeParams={nodeParams} />);
-    const button = screen.getAllByRole("button", { name: /предпросмотр/i })[0];
-    expect(button.className).toContain("focus-visible:ring");
-  });
-
-  it("◈-подзаголовок стоит над таблицей своей группы", () => {
+  it("◈-подзаголовок стоит над каналами своей ветки", () => {
     wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
     expect(screen.getByText(/Высокая склонность/)).toBeTruthy();
     expect(screen.getByText(/Средняя склонность/)).toBeTruthy();
@@ -582,30 +573,15 @@ describe("таблица коммуникаций", () => {
     expect(label.className).toContain("font-semibold");
   });
 
-  it("группа без метки не рисует ◈-подзаголовок", () => {
+  it("ветка без метки не рисует ◈-подзаголовок", () => {
     const stage: DescriptionStage = {
       ...GROUP_STAGE,
-      groups: [{ id: "g", rows: GROUP_STAGE.groups![0].rows }],
+      groups: [
+        { id: "g", rows: GROUP_STAGE.groups![0].rows, inline: GROUP_STAGE.groups![0].inline },
+      ],
     };
     const { container } = wrap(<WorkflowDescription stages={[stage]} />);
     expect(container.querySelector("[data-testid='group-label']")).toBeNull();
-  });
-
-  // Расхождение с эскизом брифа (см. отчёт задачи): у GROUP_STAGE строка
-  // Push (n2) не несёт `previewTemplateId` — «не выбран» у её пилюли ровно
-  // это и значит (шаблон не резолвился из библиотеки). Кнопка предпросмотра
-  // для такой строки существует ТОЛЬКО через синтетический fallback из
-  // `nodeParams` (реальный вызывающий, `CampaignScreen`, всегда передаёт его
-  // вместе со `stages`) — без него в этой строке нечего превьюить, и брифовский
-  // тест (без `nodeParams` вовсе) находит только 1 кнопку, а не 2. Передаём
-  // nodeParams для n2 здесь, сохраняя намерение теста «у каждой строки есть
-  // кнопка», а не подгоняя реализацию под неполную фикстуру.
-  it("у каждой строки есть кнопка предпросмотра", () => {
-    const nodeParams = new Map<string, NodeParams>([
-      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
-    ]);
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} nodeParams={nodeParams} />);
-    expect(screen.getAllByRole("button", { name: /предпросмотр/i })).toHaveLength(2);
   });
 
   it("пометка «Та же серия…» показывается у повтора", () => {
@@ -619,366 +595,33 @@ describe("таблица коммуникаций", () => {
 });
 
 /**
- * Task 9 (fix round — ревью нашло дыру в первой версии): РЕАЛЬНЫЙ источник
- * дублей `aria-label` — не несколько ◈-групп одного шага (`group.label`
- * заполняется только настоящей развилкой, `forkKind`), а этап «Пауза и
- * повтор»: он рисует СВОЮ таблицу с содержательно той же строкой, что и
- * оригинальное касание, и ОБЕ группы при этом без `group.label` (повтор
- * никогда не развилка). Единственный различитель, который реально покрывает
- * этот случай, — заголовок ЭТАПА (уникален в описании, человекочитаем).
- * `groupLabel` добавляется поверх для НАСТОЯЩИХ развилок — обе причины дублей
- * закрыты независимо друг от друга.
- */
-describe("таблица коммуникаций — уникальный aria-label кнопки предпросмотра (Task 9)", () => {
-  it("реальный случай (Апсейл): касание + повтор с той же таблицей — все ярлыки предпросмотра различны", () => {
-    // Та же фикстура, что использует campaign-screen.test.tsx (draftCampaign):
-    // Апсейл, канал sms, sourceType "new" — реальный `describeWorkflow`, а не
-    // сконструированный вручную DescriptionStage[].
-    const signalType = getScenario("base-upsell")!.signalType;
-    const graph = createTemplate(signalType, "new", ["sms"]);
-    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
-    const nodeParams = new Map(
-      graph.nodes
-        .filter((n) => n.data.params !== undefined)
-        .map((n) => [n.id, n.data.params!] as const),
-    );
-
-    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
-
-    const previewButtons = screen.getAllByRole("button", { name: /предпросмотр/i });
-    const labels = previewButtons.map((btn) => btn.getAttribute("aria-label"));
-    // Доказываем, что тест реально ловит дубль-кейс, а не проходит вхолостую:
-    // оба этапа с одноимённым SMS-шаблоном присутствуют.
-    expect(labels).toContain("Предпросмотр — SMS, Первое касание");
-    expect(labels).toContain("Предпросмотр — SMS, Пауза и повтор");
-    // И главное утверждение — различимость: ни одно имя не повторяется.
-    expect(new Set(labels).size).toBe(labels.length);
-  });
-
-  // Вторая половина правила (её можно оставить синтетической — она не про
-  // повтор, а про НАСТОЯЩУЮ развилку внутри одного шага, где `group.label`
-  // реально заполняется): два ◈-потока одного канала внутри одного этапа
-  // получают разные ярлыки за счёт метки ветки поверх заголовка этапа.
-  const sameChannelStage: DescriptionStage = {
-    id: "touch-1",
-    kind: "touch",
-    heading: "Первое касание",
-    body: t("Аудитория делится по каналам — каждому своё сообщение:"),
-    groups: [
-      {
-        id: "g1",
-        label: "Высокая склонность",
-        rows: [
-          { nodeId: "n-high", channel: "SMS", contentText: "Текст", previewTemplateId: "tpl_sms" },
-        ],
-      },
-      {
-        id: "g2",
-        label: "Средняя склонность",
-        rows: [
-          { nodeId: "n-mid", channel: "SMS", contentText: "Текст", previewTemplateId: "tpl_sms" },
-        ],
-      },
-    ],
-  };
-
-  it("две ◈-группы одного канала внутри одного шага получают различающиеся ярлыки — этап + метка ветки", () => {
-    wrap(<WorkflowDescription stages={[sameChannelStage]} />);
-    // Каждый ярлык находится по отдельности (getByRole кинул бы «multiple
-    // elements», если бы метка ветки не вошла в aria-label).
-    expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Высокая склонность" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Средняя склонность" }),
-    ).toBeInTheDocument();
-  });
-
-  // Ревью финального круга: заголовок этапа уникален у ШАБЛОНОВ репозитория, но
-  // не по построению. Цепочка A → пауза → A → пауза → A даёт ДВА этапа «Пауза и
-  // повтор», два условия-развилки — две «Развилки по реакции». Тогда
-  // возвращается ровно тот дефект, который различитель и закрывал. Уникален по
-  // построению только `stage.id` (`touch-1`, `retry-1`, `retry-2`, …), поэтому
-  // он и дописывается — но ТОЛЬКО когда заголовки реально совпали, иначе ярлык
-  // терял бы человекочитаемость на всех обычных карточках.
-  it("два этапа с ОДИНАКОВЫМ заголовком получают различающиеся ярлыки", () => {
-    const sms = (id: string) =>
-      node(id, "sms", {
-        kind: "sms",
-        text: "Ваше предложение ждёт.",
-        alphaName: "BRAND",
-        scheduledAt: "immediate",
-      });
-    const wait = (id: string) =>
-      node(id, "wait", { kind: "wait", mode: "duration", durationHours: 48 });
-    // Две паузы подряд с той же серией: обе волны — «Пауза и повтор».
-    const graph = {
-      nodes: [node("signal", "source"), sms("a1"), wait("w1"), sms("a2"), wait("w2"), sms("a3")],
-      edges: [
-        { id: "e1", source: "signal", target: "a1" },
-        { id: "e2", source: "a1", target: "w1" },
-        { id: "e3", source: "w1", target: "a2" },
-        { id: "e4", source: "a2", target: "w2" },
-        { id: "e5", source: "w2", target: "a3" },
-      ],
-    };
-    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
-    const nodeParams = new Map(
-      graph.nodes
-        .filter((n) => n.data.params !== undefined)
-        .map((n) => [n.id, n.data.params!] as const),
-    );
-
-    // Тест ловит реальный кейс, а не проходит вхолостую: заголовок «Пауза и
-    // повтор» действительно встречается дважды.
-    const repeated = stages.filter((s) => s.heading === "Пауза и повтор");
-    expect(repeated).toHaveLength(2);
-
-    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
-    const labels = screen
-      .getAllByRole("button", { name: /предпросмотр/i })
-      .map((btn) => btn.getAttribute("aria-label"));
-    expect(new Set(labels).size).toBe(labels.length);
-    // Человекочитаемость не потеряна: канал и заголовок этапа по-прежнему
-    // ведут ярлык, id дописан хвостом и только у совпавших.
-    expect(labels).toContain("Предпросмотр — SMS, Первое касание");
-    expect(labels.filter((l) => l?.startsWith("Предпросмотр — SMS, Пауза и повтор,"))).toHaveLength(2);
-  });
-
-  /**
-   * Дыра, оставшаяся после правки ключа сравнения писем: две строки ОДНОГО
-   * канала внутри ОДНОЙ группы. Канал, заголовок этапа и метка ветки у них
-   * общие — различать нечем. Форма реальная: ключ сравнения читает тему И
-   * тело, поэтому два письма с одной темой и разными телами доходят до таблицы
-   * обе, а показывается у обеих одна и та же тема.
-   */
-  const twoInOneGroup = (first: NodeParams, second: NodeParams) => {
-    const graph = {
-      nodes: [node("signal", "source"), node("m1", first.kind, first), node("m2", second.kind, second)],
-      edges: [
-        { id: "e1", source: "signal", target: "m1" },
-        { id: "e2", source: "m1", target: "m2" },
-      ],
-    };
-    const stages = describeWorkflow(graph, [], { pending: [], graphEditable: true });
-    const nodeParams = new Map(
-      graph.nodes.filter((n) => n.data.params).map((n) => [n.id, n.data.params!] as const),
-    );
-    return { stages, nodeParams };
-  };
-
-  it("две строки одного канала в ОДНОЙ группе различаются началом своего контента", () => {
-    const { stages, nodeParams } = twoInOneGroup(
-      { kind: "sms", text: "Первый заход", alphaName: "BRAND", scheduledAt: "immediate" },
-      { kind: "sms", text: "Второй заход", alphaName: "BRAND", scheduledAt: "immediate" },
-    );
-    // Тест ловит реальный кейс: обе строки — в одной группе одного этапа.
-    const groups = stages.find((s) => s.kind === "touch")!.groups!;
-    expect(groups).toHaveLength(1);
-    expect(groups[0].rows).toHaveLength(2);
-
-    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
-    expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Первый заход" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Предпросмотр — SMS, Первое касание, Второй заход" }),
-    ).toBeInTheDocument();
-  });
-
-  it("два письма с ОДНОЙ темой и разными телами всё равно различимы — номером строки", () => {
-    const { stages, nodeParams } = twoInOneGroup(
-      { kind: "email", subject: "Ваше предложение", body: "Первый вариант", sender: "a@brand.com" },
-      { kind: "email", subject: "Ваше предложение", body: "Второй вариант", sender: "a@brand.com" },
-    );
-    // Тест ловит реальный кейс: видимый контент обеих строк ОДИНАКОВ (таблица
-    // показывает у письма одну тему) — содержательного различителя нет.
-    const rows = stages.find((s) => s.kind === "touch")!.groups![0].rows;
-    expect(rows).toHaveLength(2);
-    expect(rows[0].contentText).toBe(rows[1].contentText);
-
-    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
-    const labels = screen
-      .getAllByRole("button", { name: /предпросмотр/i })
-      .map((btn) => btn.getAttribute("aria-label"));
-    expect(new Set(labels).size).toBe(labels.length);
-    // Номер уникален по построению, но канал и этап ярлык не теряет.
-    expect(labels).toEqual([
-      "Предпросмотр — Email, Первое касание, сообщение 1",
-      "Предпросмотр — Email, Первое касание, сообщение 2",
-    ]);
-  });
-
-  it("строки с ПУСТЫМ контентом получают номер, а не одинаковый пустой хвост", () => {
-    const { stages, nodeParams } = twoInOneGroup(
-      { kind: "sms", text: "", alphaName: "BRAND", scheduledAt: "immediate" },
-      { kind: "sms", text: " ", alphaName: "BRAND", scheduledAt: "immediate" },
-    );
-    wrap(<WorkflowDescription stages={stages} nodeParams={nodeParams} />);
-    const labels = screen
-      .getAllByRole("button", { name: /предпросмотр/i })
-      .map((btn) => btn.getAttribute("aria-label"));
-    expect(labels).toEqual([
-      "Предпросмотр — SMS, Первое касание, сообщение 1",
-      "Предпросмотр — SMS, Первое касание, сообщение 2",
-    ]);
-  });
-
-  it("единственная строка канала хвоста не получает — ярлык остаётся коротким", () => {
-    wrap(<WorkflowDescription stages={[GROUP_STAGE]} />);
-    expect(
-      screen.getByRole("button", {
-        name: "Предпросмотр — Email, Первое касание, Высокая склонность",
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("группа без метки ветки — ярлык несёт канал и этап, без хвоста группы", () => {
-    const stage: DescriptionStage = {
-      ...GROUP_STAGE,
-      groups: [{ id: "g", rows: [GROUP_STAGE.groups![0].rows[0]] }],
-    };
-    wrap(<WorkflowDescription stages={[stage]} />);
-    expect(
-      screen.getByRole("button", { name: "Предпросмотр — Email, Первое касание" }),
-    ).toBeInTheDocument();
-  });
-});
-
-describe("таблица коммуникаций — кнопка предпросмотра открывает дровер", () => {
-  // `TemplatePreviewDrawer` смонтирован рядом — тот же приём, что
-  // `template-preview-drawer.test.tsx` использует для «глаза» ноды: клик по
-  // кнопке диспатчит через `useChat()`, а сам дровер читает диспатченное
-  // состояние и рендерит содержимое.
-  it("резолвнутый шаблон (previewTemplateId) открывает дровер с содержимым библиотеки", () => {
-    const stage: DescriptionStage = {
-      id: "touch-1",
-      kind: "touch",
-      heading: "Первое касание",
-      body: t("Аудитория делится по каналам — каждому своё сообщение:"),
-      groups: [
-        {
-          id: "g1",
-          rows: [
-            {
-              nodeId: "n1",
-              channel: "SMS",
-              contentText: "Ваше предложение ждёт. Подробности на сайте.",
-              // Реальный библиотечный шаблон — `PRESET_TEMPLATES` в app-state.ts.
-              previewTemplateId: "tpl_sms_reminder",
-            },
-          ],
-        },
-      ],
-    };
-    wrap(
-      <>
-        <WorkflowDescription stages={[stage]} />
-        <TemplatePreviewDrawer />
-      </>,
-    );
-    expect(screen.queryByTestId("template-preview-drawer")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(drawer).toBeInTheDocument();
-    // Скоуп на дровер: та же строка «Ваше предложение ждёт…» лежит ЕЩЁ и в
-    // ячейке таблицы позади дровера — screen.getByText без within нашёл бы
-    // ДВА узла и упал бы с «multiple elements found».
-    expect(
-      within(drawer).getByText("Ваше предложение ждёт. Подробности на сайте."),
-    ).toBeInTheDocument();
-  });
-
-  it("нерезолвнутый шаблон открывает синтетический предпросмотр из params ноды, read-only", () => {
-    const stage: DescriptionStage = {
-      id: "touch-1",
-      kind: "touch",
-      heading: "Первое касание",
-      body: t("Аудитория делится по каналам — каждому своё сообщение:"),
-      groups: [
-        {
-          id: "g1",
-          rows: [
-            {
-              nodeId: "n2",
-              channel: "Push",
-              contentTitle: "Напоминание",
-              contentText: "У нас есть кое-что для вас.",
-              // Нет previewTemplateId — «не выбран», предпросмотр идёт из
-              // текущих params ноды (nodePreviewTemplate), не из библиотеки.
-            },
-          ],
-        },
-      ],
-    };
-    const nodeParams = new Map<string, NodeParams>([
-      ["n2", { kind: "push", title: "Напоминание", body: "У нас есть кое-что для вас." }],
-    ]);
-    wrap(
-      <>
-        <WorkflowDescription stages={[stage]} nodeParams={nodeParams} />
-        <TemplatePreviewDrawer />
-      </>,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /предпросмотр/i }));
-    const drawer = screen.getByTestId("template-preview-drawer");
-    expect(drawer).toBeInTheDocument();
-    // Скоуп на дровер — та же причина, что и в тесте выше: контент строки
-    // таблицы («У нас есть кое-что для вас.») дублируется дровером поверх неё.
-    expect(within(drawer).getByText("У нас есть кое-что для вас.")).toBeInTheDocument();
-    // `nodePreviewTemplate` метит синтетический шаблон usedInCampaigns: 1 —
-    // без записи в библиотеке «Сохранить» списало бы правку в несуществующий
-    // id, поэтому дровер обязан открыть его read-only (баннер-предупреждение).
-    expect(within(drawer).getByText(/нельзя редактировать/)).toBeInTheDocument();
-  });
-});
-
-/**
- * Покрытие `nodeTypeForTag` внутри таблицы (Task 8 явно просит его вернуть —
- * прошлая задача сняла юнит-покрытие этой функции, т.к. живого пути к ней не
- * было; таблица — этот путь). Пилюля шаблона строки (`target.kind:"template"`)
- * красится под `NODE_STYLES` СВОЕГО канала — не общим цветом, не нейтральным —
- * подтверждаем на ДВУХ разных каналах в одной таблице, чтобы исключить
- * совпадение по случайности/дефолту.
+ * Покрытие `nodeTypeForTag` внутри строки коммуникации (Task 8 явно просит
+ * его вернуть — прошлая задача сняла юнит-покрытие этой функции, т.к. живого
+ * пути к ней не было; строка коммуникации — этот путь). Пилюля шаблона строки
+ * (`target.kind:"template"`) красится под `NODE_STYLES` СВОЕГО канала — не
+ * общим цветом, не нейтральным — подтверждаем на ДВУХ разных каналах в одной
+ * группе, чтобы исключить совпадение по случайности/дефолту.
  */
 function hexToRgb(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 }
 
-describe("таблица коммуникаций — пилюля шаблона красится под цвет узла (nodeTypeForTag)", () => {
-  it("email- и push-строки красятся разными цветами своих каналов, а не нейтрально", () => {
+describe("коммуникации — пилюля шаблона красится под цвет узла (nodeTypeForTag)", () => {
+  it("email- и push-теги шаблонов в тексте красятся разными цветами своих каналов, а не нейтрально", () => {
+    // Теги шаблонов вплетены инлайн в текст касания; цвет каждого — из
+    // NODE_STYLES своего канала (nodeTypeForTag резолвит nodeType по nodeId).
     const stage: DescriptionStage = {
       id: "touch-1",
       kind: "touch",
+      block: "communication",
       heading: "Первое касание",
-      body: t("Аудитория делится по каналам — каждому своё сообщение:"),
-      groups: [
-        {
-          id: "g1",
-          rows: [
-            {
-              nodeId: "n-email",
-              channel: "Email",
-              contentText: "Ваше предложение готово",
-              templateTag: {
-                id: "tt-email",
-                label: "Email — оффер",
-                target: { kind: "template", nodeId: "n-email" },
-              },
-            },
-            {
-              nodeId: "n-push",
-              channel: "Push",
-              contentText: "Загляните",
-              templateTag: {
-                id: "tt-push",
-                label: "Push — возвращение",
-                target: { kind: "template", nodeId: "n-push" },
-              },
-            },
-          ],
-        },
+      body: [
+        { kind: "text", text: "email с шаблоном " },
+        { kind: "tag", tag: { id: "tt-email", label: "Email — оффер", target: { kind: "template", nodeId: "n-email" } } },
+        { kind: "text", text: " и push с шаблоном " },
+        { kind: "tag", tag: { id: "tt-push", label: "Push — возвращение", target: { kind: "template", nodeId: "n-push" } } },
+        { kind: "text", text: "." },
       ],
     };
     const nodeTypes = new Map([

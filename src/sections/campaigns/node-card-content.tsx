@@ -17,7 +17,7 @@ import {
 } from "@/state/node-template-options";
 import { cn } from "@/lib/utils";
 import { pluralRu } from "@/lib/plural-ru";
-import { getNodeColor } from "./node-visuals";
+import { getNodeColor, NODE_STYLES } from "./node-visuals";
 import { UNIT_COST } from "./campaign-cost";
 import { useWorkflowReadOnly } from "./workflow-readonly-context";
 import { NodeFieldCombobox } from "./node-field-combobox";
@@ -159,7 +159,7 @@ export function ScoringRow({
   const state = useAppState();
   const readOnly = useWorkflowReadOnly();
   const chat = useChat();
-  const { removeChip } = usePromptChips();
+  const { pushChip } = usePromptChips();
 
   const editable = !readOnly;
   // Mounted only inside the workflow canvas (graph node card) — the campaign
@@ -173,11 +173,22 @@ export function ScoringRow({
 
   // Open «Интересы и триггеры» in the AI sidebar (chat-drawer) — the drawer that
   // already hosts «Афина ИИ» + the prompt composer. The editor there is the SAME
-  // one the wizard uses; edits persist to the campaign scoring params. Drop the
-  // auto scoring-node chip so the drawer's bar matches the wizard's bar (parity).
+  // one the wizard uses; edits persist to the campaign scoring params.
   function openInterestsDrawer() {
     if (!campaignId) return;
-    removeChip(`node_${nodeId}`);
+    // spec §8: боковик скоринга ДОЛЖЕН нести контекст в бар (иначе ИИ отвечает
+    // «нет такой ноды»). Ставим whole-node чип скоринга (раньше он тут снимался).
+    pushChip({
+      id: `node_${nodeId}`,
+      kind: "node",
+      label: "Скоринг",
+      payload: {
+        nodeId,
+        nodeType: "scoring",
+        color: NODE_STYLES.scoring.color,
+      },
+      removable: true,
+    });
     chat.openScoringDrawer({ nodeId, campaignId, editable });
   }
 

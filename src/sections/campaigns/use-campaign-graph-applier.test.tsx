@@ -335,11 +335,9 @@ describe("useCampaignGraphApplier — CampaignScreen re-renders off the edited c
     // Заголовок этапа больше не строка с точкой — отдельный <p> без неё
     // (Task 4/5 разметка).
     expect(screen.getByText("Первое касание")).toBeInTheDocument();
-    // Апсейл несёт повторную волну (Task 5) с той же серией — тот же текст
-    // легально встречается дважды («Первое касание» + «Пауза и повтор»).
-    expect(
-      screen.getAllByText(/Ваше предложение ждёт\. Подробности на сайте\./)[0],
-    ).toBeInTheDocument();
+    // Task 9 (текст-история): контент SMS теперь в предпросмотре, не инлайн —
+    // проверяем, что строка коммуникации (канал «SMS») отрендерилась.
+    expect(screen.getAllByText("SMS").length).toBeGreaterThan(0);
 
     // Submit a rebuild to a minimal signal→success graph (no communications).
     let replyId = "";
@@ -360,12 +358,10 @@ describe("useCampaignGraphApplier — CampaignScreen re-renders off the edited c
       }),
     );
 
-    // Description rebuilt off the new graph: first-touch + SMS text gone, the
+    // Description rebuilt off the new graph: first-touch + SMS row gone, the
     // no-communications outcome copy present instead.
     expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/Ваше предложение ждёт\. Подробности на сайте\./),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("SMS")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
 
     // Pending bubble resolved (no forever-spinner), slot cleared.
