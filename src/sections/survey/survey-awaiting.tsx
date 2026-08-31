@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 
-const TOTAL_DURATION = 2400; // ms — short, this is a mock
+const DEFAULT_DURATION = 2400; // ms — short, this is a mock
 const TICK = 50;
 
 interface SurveyAwaitingProps {
@@ -13,15 +13,25 @@ interface SurveyAwaitingProps {
   /** Override the sub-line. When omitted, falls back to the source-agnostic
    *  task-analysis copy. */
   subtitle?: string;
+  /** Длительность заполнения бара, мс. Анкета не передаёт — держит свои 2400. */
+  durationMs?: number;
+  /** Тихая строка под процентом (например, где хранятся кампании). */
+  footnote?: React.ReactNode;
 }
 
-export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps) {
+export function SurveyAwaiting({
+  onDone,
+  title,
+  subtitle,
+  durationMs = DEFAULT_DURATION,
+  footnote,
+}: SurveyAwaitingProps) {
   const [progress, setProgress] = useState(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
   useEffect(() => {
-    const steps = TOTAL_DURATION / TICK;
+    const steps = durationMs / TICK;
     let count = 0;
     const id = setInterval(() => {
       count++;
@@ -32,7 +42,7 @@ export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps)
       }
     }, TICK);
     return () => clearInterval(id);
-  }, []);
+  }, [durationMs]);
 
   return (
     <motion.div
@@ -62,6 +72,9 @@ export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps)
         <p className="text-right text-xs tabular-nums text-muted-foreground">
           {Math.round(progress)}%
         </p>
+        {footnote && (
+          <p className="mt-1 text-xs text-muted-foreground/70">{footnote}</p>
+        )}
       </div>
     </motion.div>
   );
