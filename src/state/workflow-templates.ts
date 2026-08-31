@@ -326,7 +326,8 @@ function estimateUnitWidth(channels: Channel[]): number {
 }
 
 /**
- * Builds a linear (non-segmented) channel-aware template.
+ * Builds the channel-aware template — единственный путь при непустых
+ * `channels` для ЛЮБОГО типа сигнала (сегментная ветка снята).
  * Structure: source → [scoring] → commUnit(channels) → success/end
  *
  * The comm unit provides:

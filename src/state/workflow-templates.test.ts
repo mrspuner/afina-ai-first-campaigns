@@ -304,11 +304,18 @@ describe("channel-aware template generation", () => {
     expect(types).not.toContain("condition");
   });
 
-  it("segmented scenario Апсейл with channels has comm units and NO merge", () => {
+  it("Апсейл with channels has a CHANNEL splitter, comm-unit conditions and NO merge", () => {
     const t = createTemplate("Апсейл", "own", ["sms", "email"]);
     const types = t.nodes.map((n) => n.data.nodeType);
-    // Must have split (by segment); Слияние удалено.
-    expect(types).toContain("split");
+    // Сплиттер здесь КАНАЛЬНЫЙ (by:"equal", два канала) — сегментной генерации
+    // больше нет, ничего сегментного в этом графе не строится. Слияние удалено.
+    const splits = t.nodes.filter(
+      (n) => n.data.nodeType === "split" && n.data.params?.kind === "split",
+    );
+    expect(splits.length).toBeGreaterThan(0);
+    for (const sp of splits) {
+      expect(sp.data.params?.kind === "split" ? sp.data.params.by : undefined).toBe("equal");
+    }
     expect(types).not.toContain("merge");
     // Must have conditions (from comm units)
     const condCount = types.filter((t) => t === "condition").length;
@@ -739,22 +746,13 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     assertCostParity("Реактивация", "new", from, to);
   });
 
-  // Та же матрица для «Апсейла»: сегментной генерации у него больше нет, но
-  // тип сигнала по-прежнему выбирает шаблон (цель «Успеха», reason «Конца»),
-  // и паритет стоимости обязан держаться на каждом из них, а не только на
-  // «Реактивации».
-  const upsellCases: [Channel[], Channel[]][] = [
-    [["sms"], ["sms", "email"]],
-    [["sms", "email"], ["sms"]],
-    [["sms"], ["push"]],
-    [["sms", "email"], ["push", "ivr"]],
-    [["sms", "email", "push"], ["sms"]],
-    [["sms"], ["sms", "email", "push"]],
-  ];
-
-  it.each(upsellCases)("другой тип сигнала («Апсейл»): %j → %j", (from, to) => {
-    assertCostParity("Апсейл", "new", from, to);
-  });
+  // Матрицы «на другом типе сигнала» здесь нет намеренно: при непустых каналах
+  // `buildLinearChannelTemplate` строит для всех типов структурно ОДИН И ТОТ ЖЕ
+  // граф (различаются params сигнала, лейбл и цель «Успеха», reason «Конца» —
+  // ничего из этого `computeCampaignCost` не читает), так что копия матрицы под
+  // «Апсейл» повторяла бы строки «Реактивации» слово в слово. Что у «Апсейла»
+  // действительно своё — legacy-форма с комм-нодами ПОД сегментным сплитом; она
+  // проверяется структурно, см. describe «слоты под сегментным сплитом» ниже.
 
   it("тот же сценарий, own-источник (без скоринга) — линейный", () => {
     assertCostParity("Возврат", "own", ["sms", "email"], ["push"]);
@@ -845,6 +843,133 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     expect(refilledCost.total).toBe(freshCost.total);
   });
 });
+
+/**
+ * Регрессия Finding 2 на ЕДИНСТВЕННОЙ форме, где комм-ноды сидят
+ * НЕПОСРЕДСТВЕННО под сплитом `by:"segment"`: legacy-шаблон «Апсейла» (email
+ * под «Выс», sms под «Ср»). Генератор такую форму больше не строит, но она
+ * штатно возникает в продукте — сегментный сплит ставит пользователь или ИИ,
+ * а потом добавляет канал. Именно этот случай прогоняет ветку `singleSlots`
+ * (каждый сегмент — ОТДЕЛЬНОЕ место, соседи по общему предку схлопываться не
+ * имеют права) и перенос метки сегмента на вставленный channel-сплиттер.
+ *
+ * Утверждения структурные, а не про паритет стоимости: чистой пересборки такой
+ * формы больше не существует (`createTemplate` с каналами строит линейный
+ * шаблон), значит сравнивать merged не с чем — сверять надо саму форму.
+ */
+describe("mergeChannelNodes — слоты под сегментным сплитом (регрессия Finding 2)", () => {
+  const UPSELL_SEG_CTX = { signalType: "Апсейл" as SignalType, sourceType: "new" as SourceType };
+  const NEXT: Channel[] = ["sms", "email", "push"];
+
+  /** legacy-«Апсейл» + предпосылки фикстуры (иначе тесты проверяли бы не то). */
+  function legacySegmentedUpsell() {
+    const graph = createTemplate("Апсейл", "new");
+    const split = graph.nodes.find(
+      (nd) =>
+        nd.data.nodeType === "split" &&
+        nd.data.params?.kind === "split" &&
+        nd.data.params.by === "segment",
+    )!;
+    const branches = graph.edges.filter((ed) => ed.source === split.id);
+    expect(branches.map((ed) => ed.label).sort()).toEqual(["Выс", "Макс", "Низ", "Ср"]);
+    // Предпосылка: коммуникации висят ПРЯМО на сегментном сплите, без
+    // channel-сплиттера между ними.
+    expect(typeOfBranch(graph, branches, "Выс")).toBe("email");
+    expect(typeOfBranch(graph, branches, "Ср")).toBe("sms");
+    return { graph, splitId: split.id };
+  }
+
+  function typeOfBranch(
+    graph: { nodes: WorkflowNode[] },
+    branches: WorkflowEdge[],
+    label: string,
+  ) {
+    const target = branches.find((ed) => ed.label === label)!.target;
+    return graph.nodes.find((nd) => nd.id === target)!.data.nodeType;
+  }
+
+  const branchTarget = (
+    graph: { edges: WorkflowEdge[] },
+    splitId: string,
+    label: string,
+  ) => graph.edges.find((ed) => ed.source === splitId && ed.label === label)!.target;
+
+  const childTypes = (
+    graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
+    parentId: string,
+  ) =>
+    graph.edges
+      .filter((ed) => ed.source === parentId)
+      .map((ed) => graph.nodes.find((nd) => nd.id === ed.target)!.data.nodeType)
+      .sort();
+
+  it("каждый сегмент с коммуникацией получает СВОЙ channel-сплиттер, а не один общий на всех", () => {
+    const { graph, splitId } = legacySegmentedUpsell();
+    const merged = mergeChannelNodes(graph, NEXT, UPSELL_SEG_CTX);
+
+    // Сам сегментный сплит не пересобран и по-прежнему несёт четыре
+    // размеченные ветки.
+    expect(merged.nodes.find((nd) => nd.id === splitId)!.data.params).toEqual({
+      kind: "split",
+      by: "segment",
+      branches: 3,
+    });
+    expect(
+      merged.edges.filter((ed) => ed.source === splitId).map((ed) => ed.label).sort(),
+    ).toEqual(["Выс", "Макс", "Низ", "Ср"]);
+
+    // Ветки «Выс» и «Ср» ведут в РАЗНЫЕ channel-сплиттеры: соседние сегменты,
+    // делящие общего предка, не имеют права схлопнуться в одно место.
+    const high = branchTarget(merged, splitId, "Выс");
+    const mid = branchTarget(merged, splitId, "Ср");
+    expect(high).not.toBe(mid);
+    for (const id of [high, mid]) {
+      expect(merged.nodes.find((nd) => nd.id === id)!.data.params).toEqual({
+        kind: "split",
+        by: "equal",
+        branches: 3,
+      });
+      // В каждом сегменте — полный новый набор каналов, а не остаток.
+      expect(childTypes(merged, id)).toEqual(["email", "push", "sms"]);
+    }
+  });
+
+  it("сегменты без коммуникации мерж не трогает вовсе", () => {
+    const { graph, splitId } = legacySegmentedUpsell();
+    const untouched = (g: { edges: WorkflowEdge[] }) =>
+      g.edges.filter(
+        (ed) => ed.source === splitId && (ed.label === "Макс" || ed.label === "Низ"),
+      );
+    const before = untouched(graph);
+    expect(before).toHaveLength(2);
+
+    const merged = mergeChannelNodes(graph, NEXT, UPSELL_SEG_CTX);
+    expect(untouched(merged)).toEqual(before);
+  });
+
+  it("добавленный канал встаёт в КАЖДЫЙ сегментный слот и наследует продолжение сегмента", () => {
+    const { graph } = legacySegmentedUpsell();
+    const merged = mergeChannelNodes(graph, NEXT, UPSELL_SEG_CTX);
+
+    // По одному push на каждый сегмент с коммуникацией (их два), а не один на
+    // весь граф: слоты независимы.
+    const pushes = merged.nodes.filter((nd) => nd.data.nodeType === "push");
+    expect(pushes).toHaveLength(2);
+    for (const push of pushes) {
+      expect(merged.edges.filter((ed) => ed.source === push.id).map((ed) => ed.target)).toEqual([
+        "success",
+      ]);
+    }
+
+    const ids = new Set(merged.nodes.map((nd) => nd.id));
+    for (const ed of merged.edges) {
+      expect(ids.has(ed.source), `висячее ребро ${ed.source}→${ed.target}`).toBe(true);
+      expect(ids.has(ed.target), `висячее ребро ${ed.source}→${ed.target}`).toBe(true);
+    }
+    assertFullyReachableFromSingleRoot(merged);
+  });
+});
+
 
 // Fix round 4 (Important finding) — the "no comm/condition nodes anywhere"
 // branch (round 3) rebuilds the whole graph via createTemplate, which is
