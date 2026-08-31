@@ -82,19 +82,28 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   //    Wait for the step's body (the budget cards) to render before clicking —
   //    StepContent types its title/subtitle first, so «Далее» appears late and
   //    a premature `.last()` would re-hit the previous step's button.
-  await expect(
-    page.getByRole("heading", { name: /Прогноз бюджета/ })
-  ).toBeVisible();
+  const budgetHeading = page.getByRole("heading", { name: /Прогноз бюджета/ });
+  await expect(budgetHeading).toBeVisible();
   await expect(page.getByText("Рекомендуемая")).toBeVisible();
-  await page.getByRole("button", { name: "Далее" }).last().click();
+  // Scope to the budget step's own StepContent root (heading → .mb-8 → root)
+  // rather than a blind `.last()` — the app now has four «Создать кампанию»
+  // buttons (welcome view, campaigns section, empty-state card, and this
+  // step's forward CTA), so a global `.last()` is no longer safe.
+  await budgetHeading
+    .locator("xpath=../..")
+    .getByRole("button", { name: "Создать кампанию" })
+    .click();
 
   // 10. Campaign card (draft) — the wizard lands here, not in the graph editor.
   //     Its «Сценарий кампании» block carries the mini-graph; the «Запуск»
   //     block below it shows a touch forecast + payments (A2.3), and its
   //     «К оплате» CTA validates the graph and routes to the payment screen
   //     (a routing hop, not the launch itself).
-  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 5_000 });
-  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 5_000 });
+  //     The «Создаём кампанию» waiting screen sits between the click and the
+  //     card (durationMs 4000 + a trailing 200ms pause = ~4200ms), so give
+  //     the card generous headroom.
+  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".react-flow")).toBeVisible({ timeout: 10_000 });
   await page
     .locator('[data-slot="button"]')
     .filter({ hasText: /^К оплате$/ })
