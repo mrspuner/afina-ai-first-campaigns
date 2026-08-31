@@ -169,6 +169,27 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.queryByText("Первое касание")).not.toBeInTheDocument();
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
+
+  it("у черновика подсказывает, что граф кликабелен", () => {
+    renderCampaign(
+      baseCampaign({ id: "cmp_graph_hint", channels: ["sms"], status: "draft" }),
+    );
+    expect(
+      screen.getByText("Кликните на граф, чтобы точечно поправить кампанию"),
+    ).toBeInTheDocument();
+  });
+
+  // После запуска граф не правится (graphEditable === false), и подсказка
+  // обещала бы недоступное действие.
+  it("у запущенной кампании подсказки про граф нет", () => {
+    for (const status of ["active", "paused", "completed"] as const) {
+      const { unmount } = renderCampaign(
+        baseCampaign({ id: `cmp_graph_hint_${status}`, channels: ["sms"], status }),
+      );
+      expect(screen.queryByText(/Кликните на граф/)).toBeNull();
+      unmount();
+    }
+  });
 });
 
 describe("CampaignScreen — CampaignFacts на карточке, нодо-блоки сняты (Task 6)", () => {
