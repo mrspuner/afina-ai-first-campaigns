@@ -409,122 +409,6 @@ function buildLinearChannelTemplate(
 }
 
 /**
- * Builds a segmented channel-aware template (Апсейл, Удержание).
- * Structure: source → split(by segment) → [comm unit per active segment] → success
- * (Слияние удалено — ветки сегментов сходятся стрелками в Успех напрямую.)
- * Lowest segment (low) → end (no comm unit).
- */
-function buildSegmentedChannelTemplate(
-  signalType: SignalType,
-  channels: Channel[]
-): Template {
-  const legacy = TEMPLATE_BY_TYPE[signalType]();
-  const signalNode = legacy.nodes[0];
-
-  // For segmented scenarios: 3 active segments (high, mid, max-like) + 1 lowest (low → end)
-  const SEGMENTS = ["max", "high", "mid"] as const;
-  const SEGMENT_LABELS: Record<string, string> = {
-    max: "Макс",
-    high: "Выс",
-    mid: "Ср",
-    low: "Низ",
-  };
-
-  const splitId = "seg_split";
-  const successId = "success";
-  const endId = "end";
-
-  const splitNode = n(
-    splitId,
-    "Сплиттер",
-    "split",
-    STEP,
-    0,
-    "По сегменту",
-    undefined,
-    { kind: "split", by: "segment", branches: 4 }
-  );
-
-  // Build a comm unit per active segment
-  const unitWidth = estimateUnitWidth(channels);
-  const unitStartX = STEP * 2;
-  const segYPositions = [-120, -40, 40];
-
-  const allUnitNodes: WorkflowNode[] = [];
-  const allUnitEdges: WorkflowEdge[] = [];
-  const splitEdges: WorkflowEdge[] = [];
-
-  SEGMENTS.forEach((seg, idx) => {
-    const prefix = `${seg}_comm`;
-    const yOffset = segYPositions[idx];
-
-    // Each unit's YES path → success (напрямую, без Слияния), NO path → end.
-    // Comm-ноды авто-заполняются шаблонами («магия» #2) — запуск не блокируется.
-    const unit = buildCommUnit(channels, {
-      prefix,
-      onEngaged: successId,    // YES → Успех напрямую
-      onExhausted: endId,      // NO → end (exhausted)
-      xOffset: unitStartX,
-      yOffset,
-      useTemplateParams: true,
-    });
-
-    allUnitNodes.push(...unit.nodes);
-    allUnitEdges.push(...unit.edges);
-    splitEdges.push(e(splitId, unit.entryId, SEGMENT_LABELS[seg]));
-  });
-
-  // Lowest segment → end directly
-  splitEdges.push(e(splitId, endId, SEGMENT_LABELS["low"]));
-
-  // Position success after units (Слияние удалено — сегменты сходятся в Успех)
-  const successX = unitStartX + unitWidth + STEP;
-
-  const legacySuccess = legacy.nodes.find((nd) => nd.data.isSuccess) ?? legacy.nodes[legacy.nodes.length - 1];
-  const legacyEnd = legacy.nodes.find((nd) => nd.data.nodeType === "end");
-
-  const successNode = n(
-    successId,
-    legacySuccess.data.label,
-    "success",
-    successX,
-    -40,
-    legacySuccess.data.sublabel,
-    { isSuccess: true },
-    legacySuccess.data.params
-  );
-  const endNode = n(
-    endId,
-    legacyEnd?.data.label ?? "Конец",
-    "end",
-    successX,
-    120,
-    legacyEnd?.data.sublabel,
-    undefined,
-    legacyEnd?.data.params
-  );
-
-  const nodes = [
-    { ...signalNode, position: { x: 0, y: 0 } },
-    splitNode,
-    ...allUnitNodes,
-    successNode,
-    endNode,
-  ];
-
-  const edges = [
-    e(signalNode.id, splitId),
-    ...splitEdges,
-    ...allUnitEdges,
-  ];
-
-  return { nodes, edges };
-}
-
-/** Segmented signal types */
-const SEGMENTED_TYPES = new Set<SignalType>(["Апсейл", "Удержание"]);
-
-/**
  * «Без коммуникации» minimal template (bug 2a/2b): a campaign that explicitly
  * selected NO channels gets a graph with only the signal path and a terminal
  * success node — no communication nodes (email/sms/push/ivr). `withSignalPath`
@@ -573,12 +457,11 @@ export function createTemplate(
   let base: Template;
 
   if (channels && channels.length > 0) {
-    // Channel-aware path
-    if (SEGMENTED_TYPES.has(signalType)) {
-      base = buildSegmentedChannelTemplate(signalType, channels);
-    } else {
-      base = buildLinearChannelTemplate(signalType, channels);
-    }
+    // Channel-aware path. Сегментная ветка (по одному комм-юниту на каждый из
+    // трёх активных сегментов) снята 31.08: она давала граф в несколько
+    // десятков нод. Сам тип сплита «По сегменту» остался — его ставит
+    // пользователь или ИИ, генератор его больше не создаёт.
+    base = buildLinearChannelTemplate(signalType, channels);
   } else if (channels) {
     // Explicitly empty channels[] — «без коммуникации» (bug 2a/2b): a minimal
     // graph with no communication nodes (and thus no communication budget).
@@ -784,8 +667,8 @@ function collapseDegenerateEqualSplits(
  * схлопывает сплиттеры, оставшиеся с одной веткой (`collapseDegenerateEqualSplits`)
  * — иначе сплиттер продолжил бы "делить" аудиторию между уцелевшим каналом и
  * мостиком в обход коммуникации. Канал может встречаться в графе несколько
- * раз (первый проход/повтор в `buildCommUnit`, несколько сегментов в
- * `buildSegmentedChannelTemplate`) — и удаление, и добавление обрабатывают
+ * раз (первый проход и повтор в `buildCommUnit`, а также сегментные сплиты,
+ * поставленные вручную или ИИ) — и удаление, и добавление обрабатывают
  * КАЖДОЕ такое место по отдельности, а не одно на канал.
  *
  * Новые каналы: каждое место, где сейчас есть коммуникация (сгруппированное
@@ -807,11 +690,11 @@ function collapseDegenerateEqualSplits(
  * хирургически нечего (пользователю/ИИ негде было оставить правку в
  * коммуникационной области), и функция возвращает чистую пересборку
  * `createTemplate(context.signalType, context.sourceType, nextChannels)`
- * целиком. Это единственный способ корректно восстановить сегментацию
- * (Апсейл/Удержание — сколько сегментов, какие сплиты) и «Конец» с верным
- * `reason`: ни то ни другое `mergeChannelNodes` не может воспроизвести
- * вручную без знания сценария (Fix round 3, Important finding) — отсюда
- * обязательный (не опциональный) `context`.
+ * целиком. Шаблон при непустых каналах теперь для всех типов линейный, но
+ * пересборка всё равно требует знания сценария: «Конец» с верным `reason` и
+ * подбор шаблона по `signalType`/`sourceType` (цель «Успеха», параметры
+ * «Сигнала») ручной реконструкцией не восстанавливаются (Fix round 3,
+ * Important finding) — отсюда обязательный (не опциональный) `context`.
  */
 export function mergeChannelNodes(
   graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
@@ -998,14 +881,13 @@ export function mergeChannelNodes(
       // Ни коммуникаций, ни condition-нод — в коммуникационной области
       // сохранять хирургически нечего: коммуникации не было никогда («без
       // коммуникации», bug 2a/2b), либо предыдущий merge её уже полностью
-      // стёр. mergeChannelNodes не может сам знать, что "Апсейл"/"Удержание"
-      // — сегментированные сценарии (нет signalType без context), поэтому
-      // ручная реконструкция здесь раньше ВСЕГДА строила линейный юнит — и
-      // ломала сегментацию (Fix round 3, Important finding). Чистая
-      // пересборка через createTemplate (тот же билдер, что диспетчерит
-      // linear/segmented и знает про «Конец» с правильным `reason`) даёт
-      // паритет с фактической пересборкой по построению, а не по ручной
-      // мимикрии.
+      // стёр. Без signalType (а его несёт только context) ручная
+      // реконструкция не знает ни цели «Успеха», ни `reason` «Конца», ни
+      // параметров «Сигнала» — она строила безымянный юнит и расходилась с
+      // фактической пересборкой (Fix round 3, Important finding). Чистая
+      // пересборка через createTemplate (тот же билдер, что подбирает шаблон
+      // по типу сигнала и знает про «Конец» с правильным `reason`) даёт
+      // паритет по построению, а не по ручной мимикрии.
       //
       // Но «Скоринг»/«Сигнал» — это НЕ коммуникационная область: там живут
       // реальные данные кампании (загруженная база, интересы, триггеры), и

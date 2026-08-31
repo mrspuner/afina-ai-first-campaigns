@@ -57,6 +57,30 @@ function forkThenTouchGraph(): DescribableGraph {
 }
 
 /**
+ * Сегментный сплиттер, у которого все три ветки несут ОДНО И ТО ЖЕ сообщение.
+ * Раньше такой граф давал генератор для «Апсейла»/«Удержания»; сегментная
+ * генерация снята, но сплит «По сегменту» остаётся легальной нодой — его
+ * ставит пользователь или ИИ, — поэтому граф собран руками.
+ */
+function sameContentSegmentsGraph(): DescribableGraph {
+  const sms = (id: string) =>
+    node(id, "sms", {
+      kind: "sms", text: "Вернитесь — для вас скидка", alphaName: "BRAND", scheduledAt: "immediate",
+    });
+  return {
+    nodes: [
+      node("signal", "source"),
+      node("split", "split", { kind: "split", by: "segment", branches: 3 }),
+      sms("high"), sms("mid"), sms("low"),
+    ],
+    edges: [
+      edge("signal", "split"),
+      edge("split", "high", "Выс"), edge("split", "mid", "Ср"), edge("split", "low", "Низ"),
+    ],
+  };
+}
+
+/**
  * Развилка условия: signal → email → condition("opened") → ДА:email / НЕТ:sms.
  * Та же форма графа, что уже проверяет `graph-waves.test.ts` («condition с
  * разными сообщениями в ветках») — тестовые фикстуры графов не шарятся между
@@ -286,9 +310,9 @@ describe("describeWorkflow", () => {
     });
 
     it("схлопывает одинаковые касания параллельных сегментов в одну строку на канал", () => {
-      // Апсейл — сегментированный шаблон: три comm-юнита с одинаковыми params.
-      // Одинаковые потоки — не потоки: развилки нет, есть обычное касание.
-      const stages = describeWorkflow(createTemplate("Апсейл", "new", ["sms"]), T);
+      // Три ветки сегментного сплиттера с одинаковыми params. Одинаковые
+      // потоки — не потоки: развилки нет, есть обычное касание.
+      const stages = describeWorkflow(sameContentSegmentsGraph(), T);
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(touch.groups).toHaveLength(1);
       expect(touch.groups![0].rows).toHaveLength(1);
@@ -600,7 +624,7 @@ describe("describeWorkflow", () => {
     });
 
     it("одинаковые по содержанию потоки развилкой не становятся — это обычное касание", () => {
-      const stages = describeWorkflow(createTemplate("Удержание", "new", ["sms", "email"]), T);
+      const stages = describeWorkflow(sameContentSegmentsGraph(), T);
       expect(stages.some((s) => s.kind === "fork")).toBe(false);
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(touch.groups).toHaveLength(1);

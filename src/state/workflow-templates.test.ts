@@ -464,8 +464,9 @@ function assertFullyReachableFromSingleRoot(graph: {
   expect(seen.size).toBe(graph.nodes.length);
 }
 
-// "Реактивация" — реальный SignalType (не сегментированный: не входит в
-// SEGMENTED_TYPES). Через channel-aware путь (createTemplate с channels)
+// "Реактивация" — реальный SignalType (типов-исключений у channel-aware пути
+// больше нет: сегментная генерация снята, шаблон при непустых каналах для всех
+// типов линейный). Через channel-aware путь (createTemplate с channels)
 // buildCommUnit гарантированно добавляет wait + 2 condition-ноды независимо
 // от типа сигнала, так что тест "задержки и условия остаются нетронутыми"
 // действительно что-то проверяет.
@@ -539,20 +540,19 @@ describe("mergeChannelNodes", () => {
     expect(merged.nodes.map((n) => n.id)).toEqual(graph.nodes.map((n) => n.id));
   });
 
-  // "Апсейл" — сегментированный сценарий (SEGMENTED_TYPES): buildSegmentedChannelTemplate
-  // строит по одному comm-юниту НА КАЖДЫЙ из трёх активных сегментов (макс/выс/ср),
-  // а каждый comm-юнит сам дублирует каналы (первый проход + повтор). Значит
-  // "email" при channels=["sms","email"] встречается тут 6 раз (3 сегмента × 2
-  // прохода) — ровно тот случай, где мерж "по одной ноде на канал" бы сломался.
+  // Канал встречается в графе БОЛЬШЕ ОДНОГО РАЗА и без сегментной генерации:
+  // каждый comm-юнит дублирует каналы сам (первый проход + повтор в
+  // buildCommUnit). Значит "email" при channels=["sms","email"] встречается
+  // дважды — ровно тот случай, где мерж "по одной ноде на канал" бы сломался.
   const UPSELL_CTX = { signalType: "Апсейл" as SignalType, sourceType: "new" as SourceType };
 
-  describe("сегментированный сценарий (несколько параллельных юнитов на канал)", () => {
-    it("снятый канал уходит из ВСЕХ сегментов без висячих рёбер", () => {
-      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
+  describe("канал, встречающийся в графе несколько раз (проход + повтор)", () => {
+    it("снятый канал уходит из ВСЕХ мест без висячих рёбер и разрывов", () => {
+      const graph = createTemplate("Реактивация", "new", ["sms", "email"]);
       const emailCountBefore = graph.nodes.filter((n) => n.data.nodeType === "email").length;
-      expect(emailCountBefore).toBeGreaterThan(1); // предпосылка теста — каналов правда несколько
+      expect(emailCountBefore).toBeGreaterThan(1); // предпосылка теста — мест правда несколько
 
-      const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
+      const merged = mergeChannelNodes(graph, ["sms"], REACT_CTX);
       expect(merged.nodes.some((n) => n.data.nodeType === "email")).toBe(false);
 
       const ids = new Set(merged.nodes.map((n) => n.id));
@@ -560,43 +560,32 @@ describe("mergeChannelNodes", () => {
         expect(ids.has(e.source), `висячее ребро ${e.source}→${e.target}`).toBe(true);
         expect(ids.has(e.target), `висячее ребро ${e.source}→${e.target}`).toBe(true);
       }
-    });
-
-    it("после удаления канала из всех сегментов граф остаётся полностью связным", () => {
-      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
-      const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
       assertFullyReachableFromSingleRoot(merged);
     });
 
-    it("сплиттер сегментов (by:segment) не трогается; внутренние channel-сплиттеры схлопываются до 1 канала", () => {
-      // Наружный сплиттер "по сегменту" — защищённый (никогда не создаётся и
-      // не удаляется мержем), а внутренние channel-сплиттеры (by:"equal",
-      // по одному на сегмент × проход) — часть комм-блока и обязаны
-      // схлопнуться, когда в сегменте остаётся 1 канал (Finding 1).
-      const graph = createTemplate("Апсейл", "new", ["sms", "email"]);
-      const segmentSplitBefore = graph.nodes.filter(
-        (n) => n.data.nodeType === "split" && n.data.params?.kind === "split" && n.data.params.by === "segment",
+    // Сегментный сплит генератором больше не создаётся, но остаётся легальной
+    // нодой: legacy-шаблон «Апсейла» его несёт, пользователь и ИИ могут
+    // поставить свой. Защита «мерж такой сплит не трогает» обязана держаться.
+    it("сплиттер по сегменту переживает мерж каналов нетронутым", () => {
+      const graph = createTemplate("Апсейл", "new");
+      const before = graph.nodes.filter(
+        (n) =>
+          n.data.nodeType === "split" &&
+          n.data.params?.kind === "split" &&
+          n.data.params.by === "segment",
       );
-      expect(segmentSplitBefore).toHaveLength(1);
-      const equalSplitsBefore = graph.nodes.filter(
-        (n) => n.data.nodeType === "split" && n.data.params?.kind === "split" && n.data.params.by === "equal",
-      );
-      expect(equalSplitsBefore.length).toBeGreaterThan(0); // предпосылка — они правда есть (2-канальные юниты)
+      expect(before).toHaveLength(1);
 
       const merged = mergeChannelNodes(graph, ["sms"], UPSELL_CTX);
 
-      const segmentSplitAfter = merged.nodes.filter(
-        (n) => n.data.nodeType === "split" && n.data.params?.kind === "split" && n.data.params.by === "segment",
+      const after = merged.nodes.filter(
+        (n) =>
+          n.data.nodeType === "split" &&
+          n.data.params?.kind === "split" &&
+          n.data.params.by === "segment",
       );
-      expect(segmentSplitAfter).toHaveLength(1);
-      expect(segmentSplitAfter[0].id).toBe(segmentSplitBefore[0].id); // тот же узел, не пересобран
-
-      // Единственный оставшийся канал — sms — везде схлопнут до прямой связи,
-      // ни одного channel-сплиттера с одной веткой не осталось.
-      const equalSplitsAfter = merged.nodes.filter(
-        (n) => n.data.nodeType === "split" && n.data.params?.kind === "split" && n.data.params.by === "equal",
-      );
-      expect(equalSplitsAfter).toHaveLength(0);
+      expect(after).toHaveLength(1);
+      expect(after[0].id).toBe(before[0].id); // тот же узел, не пересобран
     });
   });
 
@@ -750,11 +739,11 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     assertCostParity("Реактивация", "new", from, to);
   });
 
-  // Сегментированный: та же матрица, но каждый случай размножен на 3 сегмента
-  // × 2 прохода (первый/повтор) — ровно то, что сломал Finding 2 (сегменты не
-  // тронутые пользователем меняли стоимость при добавлении канала только в
-  // один сегмент).
-  const segmentedCases: [Channel[], Channel[]][] = [
+  // Та же матрица для «Апсейла»: сегментной генерации у него больше нет, но
+  // тип сигнала по-прежнему выбирает шаблон (цель «Успеха», reason «Конца»),
+  // и паритет стоимости обязан держаться на каждом из них, а не только на
+  // «Реактивации».
+  const upsellCases: [Channel[], Channel[]][] = [
     [["sms"], ["sms", "email"]],
     [["sms", "email"], ["sms"]],
     [["sms"], ["push"]],
@@ -763,7 +752,7 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     [["sms"], ["sms", "email", "push"]],
   ];
 
-  it.each(segmentedCases)("сегментированный сценарий («Апсейл»): %j → %j", (from, to) => {
+  it.each(upsellCases)("другой тип сигнала («Апсейл»): %j → %j", (from, to) => {
     assertCostParity("Апсейл", "new", from, to);
   });
 
@@ -782,30 +771,30 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
   });
 
   // Fix round 3 (Important finding) — та же "без коммуникации с самого
-  // начала" точка входа, но для СЕГМЕНТИРОВАННОГО сценария: у mergeChannelNodes
-  // нет signalType, так что ручная реконструкция (round 2) всегда строила
-  // линейный юнит вместо сплита "по сегменту" — паритет по стоимости
-  // проходил только там, где condition-ноды выживали от непустого состояния
-  // (двухшаговый сценарий ниже), но не для by-scratch-пустого графа. Ровно
-  // два случая, которые ревьюер измерил напрямую.
+  // начала" точка входа, но для ДРУГИХ типов сигнала: ручная реконструкция
+  // (round 2) не знала signalType и потому не могла воспроизвести шаблон типа
+  // (цель «Успеха», reason «Конца») — паритет проходил только там, где
+  // condition-ноды выживали от непустого состояния (двухшаговый сценарий
+  // ниже), но не для by-scratch-пустого графа. Ровно два случая, которые
+  // ревьюер измерил напрямую.
   it.each<[SignalType, Channel]>([
     ["Апсейл", "sms"],
     ["Удержание", "ivr"],
-  ])("«без коммуникации» с самого начала, сегментированный сценарий: [] → [\"%s\"→%s]", (signalType, channel) => {
+  ])("«без коммуникации» с самого начала, другой тип сигнала: [] → [\"%s\"→%s]", (signalType, channel) => {
     assertCostParity(signalType, "new", [], [channel]);
   });
 
-  it("«без коммуникации» с самого начала, сегментированный сценарий: структура сравнима с чистой пересборкой", () => {
+  it("«без коммуникации» с самого начала: структура сравнима с чистой пересборкой", () => {
     const graph = createTemplate("Апсейл", "new", []);
     const merged = mergeChannelNodes(graph, ["sms"], { signalType: "Апсейл", sourceType: "new" });
     const fresh = createTemplate("Апсейл", "new", ["sms"]);
 
-    // Не только совпадающая стоимость — тот же НАБОР типов нод (в частности,
-    // сплиттер "по сегменту", которого ручная реконструкция построить не могла).
+    // Не только совпадающая стоимость — тот же НАБОР типов нод. (Проверка на
+    // сплиттер "по сегменту" снята вместе с сегментной генерацией: шаблон при
+    // непустых каналах линейный, и одноканальный юнит сплиттера не содержит.)
     const kindsOf = (g: { nodes: { data: { nodeType: string } }[] }) =>
       [...new Set(g.nodes.map((n) => n.data.nodeType))].sort();
     expect(kindsOf(merged)).toEqual(kindsOf(fresh));
-    expect(merged.nodes.some((n) => n.data.nodeType === "split")).toBe(true);
     expect(merged.nodes.filter((n) => n.data.nodeType === "sms")).toHaveLength(
       fresh.nodes.filter((n) => n.data.nodeType === "sms").length,
     );
@@ -843,7 +832,7 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     expect(refilledCost.repeat).toBe(freshCost.repeat);
   });
 
-  it("двухшаговый сценарий, сегментированный сценарий («Апсейл»)", () => {
+  it("двухшаговый сценарий: опустошение и заполнение каналов сходятся со свежим шаблоном", () => {
     const upsellCtx = { signalType: "Апсейл" as SignalType, sourceType: "new" as SourceType };
     const original = createTemplate("Апсейл", "new", ["sms"]);
     const emptied = mergeChannelNodes(original, [], upsellCtx);
@@ -854,17 +843,6 @@ describe("mergeChannelNodes — паритет стоимости с чисто�
     const refilledCost = computeCampaignCost(refilled.nodes, refilled.edges, N);
     const freshCost = computeCampaignCost(fresh.nodes, fresh.edges, N);
     expect(refilledCost.total).toBe(freshCost.total);
-
-    // Метки сегментов на рёбрах сплиттера "по сегменту" не теряются через
-    // опустошение и повторное заполнение (дёшево проверить, раз уже здесь).
-    const segSplit = refilled.nodes.find(
-      (nd) => nd.data.nodeType === "split" && nd.data.params?.kind === "split" && nd.data.params.by === "segment",
-    )!;
-    const segLabels = refilled.edges
-      .filter((ed) => ed.source === segSplit.id)
-      .map((ed) => ed.label)
-      .sort();
-    expect(segLabels).toEqual(["Выс", "Низ", "Макс", "Ср"].sort());
   });
 });
 
@@ -935,5 +913,40 @@ describe("mergeChannelNodes сохраняет данные кампании п�
     });
     // Просто чистая пересборка — не бросает исключение и не теряет структуру.
     expect(merged.nodes.some((n) => n.data.nodeType === "scoring")).toBe(true);
+  });
+});
+
+describe("createTemplate — сегментной генерации больше нет", () => {
+  it("«Удержание» с каналами не порождает сплит по сегменту", () => {
+    const graph = createTemplate("Удержание", "new", ["sms", "email"]);
+    const segmentSplits = graph.nodes.filter(
+      (nd) =>
+        nd.data.nodeType === "split" &&
+        nd.data.params?.kind === "split" &&
+        nd.data.params.by === "segment",
+    );
+    expect(segmentSplits).toHaveLength(0);
+  });
+
+  it("«Удержание» и «Апсейл» дают граф того же размера, что несегментный тип", () => {
+    const channels = ["sms", "email"] as const;
+    const linear = createTemplate("Возврат", "new", [...channels]);
+    for (const type of ["Удержание", "Апсейл"] as const) {
+      expect(createTemplate(type, "new", [...channels]).nodes).toHaveLength(
+        linear.nodes.length,
+      );
+    }
+  });
+
+  // Сплиттер каналов (by:"equal") — часть линейного шаблона и остаётся.
+  it("сплиттер каналов при нескольких каналах на месте", () => {
+    const graph = createTemplate("Удержание", "new", ["sms", "email"]);
+    const equalSplits = graph.nodes.filter(
+      (nd) =>
+        nd.data.nodeType === "split" &&
+        nd.data.params?.kind === "split" &&
+        nd.data.params.by === "equal",
+    );
+    expect(equalSplits.length).toBeGreaterThan(0);
   });
 });

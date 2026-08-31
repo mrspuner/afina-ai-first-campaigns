@@ -118,9 +118,10 @@ async function openPresetCampaignWorkflow(page: Page) {
 }
 
 test.describe("Block D — Workflow templates", () => {
-  // Апсейл is a segmented scenario → split + per-segment comm units. With
-  // email+sms channels selected, both channel nodes appear, plus the success
-  // node. (The former storefront node was removed by design — commit 4483ac6.)
+  // С email+sms шаблон строит комм-юнит со сплиттером КАНАЛОВ (by:"equal") —
+  // обе ноды каналов на месте, плюс «Успех». (Сегментная генерация снята:
+  // сплиттер здесь делит по каналам, а не по сегментам.) (The former
+  // storefront node was removed by design — commit 4483ac6.)
   test("Апсейл template shows split with multiple channels and success", async ({ page }) => {
     await createCampaignViaWizard(page, "Новая категория", ["email", "sms"]);
 
