@@ -29,6 +29,15 @@ export function SurveyAwaiting({
   const [progress, setProgress] = useState(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // Хвостовой таймаут (200мс паузы между заполнением бара и onDone) ставится
+  // ПОСЛЕДНИМ тиком интервала, поэтому cleanup, который знает только id
+  // интервала (`clearInterval`), не может его отменить — размонтирование
+  // внутри этого окна раньше всё равно давало вызов onDone. Держим id
+  // отдельно и чистим оба таймера на unmount: у одного из потребителей
+  // (CampaignWorkspace) onDone создаёт кампанию, а не просто листает локальную
+  // фазу — поздний вызов после размонтирования там не косметика, а фантомная
+  // кампания в фоне.
+  const trailingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const steps = durationMs / TICK;
@@ -38,10 +47,16 @@ export function SurveyAwaiting({
       setProgress(Math.min((count / steps) * 100, 100));
       if (count >= steps) {
         clearInterval(id);
-        setTimeout(() => onDoneRef.current(), 200);
+        trailingTimeoutRef.current = setTimeout(() => onDoneRef.current(), 200);
       }
     }, TICK);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (trailingTimeoutRef.current) {
+        clearTimeout(trailingTimeoutRef.current);
+        trailingTimeoutRef.current = null;
+      }
+    };
   }, [durationMs]);
 
   return (
