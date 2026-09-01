@@ -208,7 +208,6 @@ export function StepBudget({
     <StepContent
       title="Проверьте кампанию"
       subtitle={`Настройки собраны, стоимость рассчитана по источнику, каналам${data.fileRowCount ? " и размеру базы" : ""}.`}
-      maxWidth="max-w-xl"
     >
       <div className="flex flex-col gap-4">
         {/* Сводка заполненного визарда (возвращена из снятого Step6Summary).
