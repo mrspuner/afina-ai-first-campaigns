@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
-import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
+import { describe, it, expect, afterEach, beforeEach, beforeAll, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, within, act } from "@testing-library/react";
 import { CampaignWorkspace } from "./campaign-workspace";
 import { AppStateProvider } from "@/state/app-state-context";
 import { PromptChipsProvider } from "@/state/prompt-chips-context";
@@ -76,13 +76,61 @@ function renderWorkspace({
   );
 }
 
+// Fix round 2 (coordinator review): the ORDINARY (non-isolated) wizard's own
+// launch handoff dropped the Budget step's submitted partial —
+// `onNext={() => handleLaunchFromBudget()}` discarded whatever `StepBudget`
+// passed, so `LaunchRequest.cost`/`stepData` were built from stale
+// pre-submission state. Every campaign created through the normal wizard
+// therefore snapshot a `budget`/`wizardData.budget` that never carried the
+// user's actual choice — which starves `graph-description.ts`'s
+// `facts?.budget !== undefined` gate, so the budget tag never renders at all.
+// Jump straight to the last (Бюджет) step via `initialStepDataOverride` +
+// `initialStep` (the same mechanism the dev-seed harness and "Открыть и
+// редактировать" already use) — intent "comms-own" keeps the step list short
+// (scenario, intent, file, channels, budget — budget is step 5) so the test
+// doesn't have to walk scenario/interests/analysis/file UI it isn't testing.
+//
+// Module-scoped (Task 3): originally declared inside the describe below, but
+// the new «Создаём кампанию» describe at the bottom of this file needs both
+// helpers too — hoisted here, bodies unchanged, so both describes share them.
+function renderAtBudgetStep(onLaunchRequested: (req: unknown) => void) {
+  return render(
+    <AppStateProvider>
+      <PromptChipsProvider>
+        <ChatProvider>
+          <CampaignWorkspace
+            onLaunchRequested={onLaunchRequested}
+            initialStepDataOverride={{
+              ...initialStepData,
+              intent: "comms-own",
+              sourceType: "own",
+              scenario: "base-registration",
+              channels: ["sms"],
+              fileRowCount: 5000,
+            }}
+            initialStep={5}
+          />
+        </ChatProvider>
+      </PromptChipsProvider>
+    </AppStateProvider>,
+  );
+}
+
+// WorkspaceInner mounts every reached step (1..maxStep) at once, and every
+// step's footer reuses the same "Далее" label — scope every query to the
+// Бюджет step's own StepContent root (same pattern wizard-buttons.spec.ts
+// uses) so a click never lands on some other mounted step's button.
+function budgetStepScope() {
+  return within(screen.getByText("Проверьте кампанию").closest("div")!);
+}
+
 describe("CampaignWorkspace — изолированный режим правки шага (Task 12)", () => {
   afterEach(cleanup);
 
   it("изолированный режим показывает только запрошенный шаг", () => {
     renderWorkspace({ editing: { campaignId: "cmp_1", step: "channels" }, snapshot });
     expect(screen.getByText("Как будем общаться с аудиторией?")).toBeInTheDocument();
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
   });
 
   it("без правки основная кнопка читается как «Применить и вернуться»", () => {
@@ -97,7 +145,7 @@ describe("CampaignWorkspace — изолированный режим правк
     fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
     expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
     // Шаг «Бюджет» реально появился в колонке — не только подпись поменялась.
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
   });
 
   // Item 2 (финальная полировка): степпер должен отличать «значение не
@@ -119,7 +167,7 @@ describe("CampaignWorkspace — изолированный режим правк
     fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
     // «Каналы» — активный шаг сессии, «Бюджет» попал в колонку правки, но
     // пользователь его ещё не открывал в ЭТОЙ сессии.
-    expect(hasCheckmark("Бюджет")).toBe(false);
+    expect(hasCheckmark("Проверка настроек")).toBe(false);
     expect(screen.getByText("7")).toBeInTheDocument();
     // Всё остальное — вне колонки, значение снапшота не тронуто правкой.
     for (const label of ["Сценарий", "Цель", "Интересы", "Режим", "Файл"]) {
@@ -196,7 +244,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
 
     // Живой выбор снова совпал со снапшотом — обнулять уже нечего, «Бюджет»
     // выпадает из колонки, кнопка возвращается к «Применить и вернуться».
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
@@ -220,18 +268,16 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
     fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
 
-    // На «Бюджете»: переключиться на «Своя сумма» и ввести своё значение.
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "99999" },
-    });
+    // Ввода своей суммы на шаге больше нет — бюджет задаётся при запуске.
+    // Инвариант тот же: пройденный шаг коммитит СВЕЖЕ ПОСЧИТАННЫЙ бюджет под
+    // новый набор каналов, а не застрявшее снапшотное значение.
     fireEvent.click(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     );
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0] as StepData;
-    expect(committed.budget).toBe(99999);
+    expect(committed.budget).toBeGreaterThan(0);
     expect(committed.budget).not.toBe(snapshot.budget);
   });
 
@@ -242,7 +288,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
 
     fireEvent.click(screen.getByRole("button", { name: "Каналы" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Push/ })); // восстановили снапшот
-    expect(screen.queryByText("Прогноз бюджета")).toBeNull();
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
@@ -250,7 +296,7 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
     // Меняем каналы снова (по-другому) — маска обязана вернуться.
     fireEvent.click(screen.getByRole("checkbox", { name: /Звонок/ }));
     expect(screen.getByRole("button", { name: "Далее" })).toBeInTheDocument();
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Применить и вернуться" }),
     ).toBeNull();
@@ -295,13 +341,13 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     // Коммита ещё не было — сценарий применился в СЕССИЮ, а не наружу.
     expect(onCommit).not.toHaveBeenCalled();
     // Колонка выросла до «Бюджета» — ровно то, что делает каскад канала.
-    expect(screen.getByText("Прогноз бюджета")).toBeInTheDocument();
+    expect(screen.getByText("Проверьте кампанию")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
   });
 
-  it("после смены сценария и ввода бюджета коммит несёт НОВЫЙ сценарий и введённый бюджет", () => {
+  it("после смены сценария коммит несёт НОВЫЙ сценарий и пересчитанный бюджет", () => {
     const onCommit = vi.fn();
     renderWorkspace({
       editing: { campaignId: "cmp_1", step: "scenario" },
@@ -312,10 +358,6 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     fireEvent.click(screen.getByRole("button", { name: "Спящий клиент" }));
     fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "77777" },
-    });
     fireEvent.click(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     );
@@ -323,7 +365,9 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0] as StepData;
     expect(committed.scenario).toBe("cur-sleeping");
-    expect(committed.budget).toBe(77777);
+    // Бюджет пересчитан под новый сценарий, а не взят из снапшота.
+    expect(committed.budget).toBeGreaterThan(0);
+    expect(committed.budget).not.toBe(scenarioSnapshot.budget);
   });
 
   it("клик по УЖЕ выбранному сценарию не поднимает диалог и коммитит сразу, бюджет не трогая", () => {
@@ -407,71 +451,15 @@ describe("CampaignWorkspace — изолированная «Интересы»:
   });
 });
 
-// Fix round 2 (coordinator review): the ORDINARY (non-isolated) wizard's own
-// launch handoff dropped the Budget step's submitted partial —
-// `onNext={() => handleLaunchFromBudget()}` discarded whatever `StepBudget`
-// passed, so `LaunchRequest.cost`/`stepData` were built from stale
-// pre-submission state. Every campaign created through the normal wizard
-// therefore snapshot a `budget`/`wizardData.budget` that never carried the
-// user's actual choice — which starves `graph-description.ts`'s
-// `facts?.budget !== undefined` gate, so the budget tag never renders at all.
-// Jump straight to the last (Бюджет) step via `initialStepDataOverride` +
-// `initialStep` (the same mechanism the dev-seed harness and "Открыть и
-// редактировать" already use) — intent "comms-own" keeps the step list short
-// (scenario, intent, file, channels, budget — budget is step 5) so the test
-// doesn't have to walk scenario/interests/analysis/file UI it isn't testing.
 describe("CampaignWorkspace — обычный визард: явный бюджет доходит до LaunchRequest", () => {
-  afterEach(cleanup);
-
-  function renderAtBudgetStep(onLaunchRequested: (req: unknown) => void) {
-    return render(
-      <AppStateProvider>
-        <PromptChipsProvider>
-          <ChatProvider>
-            <CampaignWorkspace
-              onLaunchRequested={onLaunchRequested}
-              initialStepDataOverride={{
-                ...initialStepData,
-                intent: "comms-own",
-                sourceType: "own",
-                scenario: "base-registration",
-                channels: ["sms"],
-                fileRowCount: 5000,
-              }}
-              initialStep={5}
-            />
-          </ChatProvider>
-        </PromptChipsProvider>
-      </AppStateProvider>,
-    );
-  }
-
-  // WorkspaceInner mounts every reached step (1..maxStep) at once, and every
-  // step's footer reuses the same "Далее" label — scope every query to the
-  // Бюджет step's own StepContent root (same pattern wizard-buttons.spec.ts
-  // uses) so a click never lands on some other mounted step's button.
-  function budgetStepScope() {
-    return within(screen.getByText("Прогноз бюджета").closest("div")!);
-  }
-
-  it("своя сумма, введённая на «Бюджете», доходит и до cost, и до stepData.budget в LaunchRequest", () => {
-    const onLaunchRequested = vi.fn();
-    renderAtBudgetStep(onLaunchRequested);
-    const budget = budgetStepScope();
-
-    fireEvent.click(budget.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(budget.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "88888" },
-    });
-    fireEvent.click(budget.getByRole("button", { name: "Далее" }));
-
-    expect(onLaunchRequested).toHaveBeenCalledTimes(1);
-    const req = onLaunchRequested.mock.calls[0][0] as {
-      cost: number;
-      stepData: StepData;
-    };
-    expect(req.cost).toBe(88888);
-    expect(req.stepData.budget).toBe(88888);
+  // Task 3: клик по «Создать кампанию» больше не создаёт кампанию сразу — он
+  // взводит четырёхсекундный экран ожидания (SurveyAwaiting), и только его
+  // onDone (durationMs + 200мс) вызывает onLaunchRequested. Фейковые таймеры
+  // нужны, чтобы прокрутить это ожидание в тесте.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
   });
 
   it("рекомендованная сумма (без ручного ввода) тоже доходит до LaunchRequest — не 0/null от устаревшего stepData", () => {
@@ -480,7 +468,11 @@ describe("CampaignWorkspace — обычный визард: явный бюдж
     const budget = budgetStepScope();
 
     // Режим «Рекомендуемая» — активен по умолчанию, ничего вводить не нужно.
-    fireEvent.click(budget.getByRole("button", { name: "Далее" }));
+    fireEvent.click(budget.getByRole("button", { name: "Создать кампанию" }));
+
+    act(() => {
+      vi.advanceTimersByTime(4200);
+    });
 
     expect(onLaunchRequested).toHaveBeenCalledTimes(1);
     const req = onLaunchRequested.mock.calls[0][0] as {
@@ -489,5 +481,78 @@ describe("CampaignWorkspace — обычный визард: явный бюдж
     };
     expect(req.cost).toBeGreaterThan(0);
     expect(req.stepData.budget).toBe(req.cost);
+  });
+});
+
+describe("CampaignWorkspace — экран «Создаём кампанию» перед карточкой", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  it("клик по «Создать кампанию» поднимает экран ожидания и НЕ создаёт кампанию сразу", () => {
+    const onLaunchRequested = vi.fn();
+    renderAtBudgetStep(onLaunchRequested);
+    fireEvent.click(
+      budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
+    );
+
+    expect(screen.getByText("Создаём кампанию")).toBeInTheDocument();
+    expect(onLaunchRequested).not.toHaveBeenCalled();
+  });
+
+  it("экран ожидания говорит, где лежат кампании", () => {
+    renderAtBudgetStep(vi.fn());
+    fireEvent.click(
+      budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
+    );
+    expect(
+      screen.getByText("Все кампании хранятся в разделе «Кампании»"),
+    ).toBeInTheDocument();
+  });
+
+  it("на время ожидания колонка шагов и степпер убраны", () => {
+    renderAtBudgetStep(vi.fn());
+    fireEvent.click(
+      budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
+    );
+    expect(screen.queryByText("Проверьте кампанию")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Проверка настроек" })).toBeNull();
+  });
+
+  it("кампания создаётся через 4 секунды, а не раньше", () => {
+    const onLaunchRequested = vi.fn();
+    renderAtBudgetStep(onLaunchRequested);
+    fireEvent.click(
+      budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(3900);
+    });
+    expect(onLaunchRequested).not.toHaveBeenCalled();
+
+    // 4000 мс бара + 200 мс паузы SurveyAwaiting перед onDone.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(onLaunchRequested).toHaveBeenCalledTimes(1);
+  });
+
+  // Точечная правка с карточки кампанию не создаёт — она коммитит правку
+  // существующей. Экран «Создаём кампанию» там был бы прямой ложью.
+  it("в режиме точечной правки экран ожидания не поднимается", () => {
+    const onCommit = vi.fn();
+    renderWorkspace({
+      editing: { campaignId: "cmp_1", step: "budget" },
+      snapshot,
+      onCommit,
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    );
+    expect(screen.queryByText("Создаём кампанию")).toBeNull();
+    expect(onCommit).toHaveBeenCalledTimes(1);
   });
 });

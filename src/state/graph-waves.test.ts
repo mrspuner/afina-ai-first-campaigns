@@ -32,6 +32,46 @@ function emailNode(id: string, body: string): WorkflowNode {
   });
 }
 
+/**
+ * Сегментный сплит с ОДИНАКОВЫМИ ветками: три сегмента получают одно и то же
+ * SMS, у каждой ветки своя пауза и свой повтор. Раньше такой граф строил
+ * генератор для «Апсейла»/«Удержания»; сегментная генерация снята, но сплит
+ * «По сегменту» остаётся легальной нодой — его ставит пользователь или ИИ, и
+ * вся логика волн по нему продолжает работать, — поэтому граф собран руками.
+ *
+ * Ноды перечислены НЕ в порядке обхода (ветка «Низ» первой) намеренно: тест
+ * про «первую паузу» обязан проверять порядок BFS, а не порядок массива.
+ */
+function sameChannelSegmentsGraph() {
+  const sms = (id: string) =>
+    node(id, "sms", {
+      kind: "sms",
+      text: "Вернитесь — для вас скидка",
+      alphaName: "BRAND",
+      scheduledAt: "immediate",
+    });
+  const wait = (id: string) =>
+    node(id, "wait", { kind: "wait", mode: "duration", durationHours: 48 });
+
+  return {
+    nodes: [
+      node("signal", "source"),
+      node("seg", "split", { kind: "split", by: "segment", branches: 3 }),
+      sms("low"), wait("low_wait"), sms("low_repeat"),
+      sms("high"), wait("high_wait"), sms("high_repeat"),
+      sms("mid"), wait("mid_wait"), sms("mid_repeat"),
+    ],
+    edges: [
+      edge("signal", "seg"),
+      edge("seg", "high", "Выс"), edge("seg", "mid", "Ср"), edge("seg", "low", "Низ"),
+      edge("high", "high_wait"), edge("mid", "mid_wait"), edge("low", "low_wait"),
+      edge("high_wait", "high_repeat"),
+      edge("mid_wait", "mid_repeat"),
+      edge("low_wait", "low_repeat"),
+    ],
+  };
+}
+
 describe("segmentWaves", () => {
   it("канонический одноканальный граф: одна волна, повтор помечен repeatsPrevious", () => {
     const { steps } = segmentWaves(createTemplate("Возврат", "new", ["sms"]));
@@ -69,7 +109,7 @@ describe("segmentWaves", () => {
   });
 
   it("сегменты с ОДИНАКОВЫМИ каналами схлопываются в одну группу без метки", () => {
-    const graph = createTemplate("Удержание", "new", ["sms", "email"]);
+    const graph = sameChannelSegmentsGraph();
     // Без `!` и без guard'а: если развилка перестанет резолвиться, тест обязан
     // упасть — именно эту регрессию он и стережёт.
     const fork = segmentWaves(graph).steps.find(
@@ -82,7 +122,7 @@ describe("segmentWaves", () => {
   });
 
   it("параллельные сегменты дают по одной строке на канал, а не N одинаковых", () => {
-    const { steps } = segmentWaves(createTemplate("Удержание", "new", ["sms", "email"]));
+    const { steps } = segmentWaves(sameChannelSegmentsGraph());
     const waves = steps.filter((s) => s.kind === "wave");
     expect(waves.length).toBeGreaterThan(0);
     for (const w of waves) {
@@ -94,20 +134,22 @@ describe("segmentWaves", () => {
   });
 
   it("из нескольких параллельных пауз waitBefore берёт ПЕРВУЮ по BFS", () => {
-    // Сегментный сценарий открывает волну повтора тремя параллельными паузами
-    // (по одной на сегмент). Выбор между ними не косметический: слой описания
+    // Сегментный граф открывает волну повтора тремя параллельными паузами (по
+    // одной на сегмент). Выбор между ними не косметический: слой описания
     // вешает на эту ноду пилюлю длительности, и правка через её поповер
     // переписывает params ИМЕННО её — адрес правки не должен переезжать.
-    const graph = createTemplate("Апсейл", "new", ["sms"]);
+    const graph = sameChannelSegmentsGraph();
     const waits = graph.nodes.filter((n) => n.data.nodeType === "wait").map((n) => n.id);
     expect(waits.length).toBeGreaterThan(1);
 
     const waves = segmentWaves(graph).steps.filter((s) => s.kind === "wave");
-    expect(waves[1].wave.waitBefore?.id).toBe(waits[0]);
+    // Первая по BFS — ветка «Выс» (первое ребро сплиттера), а не первая в
+    // массиве нод (там ветка «Низ»).
+    expect(waves[1].wave.waitBefore?.id).toBe("high_wait");
   });
 
   it("повтор сегментированного сценария помечается repeatsPrevious", () => {
-    const { steps } = segmentWaves(createTemplate("Удержание", "new", ["sms", "email"]));
+    const { steps } = segmentWaves(sameChannelSegmentsGraph());
     const waves = steps.filter((s) => s.kind === "wave");
     expect(waves).toHaveLength(2);
     expect(waves[0].wave.repeatsPrevious).toBe(false);

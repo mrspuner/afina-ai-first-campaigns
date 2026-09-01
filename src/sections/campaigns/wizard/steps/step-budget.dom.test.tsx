@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { StepBudget } from "./step-budget";
 import { initialStepData } from "@/types/campaign";
 
@@ -30,36 +30,69 @@ function renderStep(over: Partial<typeof streamData> = {}) {
   return onNext;
 }
 
-/**
- * Регрессия: «Максимальный дневной бюджет» жил только в локальном useState —
- * proceed() его не передавал, поэтому введённое значение терялось при уходе
- * со шага и никогда не доезжало до кампании.
- */
-describe("StepBudget — потолок дневного бюджета сохраняется", () => {
-  it("введённое значение уезжает в onNext", () => {
-    const onNext = renderStep();
-    fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
-      target: { value: "5000" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ maxDailyBudget: 5000 }),
-    );
+describe("StepBudget — финальная развилка визарда", () => {
+  // Абзац-развилка снят: его работу делают заголовок «Проверьте кампанию» и
+  // подпись карточки прогноза про настройку бюджета при запуске.
+  it("вместо абзаца-развилки обещает настройку бюджета при запуске", () => {
+    renderStep();
+    expect(screen.queryByText(/Вот прогноз бюджета/)).toBeNull();
+    expect(
+      screen.getByText(/Вы сможете настроить подходящий бюджет при запуске/),
+    ).toBeInTheDocument();
   });
 
-  it("инпут восстанавливается из уже сохранённых данных", () => {
-    renderStep({ maxDailyBudget: 7000 });
-    expect(screen.getByLabelText("Максимальный дневной бюджет")).toHaveValue("7000");
+  it("основная кнопка называет действие — «Создать кампанию», а не «Далее»", () => {
+    renderStep();
+    expect(
+      screen.getByRole("button", { name: "Создать кампанию" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Далее" })).toBeNull();
   });
 
-  it("очистка поля снимает потолок (undefined, а не 0)", () => {
-    const onNext = renderStep({ maxDailyBudget: 7000 });
-    fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Далее" }));
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ maxDailyBudget: undefined }),
+  // Точечная правка с карточки ничего не создаёт: там свой лейбл футера.
+  // Карточка прогноза при этом остаётся — цифры и есть смысл захода на шаг,
+  // и обещание про настройку бюджета при запуске там тоже верно.
+  it("в режиме правки лейбл берётся из footerOverride, прогноз остаётся", () => {
+    render(
+      <StepBudget
+        data={streamData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        active
+        footerOverride={{ continueLabel: "Применить и вернуться", backLabel: "Отмена" }}
+      />,
     );
+    expect(
+      screen.getByRole("button", { name: "Применить и вернуться" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Вы сможете настроить подходящий бюджет при запуске/),
+    ).toBeInTheDocument();
+  });
+
+  it("показывает сводку заполненного визарда над прогнозом", () => {
+    renderStep();
+    expect(screen.getByText("Сценарий")).toBeInTheDocument();
+    // Сводка стоит ВЫШЕ прогноза — порядок в документе, а не только наличие.
+    const summary = screen.getByText("Сценарий");
+    const forecast = screen.getByText("Прогноз кампании");
+    expect(
+      summary.compareDocumentPosition(forecast) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  // В изолированной правке правится ОДИН шаг: соседние значения не при делах,
+  // и возвращаться из сводки некуда.
+  it("в режиме правки сводки нет", () => {
+    render(
+      <StepBudget
+        data={streamData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        active
+        footerOverride={{ continueLabel: "Применить и вернуться", backLabel: "Отмена" }}
+      />,
+    );
+    expect(screen.queryByText("Сценарий")).toBeNull();
   });
 });

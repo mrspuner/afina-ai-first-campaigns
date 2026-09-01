@@ -190,6 +190,27 @@ describe("CampaignScreen — блок «Сценарий кампании»", ()
     expect(screen.getByText(/готовый сегмент/)).toBeInTheDocument();
   });
 
+  it("у черновика подсказывает, что граф кликабелен", () => {
+    renderCampaign(
+      baseCampaign({ id: "cmp_graph_hint", channels: ["sms"], status: "draft" }),
+    );
+    expect(
+      screen.getByText("Кликните на граф, чтобы точечно поправить кампанию"),
+    ).toBeInTheDocument();
+  });
+
+  // После запуска граф не правится (graphEditable === false), и подсказка
+  // обещала бы недоступное действие.
+  it("у запущенной кампании подсказки про граф нет", () => {
+    for (const status of ["active", "paused", "completed"] as const) {
+      const { unmount } = renderCampaign(
+        baseCampaign({ id: `cmp_graph_hint_${status}`, channels: ["sms"], status }),
+      );
+      expect(screen.queryByText(/Кликните на граф/)).toBeNull();
+      unmount();
+    }
+  });
+
   it("блок денег называется «Итог» и несёт денежную подводку (spec §6)", () => {
     renderCampaign(baseCampaign({ id: "cmp_itog", channels: ["sms"] }));
     // Черновик: денежный блок «Итог» (бывший «Запуск») + подводка + «К оплате».
@@ -379,11 +400,10 @@ describe("CampaignScreen — поповер выбора шаблона у те�
 
     expect(await screen.findByRole("button", { name: "SMS — акция" })).toBeInTheDocument();
     // Кэш реально переписан (не только видимость): хотя бы один sms-узел
-    // теперь несёт текст нового шаблона. Апсейл сегментирует коммуникацию на
-    // несколько физически идентичных sms-узлов (max/high/mid × повтор) —
-    // правка бьёт только по ОДНОМУ из них, поэтому «SMS — напоминание»
-    // законно остаётся на месте у остальных дублей (дедуп описания корректно
-    // показывает две разные группы, а не баг).
+    // теперь несёт текст нового шаблона. Комм-юнит даёт два физически
+    // идентичных sms-узла (первый проход + повтор) — правка бьёт только по
+    // ОДНОМУ из них, поэтому «SMS — напоминание» законно остаётся на месте у
+    // второго (дедуп описания корректно показывает две разные группы, а не баг).
     const newText = (smsExtra.content as { text: string }).text;
     expect(
       getCachedGraph(id)!.nodes.some(

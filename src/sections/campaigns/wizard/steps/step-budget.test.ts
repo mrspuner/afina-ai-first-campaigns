@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildBudgetForecast, maxDailyBudgetLine } from "./step-budget";
+import { buildBudgetForecast } from "./step-budget";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
 import type { Channel } from "@/types/campaign";
 
@@ -65,18 +65,3 @@ describe("buildBudgetForecast channel-awareness (aim #2 mismatch fix)", () => {
   });
 });
 
-describe("maxDailyBudgetLine (aim #20 optional ceiling, display-only)", () => {
-  it("returns the RU label + formatted amount when a positive value is set", () => {
-    expect(maxDailyBudgetLine(1000)).toEqual({
-      label: "Максимальный дневной бюджет",
-      display: "₽ 1 000",
-    });
-  });
-  it("returns null when unset (undefined)", () => {
-    expect(maxDailyBudgetLine(undefined)).toBeNull();
-  });
-  it("returns null for empty/zero/invalid (no ceiling)", () => {
-    expect(maxDailyBudgetLine(0)).toBeNull();
-    expect(maxDailyBudgetLine(NaN)).toBeNull();
-  });
-});

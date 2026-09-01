@@ -3,7 +3,8 @@ import { seedScreen } from "./screens/seed";
 import { SCREENS } from "./screens/catalog";
 
 // Task #4 — canonical rule: the primary / forward CTA ("Продолжить" / "Далее" /
-// "Запустить") in every wizard step footer must sit on the RIGHT. Where a
+// "Запустить" / "Создать кампанию") in every wizard step footer must sit on
+// the RIGHT. Where a
 // «Назад» secondary exists the footer is justify-between (back left, primary
 // right); where it doesn't, the primary is still right-aligned to the content
 // column. Both satisfy "primary on the right".
@@ -18,7 +19,7 @@ import { SCREENS } from "./screens/catalog";
 // footer mounts a beat after the heading — reads go through auto-retrying
 // `expect`s, never a bare racy `count()`.
 
-const PRIMARY_LABEL = /^(Продолжить|Далее|Запустить)$/;
+const PRIMARY_LABEL = /^(Продолжить|Далее|Запустить|Создать кампанию)$/;
 // The primary button carries no right margin, so its right edge should coincide
 // with its footer row's right edge. Allow a few px for sub-pixel rounding.
 const RIGHT_EDGE_SLACK = 4;

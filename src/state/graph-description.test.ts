@@ -57,6 +57,48 @@ function forkThenTouchGraph(): DescribableGraph {
 }
 
 /**
+ * Сегментный сплиттер, у которого все три ветки несут ОДНО И ТО ЖЕ сообщение.
+ * Раньше такой граф давал генератор для «Апсейла»/«Удержания»; сегментная
+ * генерация снята, но сплит «По сегменту» остаётся легальной нодой — его
+ * ставит пользователь или ИИ, — поэтому граф собран руками.
+ */
+function sameContentSegmentsGraph(): DescribableGraph {
+  const sms = (id: string) =>
+    node(id, "sms", {
+      kind: "sms", text: "Вернитесь — для вас скидка", alphaName: "BRAND", scheduledAt: "immediate",
+    });
+  const email = (id: string) =>
+    node(id, "email", {
+      kind: "email", subject: "Вернитесь", body: "Для вас скидка", sender: "promo@brand.com",
+    });
+  // Каждый сегмент несёт ОБА канала через свой channel-сплиттер (by:"equal") —
+  // ровно та форма, что раньше приезжала из сегментного генератора. Два канала,
+  // а не один: тесты ниже проверяют, что каналы вплетаются в тело касания
+  // ИМЕНАМИ, и на одноканальной фикстуре эта проверка была бы пустой.
+  const branch = (seg: string) => [
+    node(`${seg}_ch`, "split", { kind: "split", by: "equal", branches: 2 }),
+    sms(`${seg}_sms`),
+    email(`${seg}_email`),
+  ];
+  const branchEdges = (seg: string) => [
+    edge(`${seg}_ch`, `${seg}_sms`),
+    edge(`${seg}_ch`, `${seg}_email`),
+  ];
+  return {
+    nodes: [
+      node("signal", "source"),
+      node("split", "split", { kind: "split", by: "segment", branches: 3 }),
+      ...branch("high"), ...branch("mid"), ...branch("low"),
+    ],
+    edges: [
+      edge("signal", "split"),
+      edge("split", "high_ch", "Выс"), edge("split", "mid_ch", "Ср"), edge("split", "low_ch", "Низ"),
+      ...branchEdges("high"), ...branchEdges("mid"), ...branchEdges("low"),
+    ],
+  };
+}
+
+/**
  * Развилка условия: signal → email → condition("opened") → ДА:email / НЕТ:sms.
  * Та же форма графа, что уже проверяет `graph-waves.test.ts` («condition с
  * разными сообщениями в ветках») — тестовые фикстуры графов не шарятся между
@@ -305,9 +347,12 @@ describe("describeWorkflow", () => {
     });
 
     it("схлопывает одинаковые касания параллельных сегментов в один канал (не форк)", () => {
-      // Апсейл — сегментированный шаблон: три comm-юнита с одинаковыми params.
-      // Одинаковые потоки — не потоки: развилки нет, есть обычное касание.
-      const stages = describeWorkflow(createTemplate("Апсейл", "new", ["sms"]), T);
+      // Три ветки сегментного сплиттера с одинаковыми params. Одинаковые
+      // потоки — не потоки: развилки нет, есть обычное касание.
+      // Фикстура рукотворная: генератор сегментных шаблонов снесён, и
+      // createTemplate("Апсейл", …) больше такой формы не строит — а сам
+      // сегментный сплит остался легальной нодой, которую ставят руками и ИИ.
+      const stages = describeWorkflow(sameContentSegmentsGraph(), T);
       expect(stages.some((s) => s.kind === "fork")).toBe(false);
       const touch = stages.find((s) => s.kind === "touch")!;
       expect(touch.groups).toBeUndefined();
@@ -795,7 +840,7 @@ describe("describeWorkflow", () => {
     });
 
     it("одинаковые по содержанию потоки развилкой не становятся — это обычное касание", () => {
-      const stages = describeWorkflow(createTemplate("Удержание", "new", ["sms", "email"]), T);
+      const stages = describeWorkflow(sameContentSegmentsGraph(), T);
       expect(stages.some((s) => s.kind === "fork")).toBe(false);
       const touch = stages.find((s) => s.kind === "touch")!;
       // Не форк — групп нет, каналы вплетены инлайн в тело.

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { CampaignStepper } from "./campaign-stepper";
+import { CampaignStepper, STEP_LABELS } from "./campaign-stepper";
 import type { WizardStepId } from "./wizard-steps";
 
 const STEPS: WizardStepId[] = [
@@ -39,7 +39,7 @@ describe("CampaignStepper — обычный визард (без изолиро
     expect(isCheckmark(circleFor("Цель"))).toBe(true);
     expect(isCheckmark(circleFor("Интересы"))).toBe(false); // активный — не галочка
     expect(isCheckmark(circleFor("Каналы"))).toBe(false); // ещё не дошли
-    expect(isCheckmark(circleFor("Бюджет"))).toBe(false);
+    expect(isCheckmark(circleFor("Проверка настроек"))).toBe(false);
   });
 });
 
@@ -78,7 +78,7 @@ describe("CampaignStepper — изолированная сессия правк
         completedSteps={completedSteps}
       />,
     );
-    expect(isCheckmark(circleFor("Бюджет"))).toBe(false);
+    expect(isCheckmark(circleFor("Проверка настроек"))).toBe(false);
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
@@ -139,5 +139,25 @@ describe("CampaignStepper — изолированная сессия правк
       />,
     );
     expect(screen.getByRole("button", { name: "Сценарий" })).toBeDisabled();
+  });
+});
+
+// Расхождение намеренное: в степпере последний шаг — про проверку настроек,
+// а STEP_LABELS остаются семантическими («Бюджет») для поповера пилюли на
+// карточке и контекста ИИ. Тест держит обе стороны, чтобы их не «починили»
+// в одну.
+describe("CampaignStepper — подпись последнего шага отличается от STEP_LABELS", () => {
+  it("рисует «Проверка настроек», тогда как STEP_LABELS.budget — «Бюджет»", () => {
+    render(
+      <CampaignStepper
+        steps={["scenario", "budget"]}
+        currentStep={2}
+        maxStep={2}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByText("Проверка настроек")).toBeInTheDocument();
+    expect(screen.queryByText("Бюджет")).toBeNull();
+    expect(STEP_LABELS.budget).toBe("Бюджет");
   });
 });

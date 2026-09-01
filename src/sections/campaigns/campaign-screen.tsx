@@ -425,6 +425,14 @@ export function CampaignScreen() {
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Граф кампании
             </p>
+            {/* Мини-граф кликабелен, но об этом ниоткуда не узнать (коммент
+                от 31.08). Показываем только пока граф правится — после
+                запуска подсказка обещала бы недоступное действие. */}
+            {graphEditable && (
+              <p className="text-xs text-muted-foreground">
+                Кликните на граф, чтобы точечно поправить кампанию
+              </p>
+            )}
             <WorkflowMiniPreview
               campaignId={campaign.id}
               signalType={signalType}

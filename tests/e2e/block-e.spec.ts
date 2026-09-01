@@ -119,15 +119,25 @@ async function createCampaignViaWizard(page: Page, channel: "sms") {
   ).toBeVisible({ timeout: 15_000 });
   await page.getByRole("checkbox", { name: new RegExp(channel, "i") }).click();
   await page.getByRole("button", { name: "Далее" }).last().click();
-  await expect(
-    page.getByRole("heading", { name: /Прогноз бюджета/ })
-  ).toBeVisible();
-  await expect(page.getByText("Рекомендуемая")).toBeVisible();
-  await page.getByRole("button", { name: "Далее" }).last().click();
+  const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
+  await expect(budgetHeading).toBeVisible();
+  // Карточек «Рекомендуемая / Своя сумма» на шаге больше нет — сумма задаётся
+  // на экране оплаты. Признак готовности шага теперь строка прогноза.
+  await expect(page.getByText("Рекомендуемый бюджет")).toBeVisible();
+  // Scope to the budget step's own StepContent root (heading → .mb-8 → root)
+  // rather than a blind `.last()` — the app now has four «Создать кампанию»
+  // buttons (welcome view, campaigns section, empty-state card, and this
+  // step's forward CTA), so a global `.last()` is no longer safe.
+  await budgetHeading
+    .locator("xpath=../..")
+    .getByRole("button", { name: "Создать кампанию" })
+    .click();
   // Финал визарда приземляет в КАРТОЧКУ кампании, а не в редактор графа.
   // Мини-граф карточки рендерит те же ноды, но не кликается — за редактором
   // идём через «Открыть workflow» (aria-label мини-превью).
-  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 8_000 });
+  // The «Создаём кампанию» waiting screen sits between the click and the card
+  // (durationMs 4000 + a trailing 200ms pause = ~4200ms) — give it headroom.
+  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.getByText("Сценарий кампании")).toHaveCount(0);
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 8_000 });

@@ -91,17 +91,26 @@ async function createCampaignViaWizard(
   await page.getByRole("button", { name: "Далее" }).last().click();
 
   // Budget — recommended, continue → campaign card. Wait for the body to
-  // render so «Далее» is the budget step's button (not a stale earlier one).
-  await expect(
-    page.getByRole("heading", { name: /Прогноз бюджета/ })
-  ).toBeVisible();
-  await expect(page.getByText("Рекомендуемая")).toBeVisible();
-  await page.getByRole("button", { name: "Далее" }).last().click();
+  // render, then scope the click to this step's own StepContent root (heading
+  // → .mb-8 → root) instead of a blind `.last()` — the app now has four
+  // «Создать кампанию» buttons (welcome view, campaigns section, empty-state
+  // card, and this step's forward CTA).
+  const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
+  await expect(budgetHeading).toBeVisible();
+  // Карточек «Рекомендуемая / Своя сумма» на шаге больше нет — сумма задаётся
+  // на экране оплаты. Признак готовности шага теперь строка прогноза.
+  await expect(page.getByText("Рекомендуемый бюджет")).toBeVisible();
+  await budgetHeading
+    .locator("xpath=../..")
+    .getByRole("button", { name: "Создать кампанию" })
+    .click();
 
   // Финал визарда приземляет в карточку кампании. Её мини-граф рендерит тот же
   // launchGraph, поэтому проверять состав нод надо в ПОЛНОМ редакторе, иначе
   // тест молча смотрел бы на превью.
-  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 8_000 });
+  // The «Создаём кампанию» waiting screen sits between the click and the card
+  // (durationMs 4000 + a trailing 200ms pause = ~4200ms) — give it headroom.
+  await expect(page.getByText("Сценарий кампании")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Открыть workflow" }).click();
   await expect(page.getByText("Сценарий кампании")).toHaveCount(0);
   await expect(page.locator(".react-flow")).toBeVisible({ timeout: 8_000 });
@@ -118,9 +127,9 @@ async function openPresetCampaignWorkflow(page: Page) {
 }
 
 test.describe("Block D — Workflow templates", () => {
-  // Апсейл is a segmented scenario → split + per-segment comm units. With
-  // email+sms channels selected, both channel nodes appear, plus the success
-  // node. (The former storefront node was removed by design — commit 4483ac6.)
+  // С email+sms шаблон строит комм-юнит со сплиттером КАНАЛОВ (by:"equal") —
+  // обе ноды каналов на месте, плюс «Успех». (Сегментная генерация снята:
+  // сплиттер здесь делит по каналам, а не по сегментам.)
   test("Апсейл template shows split with multiple channels and success", async ({ page }) => {
     await createCampaignViaWizard(page, "Новая категория", ["email", "sms"]);
 

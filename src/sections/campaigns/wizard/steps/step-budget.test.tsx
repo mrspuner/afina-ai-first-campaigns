@@ -102,6 +102,9 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     expect(screen.getByRole("button", { name: /Коммуникации/ })).toBeTruthy();
     // Collapsed by default: the per-channel table is not mounted yet.
     expect(screen.queryByText("Канал")).toBeNull();
@@ -124,6 +127,9 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     fireEvent.click(screen.getByRole("button", { name: /Коммуникации/ }));
     expect(screen.getByText("Канал")).toBeTruthy();
     expect(screen.getByText("Первичные")).toBeTruthy();
@@ -145,15 +151,20 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Коммуникации/ })).toBeNull();
-    // With no communication the grand total collapses to signals, so «Итого»
-    // still renders (equal to «Сигналы»).
-    expect(screen.getByText("Итого")).toBeTruthy();
+    // «Итого» внутри разбивки скрыт (hideTotal): та же сумма уже стоит в
+    // строке «Рекомендуемый бюджет», которая эту разбивку и раскрывает.
+    expect(screen.queryByText("Итого")).toBeNull();
     cleanup();
   });
 
-  it("shows updated recommended card caption", () => {
+  // Карточки «Рекомендуемая / Своя сумма» сняты: сумму пользователь задаёт
+  // позже, на экране оплаты. Вместо подписи карточки шаг несёт обещание об этом.
+  it("обещает настройку бюджета при запуске вместо выбора суммы", () => {
     renderStep(
       <StepBudget
         data={makeData({ channels: ["sms"] })}
@@ -161,16 +172,20 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
-    expect(screen.getByText(/Рассчитали на основе источников и каналов/)).toBeTruthy();
+    expect(screen.queryByText(/Рассчитали на основе источников и каналов/)).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Своя сумма" })).toBeNull();
+    expect(
+      screen.getByText(/если\s+рекомендуемый вам не подходит/),
+    ).toBeTruthy();
     cleanup();
   });
 });
 
-describe("StepBudget — footer button is «Далее» and always advances (group B #6)", () => {
+describe("StepBudget — footer button is «Создать кампанию» and always advances (group B #6)", () => {
   const SCENARIO = "base-first-deal"; // signalType "Первая сделка", cost > 0
 
-  it("footer button label is «Далее» regardless of balance", () => {
-    // Default app-state balance is 0; cost > 0 — but button must still read «Далее».
+  it("footer button label is «Создать кампанию» regardless of balance", () => {
+    // Default app-state balance is 0; cost > 0 — but button must still read «Создать кампанию».
     renderStep(
       <StepBudget
         data={makeData({
@@ -183,12 +198,12 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
         onBack={vi.fn()}
       />
     );
-    expect(screen.getByRole("button", { name: "Далее" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Создать кампанию" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /пополнить/i })).toBeNull();
     cleanup();
   });
 
-  it("clicking «Далее» calls onNext (does NOT open a top-up modal)", () => {
+  it("clicking «Создать кампанию» calls onNext (does NOT open a top-up modal)", () => {
     const onNext = vi.fn();
     renderStep(
       <StepBudget
@@ -202,7 +217,7 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
         onBack={vi.fn()}
       />
     );
-    const button = screen.getByRole("button", { name: "Далее" });
+    const button = screen.getByRole("button", { name: "Создать кампанию" });
     fireEvent.click(button);
     // Wizard advances — no top-up gate.
     expect(onNext).toHaveBeenCalledTimes(1);
@@ -212,46 +227,3 @@ describe("StepBudget — footer button is «Далее» and always advances (gr
   });
 });
 
-describe("StepBudget — max daily budget field (aim #21, stream-only)", () => {
-  it("shows the «Максимальный дневной бюджет» field for stream source", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({ sourceType: "stream", channels: ["sms"] })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    expect(
-      screen.getByText(/Максимальный дневной бюджет \(необязательно\)/)
-    ).toBeTruthy();
-    cleanup();
-  });
-
-  it("hides the «Максимальный дневной бюджет» field for new source", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({ sourceType: "new", channels: ["sms"] })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    expect(
-      screen.queryByText(/Максимальный дневной бюджет \(необязательно\)/)
-    ).toBeNull();
-    cleanup();
-  });
-
-  it("hides the «Максимальный дневной бюджет» field for own source", () => {
-    renderStep(
-      <StepBudget
-        data={makeData({ sourceType: "own", channels: ["sms"] })}
-        onNext={vi.fn()}
-        onBack={vi.fn()}
-      />
-    );
-    expect(
-      screen.queryByText(/Максимальный дневной бюджет \(необязательно\)/)
-    ).toBeNull();
-    cleanup();
-  });
-});

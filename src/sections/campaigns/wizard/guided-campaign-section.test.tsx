@@ -132,11 +132,8 @@ describe("GuidedCampaignSection — пересборка кэша графа н�
     renderEditing(campaign, "scenario");
     fireEvent.click(screen.getByRole("button", { name: "Спящий клиент" }));
     fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
-    // Каскад завёл на «Бюджет» (Item 2) — довести сессию до конца.
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "50000" },
-    });
+    // Каскад завёл на «Бюджет» (Item 2) — довести сессию до конца. Ввода своей
+    // суммы там больше нет: шаг коммитит рекомендуемый бюджет по кнопке.
     fireEvent.click(screen.getByRole("button", { name: "Применить и вернуться" }));
 
     const after = getCachedGraph("cmp_scn");
@@ -221,10 +218,6 @@ describe("GuidedCampaignSection — пересборка кэша графа н�
     renderEditing(campaign, "channels");
     fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "20000" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Применить и вернуться" }));
 
     const after = getCachedGraph("cmp_ch");

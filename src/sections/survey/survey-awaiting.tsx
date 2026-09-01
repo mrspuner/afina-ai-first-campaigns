@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 
-const TOTAL_DURATION = 2400; // ms — short, this is a mock
+const DEFAULT_DURATION = 2400; // ms — short, this is a mock
 const TICK = 50;
 
 interface SurveyAwaitingProps {
@@ -13,26 +13,51 @@ interface SurveyAwaitingProps {
   /** Override the sub-line. When omitted, falls back to the source-agnostic
    *  task-analysis copy. */
   subtitle?: string;
+  /** Длительность заполнения бара, мс. Анкета не передаёт — держит свои 2400. */
+  durationMs?: number;
+  /** Тихая строка под процентом (например, где хранятся кампании). */
+  footnote?: React.ReactNode;
 }
 
-export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps) {
+export function SurveyAwaiting({
+  onDone,
+  title,
+  subtitle,
+  durationMs = DEFAULT_DURATION,
+  footnote,
+}: SurveyAwaitingProps) {
   const [progress, setProgress] = useState(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // Хвостовой таймаут (200мс паузы между заполнением бара и onDone) ставится
+  // ПОСЛЕДНИМ тиком интервала, поэтому cleanup, который знает только id
+  // интервала (`clearInterval`), не может его отменить — размонтирование
+  // внутри этого окна раньше всё равно давало вызов onDone. Держим id
+  // отдельно и чистим оба таймера на unmount: у одного из потребителей
+  // (CampaignWorkspace) onDone создаёт кампанию, а не просто листает локальную
+  // фазу — поздний вызов после размонтирования там не косметика, а фантомная
+  // кампания в фоне.
+  const trailingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const steps = TOTAL_DURATION / TICK;
+    const steps = durationMs / TICK;
     let count = 0;
     const id = setInterval(() => {
       count++;
       setProgress(Math.min((count / steps) * 100, 100));
       if (count >= steps) {
         clearInterval(id);
-        setTimeout(() => onDoneRef.current(), 200);
+        trailingTimeoutRef.current = setTimeout(() => onDoneRef.current(), 200);
       }
     }, TICK);
-    return () => clearInterval(id);
-  }, []);
+    return () => {
+      clearInterval(id);
+      if (trailingTimeoutRef.current) {
+        clearTimeout(trailingTimeoutRef.current);
+        trailingTimeoutRef.current = null;
+      }
+    };
+  }, [durationMs]);
 
   return (
     <motion.div
@@ -62,6 +87,9 @@ export function SurveyAwaiting({ onDone, title, subtitle }: SurveyAwaitingProps)
         <p className="text-right text-xs tabular-nums text-muted-foreground">
           {Math.round(progress)}%
         </p>
+        {footnote && (
+          <p className="mt-1 text-xs text-muted-foreground/70">{footnote}</p>
+        )}
       </div>
     </motion.div>
   );
