@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { StepContent } from "@/sections/campaigns/wizard/steps/step-content";
 import { StepFooter } from "@/sections/campaigns/wizard/steps/step-footer";
@@ -13,12 +13,11 @@ import {
   FALLBACK_BASE,
 } from "@/sections/campaigns/campaign-budget-estimate";
 import { graphCostFor } from "@/sections/campaigns/campaign-graph-cost";
-import { budgetDisplayRows } from "@/sections/campaigns/wizard/steps/budget-display";
 import { groupCommunicationLines } from "@/sections/campaigns/communication-breakdown";
-import { BudgetBreakdown } from "@/sections/campaigns/budget-breakdown";
+import { estimateTouches } from "@/sections/campaigns/campaign-cost";
+import { CampaignForecastCard } from "@/sections/campaigns/wizard/steps/campaign-forecast-card";
 import { WizardSummaryTable } from "@/sections/campaigns/wizard/steps/wizard-summary-table";
 import type { StepData } from "@/types/campaign";
-import { cn } from "@/lib/utils";
 
 function formatRub(amount: number): string {
   return `₽ ${amount.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}`;
@@ -125,8 +124,6 @@ export function buildBudgetRows(input: BudgetForecastInput): BudgetRow[] {
   ];
 }
 
-type Mode = "recommended" | "custom";
-
 /**
  * Optional ceiling line for the budget summary (aim #20). Display-only — it
  * does NOT alter the cost model. Returns null when unset so the row is
@@ -137,18 +134,6 @@ export function maxDailyBudgetLine(
 ): { label: string; display: string } | null {
   if (value === undefined || !(value > 0)) return null;
   return { label: "Максимальный дневной бюджет", display: formatRub(value) };
-}
-
-function RadioDot({ active }: { active: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "absolute right-3 top-3 h-3 w-3 rounded-full border-2 transition-colors",
-        active ? "border-foreground bg-foreground" : "border-border bg-transparent"
-      )}
-    />
-  );
 }
 
 export function StepBudget({
@@ -200,15 +185,6 @@ export function StepBudget({
   const recommendedValue = estimate.total;
   const isStream = data.sourceType === "stream";
 
-  const [mode, setMode] = useState<Mode>(data.budgetMode ?? "recommended");
-  const [customValue, setCustomValue] = useState<string>(() => {
-    if (data.budgetMode === "custom" && data.budget != null) {
-      return String(data.budget);
-    }
-    return recommendedValue > 0 ? String(recommendedValue) : "";
-  });
-  const customInputRef = useRef<HTMLInputElement | null>(null);
-
   const [maxDailyValue, setMaxDailyValue] = useState<string>(
     data.maxDailyBudget != null ? String(data.maxDailyBudget) : "",
   );
@@ -221,67 +197,27 @@ export function StepBudget({
     setMaxDailyValue(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."));
   }
 
-  const customParsed = parseFloat(customValue);
-  const customIsValid = !isNaN(customParsed) && customParsed > 0;
-  const activeValue =
-    mode === "recommended" ? recommendedValue : customIsValid ? customParsed : 0;
-  const canContinue =
-    mode === "recommended" ? recommendedValue > 0 : customIsValid;
+  // Своей суммы на этом шаге больше нет: бюджет задаётся позже, на экране
+  // оплаты при запуске, где живёт полный механизм «Рекомендуемая / Своя сумма»
+  // с пересчётом разбивки. Здесь кампания всегда создаётся с рекомендуемым.
+  const activeValue = recommendedValue;
+  const canContinue = recommendedValue > 0;
 
-  // In «Своя сумма» mode the forecast rows rescale proportionally to the chosen
-  // budget (Итого = the custom sum); otherwise they show the recommended estimate.
-  const customTotal = mode === "custom" && customIsValid ? customParsed : null;
-  const rows = useMemo<BudgetRow[]>(() => {
-    const components = recommendedRows
-      .filter((r) => r.key !== "total")
-      .map((r) => ({
-        key: r.key,
-        amount: r.amount,
-        contactCount:
-          r.key === "signals" ? data.fileRowCount ?? FALLBACK_BASE : undefined,
-      }));
-    const { rows: scaled, total } = budgetDisplayRows({
-      components,
-      recommendedTotal: estimate.total,
-      customTotal,
-    });
-    const out: BudgetRow[] = scaled.map((c) => {
-      const base = recommendedRows.find((r) => r.key === c.key)!;
-      const isFreeSignals =
-        c.key === "signals" && (data.sourceType === "own" || c.amount === 0);
-      return {
-        key: base.key,
-        label: base.label,
-        amount: c.amount,
-        display: isFreeSignals ? "бесплатно" : formatRubApprox(c.amount),
-        contactLabel:
-          c.contactCount !== undefined
-            ? `~${c.contactCount.toLocaleString("ru-RU")} контактов`
-            : undefined,
-      };
-    });
-    out.push({
-      key: "total",
-      label: "Итого",
-      amount: total,
-      display: formatRubApprox(total),
-    });
-    return out;
-  }, [recommendedRows, estimate.total, customTotal, data.sourceType, data.fileRowCount]);
+  // Масштабирования под свою сумму больше нет, поэтому строки прогноза — это
+  // ровно рекомендуемая разбивка.
+  const rows = recommendedRows;
 
   const signalsRow = rows.find((r) => r.key === "signals")!;
   const commRow = rows.find((r) => r.key === "communication")!;
   const totalRow = rows.find((r) => r.key === "total")!;
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
-    setCustomValue(raw);
-  }
-
-  function selectCustom() {
-    setMode("custom");
-    window.requestAnimationFrame(() => customInputRef.current?.focus());
-  }
+  // Прогноз касаний — та же оценка, что на карточке кампании и экране оплаты,
+  // на рекомендуемой сумме и размере загруженной базы.
+  const touches = estimateTouches(
+    recommendedValue,
+    data.fileRowCount && data.fileRowCount > 0 ? data.fileRowCount : FALLBACK_BASE,
+  );
+  const touchesDisplay = touches > 0 ? touches.toLocaleString("ru-RU") : "—";
 
   function proceed() {
     // Потолок вводит пользователь (только stream) — durable значение кампании.
@@ -293,7 +229,7 @@ export function StepBudget({
         : undefined;
     onNext({
       budget: activeValue,
-      budgetMode: mode,
+      budgetMode: "recommended",
       maxDailyBudget: maxDaily,
       ...(isStream && estimate.dailyBudget !== undefined
         ? { dailyBudget: estimate.dailyBudget }
@@ -315,125 +251,38 @@ export function StepBudget({
           <WizardSummaryTable data={data} onGoToStep={onGoToStep} />
         )}
 
-        {/* Forecast: merged «Сигналы» + collapsible «Коммуникации» table + «Итого».
-            Shared with the payment screen via BudgetBreakdown. */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <BudgetBreakdown
-            signalsDisplay={signalsRow.display}
-            communicationDisplay={commRow.display}
-            totalDisplay={totalRow.display}
-            commGroups={commGroups}
-            formatCell={formatRub}
-            footer={
-              isStream &&
-              (estimate.dailyBudget !== undefined || maxDailyLine) ? (
-                <>
-                  {estimate.dailyBudget !== undefined && (
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Дневной бюджет</span>
-                      <span className="tabular-nums">
-                        ~{formatRub(estimate.dailyBudget)}/день × {STREAM_DAYS} дн · потолок ~{formatRub(estimate.total)}
-                      </span>
-                    </div>
-                  )}
-                  {maxDailyLine && (
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{maxDailyLine.label}</span>
-                      <span className="tabular-nums">{maxDailyLine.display}</span>
-                    </div>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
-        </div>
-
-        {/* Recommended / custom budget cards (reuses step-5 RadioDot pattern) */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setMode("recommended")}
-            disabled={recommendedValue <= 0}
-            className={cn(
-              "relative flex h-[140px] flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              mode === "recommended"
-                ? "border-brand/60 bg-brand-muted"
-                : "border-border bg-card hover:bg-accent/50",
-              recommendedValue <= 0 && "cursor-not-allowed opacity-50"
-            )}
-          >
-            <RadioDot active={mode === "recommended"} />
-            <span
-              className={cn(
-                "text-xs font-medium uppercase tracking-widest",
-                mode === "recommended" ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              Рекомендуемая
-            </span>
-            <span
-              className={cn(
-                "mt-1 text-2xl font-semibold tabular-nums",
-                mode === "recommended" ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              {recommendedValue > 0 ? formatRub(recommendedValue) : "—"}
-            </span>
-            <span className="mt-auto text-xs text-muted-foreground">
-              Рассчитали на основе источников и каналов
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={selectCustom}
-            className={cn(
-              "relative flex h-[140px] flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              mode === "custom"
-                ? "border-brand/60 bg-brand-muted"
-                : "border-border bg-card hover:bg-accent/50"
-            )}
-          >
-            <RadioDot active={mode === "custom"} />
-            <span
-              className={cn(
-                "text-xs font-medium uppercase tracking-widest",
-                mode === "custom" ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              Своя сумма
-            </span>
-            <div
-              className="relative mt-1 w-full"
-              onClick={(e) => {
-                if (mode === "custom") e.stopPropagation();
-              }}
-            >
-              <Input
-                ref={customInputRef}
-                type="text"
-                inputMode="decimal"
-                placeholder="Например, 5000"
-                value={customValue}
-                onChange={handleChange}
-                disabled={mode !== "custom"}
-                className={cn(
-                  "pr-8 text-lg tabular-nums",
-                  mode !== "custom" && "cursor-pointer"
+        {/* «Прогноз кампании»: рекомендуемый бюджет (раскрывается в ту же
+            разбивку, что показывает экран оплаты) и прогноз касаний. Выбора
+            суммы здесь нет — он живёт на экране оплаты при запуске. */}
+        <CampaignForecastCard
+          budgetDisplay={totalRow.display}
+          touchesDisplay={touchesDisplay}
+          signalsDisplay={signalsRow.display}
+          communicationDisplay={commRow.display}
+          totalDisplay={totalRow.display}
+          commGroups={commGroups}
+          formatCell={formatRub}
+          breakdownFooter={
+            isStream && (estimate.dailyBudget !== undefined || maxDailyLine) ? (
+              <>
+                {estimate.dailyBudget !== undefined && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Дневной бюджет</span>
+                    <span className="tabular-nums">
+                      ~{formatRub(estimate.dailyBudget)}/день × {STREAM_DAYS} дн · потолок ~{formatRub(estimate.total)}
+                    </span>
+                  </div>
                 )}
-                aria-label="Своя сумма"
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                ₽
-              </span>
-            </div>
-            <span className="mt-auto text-xs text-muted-foreground">
-              Введите свою сумму
-            </span>
-          </button>
-        </div>
+                {maxDailyLine && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{maxDailyLine.label}</span>
+                    <span className="tabular-nums">{maxDailyLine.display}</span>
+                  </div>
+                )}
+              </>
+            ) : undefined
+          }
+        />
 
         {isStream && (
           <div className="flex flex-col gap-1.5">
@@ -461,17 +310,11 @@ export function StepBudget({
           </div>
         )}
 
+        {/* Абзац-развилка снят: его работу делают заголовок «Проверьте
+            кампанию» и подпись в карточке прогноза про настройку бюджета
+            при запуске. */}
         {!footerOverride?.hidden && (
           <>
-            {/* Последняя развилка визарда (комменты от 31.08): шаг перестаёт
-                читаться как «ещё один шаг». В режиме точечной правки с
-                карточки (footerOverride) ничего не создаётся — там текста нет. */}
-            {!footerOverride && (
-              <p className="text-sm text-muted-foreground">
-                Вот прогноз бюджета. Можно вернуться назад и что-то поменять — или
-                создать кампанию, готовую к запуску.
-              </p>
-            )}
             <StepFooter
               onBack={onBack}
               onContinue={proceed}

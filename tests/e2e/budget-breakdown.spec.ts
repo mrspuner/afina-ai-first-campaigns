@@ -12,6 +12,19 @@ function screen(id: string) {
   return s!;
 }
 
+/**
+ * На шаге визарда разбивка живёт внутри карточки «Прогноз кампании»: её
+ * раскрывает строка «Рекомендуемый бюджет». На экране оплаты разбивка лежит
+ * на поверхности — там этого шага нет.
+ */
+async function openBreakdown(page: Page, id: string) {
+  if (id === "wizard-7-budget") {
+    const budgetRow = page.getByRole("button", { name: /Рекомендуемый бюджет/ });
+    await expect(budgetRow).toBeVisible({ timeout: 15_000 });
+    await budgetRow.click();
+  }
+}
+
 async function commButton(page: Page) {
   const btn = page.getByRole("button", { name: /Коммуникации/ });
   await expect(btn).toBeVisible({ timeout: 15_000 });
@@ -24,6 +37,7 @@ for (const id of ["wizard-7-budget", "campaign-payment"]) {
       page,
     }) => {
       await seedScreen(page, screen(id));
+      await openBreakdown(page, id);
 
       const btn = await commButton(page);
       // Collapsed by default: the table + its column headers are not present.

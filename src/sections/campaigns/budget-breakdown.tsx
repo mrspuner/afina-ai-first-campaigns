@@ -41,6 +41,13 @@ export interface BudgetBreakdownProps {
   footer?: React.ReactNode;
   /** Start with «Коммуникации» expanded. Default collapsed (chevron ▸). */
   defaultExpanded?: boolean;
+  /**
+   * Прячет строку «Итого». Нужно там, где разбивка раскрывается ИЗ строки,
+   * которая уже показывает эту же сумму (финальный шаг визарда: «Рекомендуемый
+   * бюджет ~₽ 51 875» → раскрытие) — иначе одно и то же число стояло бы дважды
+   * подряд и читалось бы как ошибка. Экран оплаты «Итого» сохраняет.
+   */
+  hideTotal?: boolean;
 }
 
 /**
@@ -58,6 +65,7 @@ export function BudgetBreakdown({
   commGroups,
   formatCell,
   footer,
+  hideTotal,
   defaultExpanded = false,
 }: BudgetBreakdownProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -171,15 +179,17 @@ export function BudgetBreakdown({
       {/* «Итого» — grand total (Сигналы + Коммуникации). Always renders; with no
           communication it equals «Сигналы». Stronger divider + bold label.
           Foreground (never yellow). */}
-      <div
-        className={cn(
-          "flex items-center justify-between border-t border-border pt-3 text-sm font-semibold text-foreground",
-          !expanded && "mt-1"
-        )}
-      >
-        <span>Итого</span>
-        <span className="tabular-nums">{totalDisplay}</span>
-      </div>
+      {!hideTotal && (
+        <div
+          className={cn(
+            "flex items-center justify-between border-t border-border pt-3 text-sm font-semibold text-foreground",
+            !expanded && "mt-1"
+          )}
+        >
+          <span>Итого</span>
+          <span className="tabular-nums">{totalDisplay}</span>
+        </div>
+      )}
 
       {footer}
     </div>

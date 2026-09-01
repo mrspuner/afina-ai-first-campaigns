@@ -102,6 +102,9 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     expect(screen.getByRole("button", { name: /Коммуникации/ })).toBeTruthy();
     // Collapsed by default: the per-channel table is not mounted yet.
     expect(screen.queryByText("Канал")).toBeNull();
@@ -124,6 +127,9 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     fireEvent.click(screen.getByRole("button", { name: /Коммуникации/ }));
     expect(screen.getByText("Канал")).toBeTruthy();
     expect(screen.getByText("Первичные")).toBeTruthy();
@@ -145,15 +151,20 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
+    // Разбивка теперь живёт внутри строки «Рекомендуемый бюджет» карточки
+    // «Прогноз кампании» — сначала раскрываем её.
+    fireEvent.click(screen.getByRole("button", { name: /Рекомендуемый бюджет/ }));
     expect(screen.getByText("Сигналы")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Коммуникации/ })).toBeNull();
-    // With no communication the grand total collapses to signals, so «Итого»
-    // still renders (equal to «Сигналы»).
-    expect(screen.getByText("Итого")).toBeTruthy();
+    // «Итого» внутри разбивки скрыт (hideTotal): та же сумма уже стоит в
+    // строке «Рекомендуемый бюджет», которая эту разбивку и раскрывает.
+    expect(screen.queryByText("Итого")).toBeNull();
     cleanup();
   });
 
-  it("shows updated recommended card caption", () => {
+  // Карточки «Рекомендуемая / Своя сумма» сняты: сумму пользователь задаёт
+  // позже, на экране оплаты. Вместо подписи карточки шаг несёт обещание об этом.
+  it("обещает настройку бюджета при запуске вместо выбора суммы", () => {
     renderStep(
       <StepBudget
         data={makeData({ channels: ["sms"] })}
@@ -161,7 +172,11 @@ describe("StepBudget — «Коммуникации» collapsible table (v8)", (
         onBack={vi.fn()}
       />
     );
-    expect(screen.getByText(/Рассчитали на основе источников и каналов/)).toBeTruthy();
+    expect(screen.queryByText(/Рассчитали на основе источников и каналов/)).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Своя сумма" })).toBeNull();
+    expect(
+      screen.getByText(/если\s+рекомендуемый вам не подходит/),
+    ).toBeTruthy();
     cleanup();
   });
 });

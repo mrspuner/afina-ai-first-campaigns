@@ -167,7 +167,7 @@ describe("CampaignWorkspace — изолированный режим правк
     fireEvent.click(screen.getByRole("checkbox", { name: /Email/ }));
     // «Каналы» — активный шаг сессии, «Бюджет» попал в колонку правки, но
     // пользователь его ещё не открывал в ЭТОЙ сессии.
-    expect(hasCheckmark("Бюджет")).toBe(false);
+    expect(hasCheckmark("Проверка настроек")).toBe(false);
     expect(screen.getByText("7")).toBeInTheDocument();
     // Всё остальное — вне колонки, значение снапшота не тронуто правкой.
     for (const label of ["Сценарий", "Цель", "Интересы", "Режим", "Файл"]) {
@@ -268,18 +268,16 @@ describe("CampaignWorkspace — отмена инвалидирующей пра
     fireEvent.click(screen.getByRole("checkbox", { name: /Push/ }));
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
 
-    // На «Бюджете»: переключиться на «Своя сумма» и ввести своё значение.
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "99999" },
-    });
+    // Ввода своей суммы на шаге больше нет — бюджет задаётся при запуске.
+    // Инвариант тот же: пройденный шаг коммитит СВЕЖЕ ПОСЧИТАННЫЙ бюджет под
+    // новый набор каналов, а не застрявшее снапшотное значение.
     fireEvent.click(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     );
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0] as StepData;
-    expect(committed.budget).toBe(99999);
+    expect(committed.budget).toBeGreaterThan(0);
     expect(committed.budget).not.toBe(snapshot.budget);
   });
 
@@ -349,7 +347,7 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     ).toBeInTheDocument();
   });
 
-  it("после смены сценария и ввода бюджета коммит несёт НОВЫЙ сценарий и введённый бюджет", () => {
+  it("после смены сценария коммит несёт НОВЫЙ сценарий и пересчитанный бюджет", () => {
     const onCommit = vi.fn();
     renderWorkspace({
       editing: { campaignId: "cmp_1", step: "scenario" },
@@ -360,10 +358,6 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     fireEvent.click(screen.getByRole("button", { name: "Спящий клиент" }));
     fireEvent.click(screen.getByRole("button", { name: "Сменить сценарий" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "77777" },
-    });
     fireEvent.click(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     );
@@ -371,7 +365,9 @@ describe("CampaignWorkspace — изолированная «Сценарий»:
     expect(onCommit).toHaveBeenCalledTimes(1);
     const committed = onCommit.mock.calls[0][0] as StepData;
     expect(committed.scenario).toBe("cur-sleeping");
-    expect(committed.budget).toBe(77777);
+    // Бюджет пересчитан под новый сценарий, а не взят из снапшота.
+    expect(committed.budget).toBeGreaterThan(0);
+    expect(committed.budget).not.toBe(scenarioSnapshot.budget);
   });
 
   it("клик по УЖЕ выбранному сценарию не поднимает диалог и коммитит сразу, бюджет не трогая", () => {
@@ -466,30 +462,6 @@ describe("CampaignWorkspace — обычный визард: явный бюдж
     cleanup();
   });
 
-  it("своя сумма, введённая на «Бюджете», доходит и до cost, и до stepData.budget в LaunchRequest", () => {
-    const onLaunchRequested = vi.fn();
-    renderAtBudgetStep(onLaunchRequested);
-    const budget = budgetStepScope();
-
-    fireEvent.click(budget.getByRole("button", { name: /Своя сумма/i }));
-    fireEvent.change(budget.getByRole("textbox", { name: "Своя сумма" }), {
-      target: { value: "88888" },
-    });
-    fireEvent.click(budget.getByRole("button", { name: "Создать кампанию" }));
-
-    act(() => {
-      vi.advanceTimersByTime(4200);
-    });
-
-    expect(onLaunchRequested).toHaveBeenCalledTimes(1);
-    const req = onLaunchRequested.mock.calls[0][0] as {
-      cost: number;
-      stepData: StepData;
-    };
-    expect(req.cost).toBe(88888);
-    expect(req.stepData.budget).toBe(88888);
-  });
-
   it("рекомендованная сумма (без ручного ввода) тоже доходит до LaunchRequest — не 0/null от устаревшего stepData", () => {
     const onLaunchRequested = vi.fn();
     renderAtBudgetStep(onLaunchRequested);
@@ -546,7 +518,7 @@ describe("CampaignWorkspace — экран «Создаём кампанию» �
       budgetStepScope().getByRole("button", { name: "Создать кампанию" }),
     );
     expect(screen.queryByText("Проверьте кампанию")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Бюджет" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Проверка настроек" })).toBeNull();
   });
 
   it("кампания создаётся через 4 секунды, а не раньше", () => {

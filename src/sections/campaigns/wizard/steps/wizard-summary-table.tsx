@@ -84,16 +84,16 @@ export function WizardSummaryTable({
   const rows = buildSummaryRows(data);
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Надзаголовка у блока нет намеренно: подзаголовок шага уже говорит
-          «Настройки собраны», а лишняя строка стоила бы высоты, которой на
-          финальном шаге нет. */}
-      {/* Две колонки, а не столбик: в столбик семь строк уводили основную
-          кнопку шага под промпт-бар на 1440×900, а это финальный шаг — CTA
-          обязан быть виден без скролла. Лейбл над значением (а не слева)
-          позволяет значению занять всю ширину ячейки: списки интересов и
-          каналов бывают длинными. */}
-      <div className="grid grid-cols-1 gap-x-4 gap-y-px rounded-lg border border-border bg-card p-1 sm:grid-cols-2">
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        Настройки кампании
+      </p>
+      {/* Две колонки, а не столбик: в столбик строки уводили основную кнопку
+          шага под промпт-бар на 1440×900, а это финальный шаг — CTA обязан
+          быть виден без скролла. Лейбл над значением (а не слева) позволяет
+          значению занять всю ширину ячейки: списки интересов и каналов бывают
+          длинными. */}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-px sm:grid-cols-2">
         {rows.map((row) => {
           const target = order.indexOf(row.step) + 1;
           const content = (
@@ -104,7 +104,10 @@ export function WizardSummaryTable({
                   <Settings aria-hidden className="h-3 w-3 shrink-0 opacity-60" />
                 )}
               </span>
-              <span className="truncate text-sm font-medium text-foreground">
+              {/* Значение переносится по строкам и обрезается на третьей:
+                  списки интересов и каналов бывают длиннее ячейки, а обрезка
+                  в одну строку («truncate») съедала бы почти всё содержимое. */}
+              <span className="line-clamp-3 text-sm font-medium leading-snug text-foreground">
                 {row.value}
               </span>
             </>

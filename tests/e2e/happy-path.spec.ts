@@ -84,7 +84,9 @@ test("happy path: welcome → guided campaign → editor → launch → stats", 
   //    a premature `.last()` would re-hit the previous step's button.
   const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
-  await expect(page.getByText("Рекомендуемая")).toBeVisible();
+  // Карточек «Рекомендуемая / Своя сумма» на шаге больше нет — сумма задаётся
+  // на экране оплаты. Признак готовности шага теперь строка прогноза.
+  await expect(page.getByText("Рекомендуемый бюджет")).toBeVisible();
   // Scope to the budget step's own StepContent root (heading → .mb-8 → root)
   // rather than a blind `.last()` — the app now has four «Создать кампанию»
   // buttons (welcome view, campaigns section, empty-state card, and this

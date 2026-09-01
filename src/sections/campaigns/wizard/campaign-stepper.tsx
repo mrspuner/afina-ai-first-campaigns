@@ -17,6 +17,19 @@ export const STEP_LABELS: Record<WizardStepId, string> = {
 };
 
 /**
+ * Подписи ШАГОВ В СТЕППЕРЕ. Отличаются от `STEP_LABELS` ровно в одном месте:
+ * последний шаг больше не про ввод бюджета — там сводка настроек и прогноз, а
+ * сумму пользователь задаёт позже, при запуске. `STEP_LABELS` при этом трогать
+ * нельзя: их читают поповер пилюли на карточке («Настройка · Бюджет» — пилюля
+ * указывает на ЗНАЧЕНИЕ бюджета) и контекст ИИ-оркестратора, и там «Проверка
+ * настроек» была бы неверна.
+ */
+const STEPPER_LABELS: Record<WizardStepId, string> = {
+  ...STEP_LABELS,
+  budget: "Проверка настроек",
+};
+
+/**
  * Иконка шага для тега-пилюли в описании кампании. Парная `STEP_LABELS`:
  * держим рядом, чтобы новый шаг нельзя было завести с подписью, но без иконки.
  */
@@ -77,7 +90,7 @@ export function CampaignStepper({
     <div className="flex flex-col gap-1">
       {steps.map((id, idx) => {
         const step = idx + 1;
-        const label = STEP_LABELS[id];
+        const label = STEPPER_LABELS[id];
         const isActive = step === currentStep;
         const isVisited = visitedSteps ? visitedSteps.has(step) : step <= maxStep;
         const isCompleted = completedSteps

@@ -97,7 +97,9 @@ async function createCampaignViaWizard(
   // card, and this step's forward CTA).
   const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
-  await expect(page.getByText("Рекомендуемая")).toBeVisible();
+  // Карточек «Рекомендуемая / Своя сумма» на шаге больше нет — сумма задаётся
+  // на экране оплаты. Признак готовности шага теперь строка прогноза.
+  await expect(page.getByText("Рекомендуемый бюджет")).toBeVisible();
   await budgetHeading
     .locator("xpath=../..")
     .getByRole("button", { name: "Создать кампанию" })

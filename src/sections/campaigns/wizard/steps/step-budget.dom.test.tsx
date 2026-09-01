@@ -65,12 +65,13 @@ describe("StepBudget — потолок дневного бюджета сохр
 });
 
 describe("StepBudget — финальная развилка визарда", () => {
-  it("показывает развилку: назад поправить или создать кампанию", () => {
+  // Абзац-развилка снят: его работу делают заголовок «Проверьте кампанию» и
+  // подпись карточки прогноза про настройку бюджета при запуске.
+  it("вместо абзаца-развилки обещает настройку бюджета при запуске", () => {
     renderStep();
+    expect(screen.queryByText(/Вот прогноз бюджета/)).toBeNull();
     expect(
-      screen.getByText(
-        "Вот прогноз бюджета. Можно вернуться назад и что-то поменять — или создать кампанию, готовую к запуску.",
-      ),
+      screen.getByText(/Вы сможете настроить подходящий бюджет далее/),
     ).toBeInTheDocument();
   });
 
@@ -82,9 +83,10 @@ describe("StepBudget — финальная развилка визарда", ()
     expect(screen.queryByRole("button", { name: "Далее" })).toBeNull();
   });
 
-  // Точечная правка с карточки ничего не создаёт: там свой лейбл футера, и
-  // текст про создание кампании был бы прямой ложью.
-  it("в режиме правки развилки нет, лейбл — из footerOverride", () => {
+  // Точечная правка с карточки ничего не создаёт: там свой лейбл футера.
+  // Карточка прогноза при этом остаётся — цифры и есть смысл захода на шаг,
+  // и обещание про настройку бюджета при запуске там тоже верно.
+  it("в режиме правки лейбл берётся из footerOverride, прогноз остаётся", () => {
     render(
       <StepBudget
         data={streamData}
@@ -97,7 +99,9 @@ describe("StepBudget — финальная развилка визарда", ()
     expect(
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Можно вернуться назад и что-то поменять/)).toBeNull();
+    expect(
+      screen.getByText(/Вы сможете настроить подходящий бюджет далее/),
+    ).toBeInTheDocument();
   });
 
   it("показывает сводку заполненного визарда над прогнозом", () => {
@@ -105,7 +109,7 @@ describe("StepBudget — финальная развилка визарда", ()
     expect(screen.getByText("Сценарий")).toBeInTheDocument();
     // Сводка стоит ВЫШЕ прогноза — порядок в документе, а не только наличие.
     const summary = screen.getByText("Сценарий");
-    const forecast = screen.getByText("Итого");
+    const forecast = screen.getByText("Прогноз кампании");
     expect(
       summary.compareDocumentPosition(forecast) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

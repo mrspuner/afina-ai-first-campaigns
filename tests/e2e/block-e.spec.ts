@@ -121,7 +121,9 @@ async function createCampaignViaWizard(page: Page, channel: "sms") {
   await page.getByRole("button", { name: "Далее" }).last().click();
   const budgetHeading = page.getByRole("heading", { name: /Проверьте кампанию/ });
   await expect(budgetHeading).toBeVisible();
-  await expect(page.getByText("Рекомендуемая")).toBeVisible();
+  // Карточек «Рекомендуемая / Своя сумма» на шаге больше нет — сумма задаётся
+  // на экране оплаты. Признак готовности шага теперь строка прогноза.
+  await expect(page.getByText("Рекомендуемый бюджет")).toBeVisible();
   // Scope to the budget step's own StepContent root (heading → .mb-8 → root)
   // rather than a blind `.last()` — the app now has four «Создать кампанию»
   // buttons (welcome view, campaigns section, empty-state card, and this
