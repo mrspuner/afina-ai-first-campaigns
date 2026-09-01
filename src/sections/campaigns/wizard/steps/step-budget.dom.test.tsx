@@ -71,7 +71,7 @@ describe("StepBudget — финальная развилка визарда", ()
     renderStep();
     expect(screen.queryByText(/Вот прогноз бюджета/)).toBeNull();
     expect(
-      screen.getByText(/Вы сможете настроить подходящий бюджет далее/),
+      screen.getByText(/Вы сможете настроить подходящий бюджет при запуске/),
     ).toBeInTheDocument();
   });
 
@@ -100,7 +100,7 @@ describe("StepBudget — финальная развилка визарда", ()
       screen.getByRole("button", { name: "Применить и вернуться" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Вы сможете настроить подходящий бюджет далее/),
+      screen.getByText(/Вы сможете настроить подходящий бюджет при запуске/),
     ).toBeInTheDocument();
   });
 

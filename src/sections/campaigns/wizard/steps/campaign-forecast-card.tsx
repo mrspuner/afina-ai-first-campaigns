@@ -97,7 +97,7 @@ export function CampaignForecastCard({
       </div>
 
       <p className="mt-3 border-t border-border px-1 pt-3 text-xs leading-relaxed text-foreground">
-        Вы сможете настроить подходящий бюджет далее, при запуске кампании, если
+        Вы сможете настроить подходящий бюджет при запуске кампании, если
         рекомендуемый вам не подходит
       </p>
     </div>
