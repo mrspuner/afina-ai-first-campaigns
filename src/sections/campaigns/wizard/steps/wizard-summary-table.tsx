@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { SCENARIO_NAMES } from "@/data/scenarios";
 import { CHANNEL_LABEL } from "@/sections/campaigns/campaign-cost";
 import { fileSummaryLine } from "@/state/workflow-templates";
@@ -88,12 +88,10 @@ export function WizardSummaryTable({
       <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
         Настройки кампании
       </p>
-      {/* Две колонки, а не столбик: в столбик строки уводили основную кнопку
-          шага под промпт-бар на 1440×900, а это финальный шаг — CTA обязан
-          быть виден без скролла. Лейбл над значением (а не слева) позволяет
-          значению занять всю ширину ячейки: списки интересов и каналов бывают
-          длинными. */}
-      <div className="grid grid-cols-1 gap-x-4 gap-y-px sm:grid-cols-2">
+      {/* Один столбец: значения бывают длинными (списки интересов и каналов),
+          и в две колонки они жались. Место под это освободилось, когда со шага
+          ушли карточки выбора суммы. */}
+      <div className="flex flex-col gap-px">
         {rows.map((row) => {
           const target = order.indexOf(row.step) + 1;
           const content = (
@@ -101,17 +99,19 @@ export function WizardSummaryTable({
               <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground/70">
                 {row.label}
                 {onGoToStep && (
-                  <Settings aria-hidden className="h-3 w-3 shrink-0 opacity-60" />
+                  <Pencil aria-hidden className="h-3 w-3 shrink-0 text-brand" />
                 )}
               </span>
               {/* Значение переносится по строкам и обрезается на третьей:
-                  списки интересов и каналов бывают длиннее ячейки, а обрезка
+                  списки интересов и каналов бывают длиннее колонки, а обрезка
                   в одну строку («truncate») съедала бы почти всё содержимое. */}
               <span className="line-clamp-3 text-sm font-medium leading-snug text-foreground">
                 {row.value}
               </span>
             </>
           );
+          // Лейбл сверху, значение под ним: значению достаётся вся ширина
+          // карточки, а списки интересов и каналов бывают длинными.
           const layout = "flex w-full flex-col gap-0.5 rounded px-2 py-1 text-left";
 
           return onGoToStep ? (

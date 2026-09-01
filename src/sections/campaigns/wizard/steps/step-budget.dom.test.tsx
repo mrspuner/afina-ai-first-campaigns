@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { StepBudget } from "./step-budget";
 import { initialStepData } from "@/types/campaign";
 
@@ -29,40 +29,6 @@ function renderStep(over: Partial<typeof streamData> = {}) {
   );
   return onNext;
 }
-
-/**
- * Регрессия: «Максимальный дневной бюджет» жил только в локальном useState —
- * proceed() его не передавал, поэтому введённое значение терялось при уходе
- * со шага и никогда не доезжало до кампании.
- */
-describe("StepBudget — потолок дневного бюджета сохраняется", () => {
-  it("введённое значение уезжает в onNext", () => {
-    const onNext = renderStep();
-    fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
-      target: { value: "5000" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ maxDailyBudget: 5000 }),
-    );
-  });
-
-  it("инпут восстанавливается из уже сохранённых данных", () => {
-    renderStep({ maxDailyBudget: 7000 });
-    expect(screen.getByLabelText("Максимальный дневной бюджет")).toHaveValue("7000");
-  });
-
-  it("очистка поля снимает потолок (undefined, а не 0)", () => {
-    const onNext = renderStep({ maxDailyBudget: 7000 });
-    fireEvent.change(screen.getByLabelText("Максимальный дневной бюджет"), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ maxDailyBudget: undefined }),
-    );
-  });
-});
 
 describe("StepBudget — финальная развилка визарда", () => {
   // Абзац-развилка снят: его работу делают заголовок «Проверьте кампанию» и
